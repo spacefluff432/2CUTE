@@ -1,7 +1,13 @@
 {
    "default": {
       "class": "XRoom",
-      "source": ""
+      "entities": [],
+      "hitbox": {
+         "x": 0,
+         "y": 0,
+         "w": 0,
+         "h": 0
+      }
    },
    "description": "A Storyteller room.",
    "properties": {
