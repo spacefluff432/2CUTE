@@ -1,0 +1,5 @@
+{
+   "$schema": "https://hb432.github.io/storyteller/schemas/asset.json",
+   "class": "XAsset",
+   "source": "assets/images/intro-room-background.png"
+}

@@ -1,0 +1,11 @@
+{
+   "$schema": "https://hb432.github.io/storyteller/schemas/room.json",
+   "class": "XRoom",
+   "entities": [
+      "rooms/flowey-room/background.entity.json"
+   ],
+   "hitbox": {
+      "y": -80,
+      "h": 120
+   }
+}

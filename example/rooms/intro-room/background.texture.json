@@ -1,0 +1,5 @@
+{
+   "$schema": "https://hb432.github.io/storyteller/schemas/texture.json",
+   "class": "XTexture",
+   "asset": "assets/images/intro-room-background.json"
+}

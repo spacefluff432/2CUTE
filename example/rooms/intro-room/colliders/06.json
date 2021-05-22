@@ -1,0 +1,13 @@
+{
+   "$schema": "https://hb432.github.io/storyteller/schemas/entity.json",
+   "attributes": { "collidable": true },
+   "class": "XEntity",
+   "position": {
+      "x": 300,
+      "y": 100
+   },
+   "hitbox": {
+      "w": 300,
+      "h": 20
+   }
+}

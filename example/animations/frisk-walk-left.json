@@ -1,0 +1,10 @@
+{
+   "$schema": "https://hb432.github.io/storyteller/schemas/animation.json",
+   "class": "XAnimation",
+   "default": 1,
+   "steps": 6,
+   "textures": [
+      "animations/frisk-walk-left/1.json",
+      "animations/frisk-walk-left/2.json"
+   ]
+}

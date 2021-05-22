@@ -1,0 +1,9 @@
+{
+   "$schema": "https://hb432.github.io/storyteller/schemas/texture.json",
+   "class": "XTexture",
+   "asset": "assets/images/frisk-walk-sprites.json",
+   "mapping": {
+      "x": 93,
+      "w": 17
+   }
+}

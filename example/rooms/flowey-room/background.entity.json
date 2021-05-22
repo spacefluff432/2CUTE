@@ -1,0 +1,6 @@
+{
+   "$schema": "https://hb432.github.io/storyteller/schemas/entity.json",
+   "attributes": { "visible": true },
+   "class": "XEntity",
+   "texture": "rooms/flowey-room/background.texture.json"
+}
