@@ -15,7 +15,8 @@
       },
       "source": {
          "description": "A path or URL linking to an image.",
-         "type": "string"
+         "type": "string",
+         "default": ""
       }
    },
    "required": [
