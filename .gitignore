@@ -1,4 +1,2 @@
 *.tsbuildinfo
 node_modules
-storyteller.engine.ts
-storyteller.engine.js
