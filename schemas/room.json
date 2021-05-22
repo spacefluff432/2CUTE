@@ -13,11 +13,6 @@
          ],
          "type": "string"
       },
-      "player": {
-         "type": "string",
-         "default": "",
-         "description": "A path or URL linking to an entity file to represent the player. The entity's \"collidable\" attribute will be ignored."
-      },
       "entities": {
          "default": [],
          "values": {
@@ -62,7 +57,6 @@
       }
    },
    "required": [
-      "player",
       "class"
    ],
    "type": "object"
