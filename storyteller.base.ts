@@ -165,12 +165,23 @@ class XRoom {
       entities?: XEntity[];
       hitbox?: X4Arg;
    }) {
+      this.add(...entities);
+      this.hitbox = { x, y, w, h };
+   }
+   add (...entities: XEntity[]) {
       for (const entity of entities) {
          entity.attributes.collidable && this.collidables.add(entity);
          entity.attributes.interactable && this.interactables.add(entity);
          entity.attributes.triggerable && this.triggerables.add(entity);
          entity.attributes.visible && this.visibles.add(entity);
       }
-      this.hitbox = { x, y, w, h };
+   }
+   delete (...entities: XEntity[]) {
+      for (const entity of entities) {
+         entity.attributes.collidable && this.collidables.delete(entity);
+         entity.attributes.interactable && this.interactables.delete(entity);
+         entity.attributes.triggerable && this.triggerables.delete(entity);
+         entity.attributes.visible && this.visibles.delete(entity);
+      }
    }
 }
