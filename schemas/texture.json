@@ -1,16 +1,15 @@
 {
    "default": {
-      "class": "XTexture",
-      "mapping": {
-         "h": 0,
-         "w": 0,
-         "x": 0,
-         "y": 0
-      },
+      "class": "XAsset",
       "source": ""
    },
    "description": "A Storyteller texture.",
    "properties": {
+      "asset": {
+         "default": "",
+         "description": "A path or URL linking to an asset file.",
+         "type": "string"
+      },
       "class": {
          "default": "XTexture",
          "description": "The internal class represented by this file.",
@@ -54,16 +53,11 @@
             }
          },
          "type": "object"
-      },
-      "source": {
-         "default": "",
-         "description": "A path or URL linking to an image.",
-         "type": "string"
       }
    },
    "required": [
-      "class",
-      "source"
+      "asset",
+      "class"
    ],
    "type": "object"
 }
