@@ -1,0 +1,69 @@
+{
+   "default": {
+      "class": "XRoom",
+      "source": ""
+   },
+   "description": "A Storyteller room.",
+   "properties": {
+      "class": {
+         "default": "XRoom",
+         "description": "The internal class represented by this file.",
+         "enum": [
+            "XRoom"
+         ],
+         "type": "string"
+      },
+      "player": {
+         "type": "string",
+         "default": "",
+         "description": "A path or URL linking to an entity file to represent the player. The entity's \"collidable\" attribute will be ignored."
+      },
+      "entities": {
+         "default": [],
+         "values": {
+            "type": "string",
+            "default": "",
+            "description": "A path or URL linking to an entity file."
+         },
+         "description": "An array of entities to be accessible while this room is loaded.",
+         "type": "array"
+      },
+      "hitbox": {
+         "default": {
+            "x": 0,
+            "y": 0,
+            "w": 0,
+            "h": 0
+         },
+         "description": "How this room's hitbox is placed.",
+         "type": "object",
+         "properties": {
+            "x": {
+               "type": "number",
+               "description": "The bottom edge of the hitbox.",
+               "default": 0
+            },
+            "y": {
+               "type": "number",
+               "description": "The left edge of the hitbox.",
+               "default": 0
+            },
+            "w": {
+               "type": "number",
+               "description": "The horizontal size of the hitbox, extending to the right.",
+               "default": 0
+            },
+            "h": {
+               "type": "number",
+               "description": "The vertical size of the hitbox, extending upwards.",
+               "default": 0
+            }
+         }
+      }
+   },
+   "required": [
+      "player",
+      "class"
+   ],
+   "type": "object"
+}

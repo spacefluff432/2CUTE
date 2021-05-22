@@ -1,0 +1,63 @@
+{
+   "default": {
+      "class": "XAsset",
+      "source": ""
+   },
+   "description": "A Storyteller texture.",
+   "properties": {
+      "asset": {
+         "default": "",
+         "description": "A path or URL linking to an asset file.",
+         "type": "string"
+      },
+      "class": {
+         "default": "XTexture",
+         "description": "The internal class represented by this file.",
+         "enum": [
+            "XTexture"
+         ],
+         "type": "string"
+      },
+      "mapping": {
+         "default": {
+            "h": 0,
+            "w": 0,
+            "x": 0,
+            "y": 0
+         },
+         "description": "How this texture's asset is mapped.",
+         "properties": {
+            "h": {
+               "default": 0,
+               "description": "The vertical size of the texture, extending upwards.",
+               "minimum": 0,
+               "type": "number"
+            },
+            "w": {
+               "default": 0,
+               "description": "The vertical size of the texture, extending to the right.",
+               "minimum": 0,
+               "type": "number"
+            },
+            "x": {
+               "default": 0,
+               "description": "The left edge of the texture.",
+               "minimum": 0,
+               "type": "number"
+            },
+            "y": {
+               "default": 0,
+               "description": "The bottom edge of the texture.",
+               "minimum": 0,
+               "type": "number"
+            }
+         },
+         "type": "object"
+      }
+   },
+   "required": [
+      "asset",
+      "class"
+   ],
+   "type": "object"
+}

@@ -1,0 +1,67 @@
+{
+   "default": {
+      "attributes": {
+         "single": false,
+         "sticky": false
+      },
+      "default": 0,
+      "steps": 1,
+      "textures": []
+   },
+   "description": "A Storyteller animation.",
+   "properties": {
+      "attributes": {
+         "default": {
+            "single": false,
+            "sticky": false
+         },
+         "description": "Properties that describe how this animation works.",
+         "properties": {
+            "single": {
+               "default": false,
+               "description": "If enabled, the animation will stop after one iteration.",
+               "type": "boolean"
+            },
+            "sticky": {
+               "default": false,
+               "description": "If enabled, the animation will not return to the default frame when stopped.",
+               "type": "boolean"
+            }
+         },
+         "type": "object"
+      },
+      "class": {
+         "default": "XAnimation",
+         "description": "The internal class represented by this file.",
+         "enum": [
+            "XAnimation"
+         ],
+         "type": "string"
+      },
+      "default": {
+         "default": 0,
+         "description": "The frame index this animation defaults to.",
+         "minimum": 0,
+         "type": "number"
+      },
+      "steps": {
+         "default": 1,
+         "description": "The number of rendering steps each frame should be visible before advancing.",
+         "minimum": 1,
+         "type": "number"
+      },
+      "textures": {
+         "default": [],
+         "description": "An array of textures to use as frames in the animation.",
+         "items": {
+            "description": "A path or URL linking to a texture file.",
+            "type": "string"
+         },
+         "type": "array"
+      }
+   },
+   "required": [
+      "class"
+   ],
+   "type": "object"
+}

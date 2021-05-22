@@ -1,0 +1,139 @@
+{
+   "default": {
+      "class": "XEntity",
+      "animation": null,
+      "attributes": {
+         "collidable": false,
+         "interactable": false,
+         "triggerable": false,
+         "visible": false
+      },
+      "hitbox": {
+         "x": 0,
+         "y": 0,
+         "w": 0,
+         "h": 0
+      },
+      "position": {
+         "x": 0,
+         "y": 0,
+         "z": 0
+      },
+      "texture": null
+   },
+   "description": "A Storyteller entity.",
+   "properties": {
+      "class": {
+         "default": "XEntity",
+         "description": "The internal class represented by this file.",
+         "enum": [
+            "XEntity"
+         ],
+         "type": "string"
+      },
+      "attributes": {
+         "default": {
+            "collidable": false,
+            "interactable": false,
+            "triggerable": false,
+            "visible": false
+         },
+         "description": "Properties that describe how this entity works.",
+         "properties": {
+            "collidable": {
+               "type": "boolean",
+               "description": "If enabled, the entity will collide with other collidable entities.",
+               "default": false
+            },
+            "visible": {
+               "type": "boolean",
+               "description": "If enabled, the entity will be visible when rendered.",
+               "default": false
+            },
+            "interactable": {
+               "type": "boolean",
+               "description": "If enabled, the entity will detect player interaction attempts.",
+               "default": false
+            },
+            "triggerable": {
+               "type": "boolean",
+               "description": "If enabled, the entity will detect player movement.",
+               "default": false
+            }
+         },
+         "type": "object"
+      },
+      "hitbox": {
+         "default": {
+            "x": 0,
+            "y": 0,
+            "w": 0,
+            "h": 0
+         },
+         "description": "How this entity's hitbox is placed.",
+         "type": "object",
+         "properties": {
+            "x": {
+               "type": "number",
+               "description": "The bottom edge of the hitbox relative to the entity's X position.",
+               "default": 0
+            },
+            "y": {
+               "type": "number",
+               "description": "The left edge of the hitbox relative to the entity's Y position.",
+               "default": 0
+            },
+            "w": {
+               "type": "number",
+               "description": "The horizontal size of the hitbox, extending to the right.",
+               "default": 0
+            },
+            "h": {
+               "type": "number",
+               "description": "The vertical size of the hitbox, extending upwards.",
+               "default": 0
+            }
+         }
+      },
+      "position": {
+         "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+         },
+         "description": "Determines where to place the entity in the overworld.",
+         "type": "object",
+         "properties": {
+            "x": {
+               "type": "number",
+               "description": "Determines the bottom edge of the entity's current texture.",
+               "default": 0
+            },
+            "y": {
+               "type": "number",
+               "description": "Determines the left edge of the entity's current texture.",
+               "default": 0
+            },
+            "z": {
+               "type": "number",
+               "description": "Determines the entity's rendering priority.",
+               "default": 0
+            }
+         }
+      },
+      "animation": {
+         "default": "",
+         "description": "A path or URL linking to an animation file. If both an animation and a texture are specified, the animation will be used by the renderer.",
+         "type": "string"
+      },
+      "texture": {
+         "default": "",
+         "description": "A path or URL linking to a texture file. If both an animation and a texture are specified, the animation will be used by the renderer.",
+         "type": "string"
+      }
+   },
+   "required": [
+      "class"
+   ],
+   "type": "object"
+}
