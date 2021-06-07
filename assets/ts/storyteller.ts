@@ -3,6 +3,7 @@ type XEntityAttributes = { collidable: boolean; interactable: boolean; triggerab
 type XEntityMetadata = { [$: string]: any };
 type XLinkKeys = { u: XKey; l: XKey; d: XKey; r: XKey; x: XKey };
 type XLinkSprites = { u: XSprite; l: XSprite; d: XSprite; r: XSprite };
+type XLinkState = { locked: boolean };
 type XPosition = { x: number; y: number };
 type XRendererState = { scale: number };
 type XRoomAttributes = { overworld: boolean };
@@ -248,20 +249,23 @@ class XHost {
 
 class XKey extends XHost {
    keys: Set<string>;
-   active: boolean = false;
+   states: Set<string> = new Set();
+   get active () {
+      return this.states.size > 0;
+   }
    constructor (...keys: string[]) {
       super();
       this.keys = new Set(keys);
       addEventListener('keydown', event => {
-         if (this.keys.has(event.key) && this.active === false) {
+         if (this.keys.has(event.key) && !this.states.has(event.key)) {
             this.fire('down');
-            this.active = true;
+            this.states.add(event.key);
          }
       });
       addEventListener('keyup', event => {
-         if (this.keys.has(event.key) && this.active === true) {
+         if (this.keys.has(event.key) && this.states.has(event.key)) {
             this.fire('up');
-            this.active = false;
+            this.states.delete(event.key);
          }
       });
       addEventListener('keypress', event => {
@@ -276,89 +280,116 @@ class XLink extends XHost {
    keys: XLinkKeys;
    room?: XRoom;
    sprites: XLinkSprites;
-   state: {} = {};
+   state: XLinkState;
    stride: number;
-   constructor (background: XRenderer, foreground: XRenderer, keys: XLinkKeys, sprites: XLinkSprites, stride: number) {
+   constructor (
+      background: XRenderer,
+      foreground: XRenderer,
+      keys: XLinkKeys,
+      sprites: XLinkSprites,
+      state: XLinkState,
+      stride: number
+   ) {
       super();
       this.background = background;
       this.foreground = foreground;
       this.keys = keys;
       this.sprites = sprites;
+      this.state = state;
       this.stride = stride;
-      this.keys.u.on('down', { priority: 0, script: () => this.sprites.u.enable() });
-      this.keys.l.on('down', { priority: 0, script: () => this.sprites.l.enable() });
-      this.keys.d.on('down', { priority: 0, script: () => this.sprites.d.enable() });
-      this.keys.r.on('down', { priority: 0, script: () => this.sprites.r.enable() });
-      this.keys.u.on('up', { priority: 0, script: () => this.sprites.u.disable() });
-      this.keys.l.on('up', { priority: 0, script: () => this.sprites.l.disable() });
-      this.keys.d.on('up', { priority: 0, script: () => this.sprites.d.disable() });
-      this.keys.r.on('up', { priority: 0, script: () => this.sprites.r.disable() });
+      this.keys.u.on('down', { priority: 0, script: () => this.state.locked || this.sprites.u.enable() });
+      this.keys.l.on('down', { priority: 0, script: () => this.state.locked || this.sprites.l.enable() });
+      this.keys.d.on('down', { priority: 0, script: () => this.state.locked || this.sprites.d.enable() });
+      this.keys.r.on('down', { priority: 0, script: () => this.state.locked || this.sprites.r.enable() });
+      this.keys.u.on('up', { priority: 0, script: () => this.state.locked || this.sprites.u.disable() });
+      this.keys.l.on('up', { priority: 0, script: () => this.state.locked || this.sprites.l.disable() });
+      this.keys.d.on('up', { priority: 0, script: () => this.state.locked || this.sprites.d.disable() });
+      this.keys.r.on('up', { priority: 0, script: () => this.state.locked || this.sprites.r.disable() });
+   }
+   get locked () {
+      return this.state.locked;
+   }
+   set locked (value) {
+      this.state.locked = value;
+      if (this.state.locked) {
+         this.sprites.u.disable();
+         this.sprites.l.disable();
+         this.sprites.d.disable();
+         this.sprites.r.disable();
+      } else {
+         this.keys.u.active && this.sprites.u.enable();
+         this.keys.l.active && this.sprites.l.enable();
+         this.keys.d.active && this.sprites.d.enable();
+         this.keys.r.active && this.sprites.r.enable();
+      }
    }
    render (debug?: boolean) {
       if (this.room) {
          const collisions: Set<XEntity> = new Set();
          const triggers: Set<XEntity> = new Set();
          const interactions: Set<XEntity> = new Set();
-         const origin = Object.assign({}, this.room.player.position);
-         if (this.keys.l.active) {
-            this.room.player.position.x -= 3;
-            this.room.player.sprite = this.sprites.l;
-         } else if (this.keys.r.active) {
-            this.room.player.position.x += 3;
-            this.room.player.sprite = this.sprites.r;
-         }
-         if (this.keys.u.active) {
-            this.room.player.position.y += 3;
-            this.room.player.sprite = this.sprites.u;
-         } else if (this.keys.d.active) {
-            this.room.player.position.y -= 3;
-            this.room.player.sprite = this.sprites.d;
-         }
-         if (
-            this.keys.r.active ||
-            this.keys.l.active ||
-            this.keys.u.active ||
-            this.keys.d.active ||
-            this.keys.x.active
-         ) {
-            const intersections = X.intersection(X.bounds(this.room.player), ...this.room.foreground);
-            if (intersections.size > 0) {
-               for (const intersection of intersections) {
-                  if (intersection.attributes.collidable) {
-                     collisions.add(intersection);
-                  }
-                  if (intersection.attributes.triggerable) {
-                     triggers.add(intersection);
-                  }
-                  if (this.keys.x.active && intersection.attributes.interactable) {
-                     interactions.add(intersection);
-                  }
-               }
-               this.room.player.position = origin;
-               if (this.keys.r.active || this.keys.l.active) {
-                  let index = 0;
-                  const increment = this.keys.r.active ? 1 : -1;
-                  while (index++ < 3) {
-                     this.room.player.position.x += increment;
-                     if (X.intersection(X.bounds(this.room.player), ...collisions).size > 0) {
-                        this.room.player.position.x -= increment;
-                        break;
+         if (!this.state.locked) {
+            const origin = Object.assign({}, this.room.player.position);
+            if (this.keys.l.active) {
+               this.room.player.position.x -= 3;
+               this.room.player.sprite = this.sprites.l;
+            } else if (this.keys.r.active) {
+               this.room.player.position.x += 3;
+               this.room.player.sprite = this.sprites.r;
+            }
+            if (this.keys.u.active) {
+               this.room.player.position.y += 3;
+               this.room.player.sprite = this.sprites.u;
+            } else if (this.keys.d.active) {
+               this.room.player.position.y -= 3;
+               this.room.player.sprite = this.sprites.d;
+            }
+            if (
+               this.keys.r.active ||
+               this.keys.l.active ||
+               this.keys.u.active ||
+               this.keys.d.active ||
+               this.keys.x.active
+            ) {
+               const intersections = X.intersection(X.bounds(this.room.player), ...this.room.foreground);
+               if (intersections.size > 0) {
+                  for (const intersection of intersections) {
+                     if (intersection.attributes.collidable) {
+                        collisions.add(intersection);
+                     }
+                     if (intersection.attributes.triggerable) {
+                        triggers.add(intersection);
+                     }
+                     if (this.keys.x.active && intersection.attributes.interactable) {
+                        interactions.add(intersection);
                      }
                   }
-               }
-               if (this.keys.u.active || this.keys.d.active) {
-                  let index = 0;
-                  const increment = this.keys.u.active ? 1 : -1;
-                  while (index++ < 3) {
-                     this.room.player.position.y += increment;
-                     if (X.intersection(X.bounds(this.room.player), ...collisions).size > 0) {
-                        this.room.player.position.y -= increment;
-                        /* THE FRISK DANCE CODE!! */
-                        if (this.keys.u.active && this.keys.d.active) {
-                           this.room.player.sprite = this.sprites.d;
-                           this.room.player.position.y -= this.stride;
+                  this.room.player.position = origin;
+                  if (this.keys.r.active || this.keys.l.active) {
+                     let index = 0;
+                     const increment = this.keys.r.active ? 1 : -1;
+                     while (index++ < 3) {
+                        this.room.player.position.x += increment;
+                        if (X.intersection(X.bounds(this.room.player), ...collisions).size > 0) {
+                           this.room.player.position.x -= increment;
+                           break;
                         }
-                        break;
+                     }
+                  }
+                  if (this.keys.u.active || this.keys.d.active) {
+                     let index = 0;
+                     const increment = this.keys.u.active ? 1 : -1;
+                     while (index++ < 3) {
+                        this.room.player.position.y += increment;
+                        if (X.intersection(X.bounds(this.room.player), ...collisions).size > 0) {
+                           this.room.player.position.y -= increment;
+                           /* THE FRISK DANCE CODE!! */
+                           if (this.keys.u.active && this.keys.d.active) {
+                              this.room.player.sprite = this.sprites.d;
+                              this.room.player.position.y -= this.stride;
+                           }
+                           break;
+                        }
                      }
                   }
                }
@@ -381,9 +412,9 @@ class XLink extends XHost {
             },
             debug
          );
-         for (const collision of collisions) this.fire('collision', collision);
+         for (const collision of collisions) this.fire('collide', collision);
          for (const trigger of triggers) this.fire('trigger', trigger);
-         for (const interaction of interactions) this.fire('interaction', interaction);
+         for (const interaction of interactions) this.fire('interact', interaction);
       }
    }
    resize (height?: number, width?: number) {

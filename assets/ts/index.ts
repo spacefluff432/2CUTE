@@ -77,6 +77,18 @@ const playerSprite = new XSprite(
    [ playerD1Texture, playerD2Texture, playerD3Texture, playerD4Texture ]
 );
 
+const throneRoomOverlaySprite = new XSprite(
+   { persistent: true, single: false, sticky: false },
+   0,
+   {
+      active: false,
+      index: 0,
+      step: 0
+   },
+   1,
+   [ new XTexture({ h: Infinity, w: Infinity, x: 0, y: 0 }, 'assets/game/backgrounds/throne-room-overlay.png') ]
+);
+
 /* ENTITIES */
 
 const playerEntity = new XEntity(
@@ -220,6 +232,16 @@ const throneRoomRoom = new XRoom(
          0
       ),
       new XEntity(
+         { visible: false, collidable: false, interactable: false, triggerable: true },
+         { h: 20, w: 60, x: 0, y: 0 },
+         {
+            key: 'door',
+            destination: 'nextRoom'
+         },
+         { x: 80, y: 480 },
+         0
+      ),
+      new XEntity(
          { visible: false, collidable: true, interactable: false, triggerable: false },
          { h: 45, w: 70, x: 0, y: 0 },
          {},
@@ -228,9 +250,16 @@ const throneRoomRoom = new XRoom(
       ),
       new XEntity(
          { visible: false, collidable: true, interactable: false, triggerable: false },
-         { h: 65, w: 40, x: 0, y: 0 },
+         { h: 65, w: 45, x: 0, y: 0 },
          {},
          { x: 140, y: 360 },
+         0
+      ),
+      new XEntity(
+         { visible: false, collidable: false, interactable: true, triggerable: false },
+         { h: 75, w: 55, x: 0, y: 0 },
+         { key: 'toriel-throne', interact: 0 },
+         { x: 135, y: 355 },
          0
       ),
       new XEntity(
@@ -239,6 +268,34 @@ const throneRoomRoom = new XRoom(
          {},
          { x: 0, y: 0 },
          10,
+         throneRoomOverlaySprite
+      ),
+      new XEntity(
+         { visible: true, collidable: false, interactable: false, triggerable: false },
+         { h: 0, w: 0, x: 0, y: 0 },
+         {},
+         { x: 0, y: 0 },
+         10,
+         throneRoomOverlaySprite
+      )
+   ],
+   playerEntity
+);
+
+const nextRoomRoom = new XRoom(
+   { overworld: true },
+   [],
+   { h: 0, w: 0, x: 0, y: 0 },
+   [
+      new XEntity(
+         { visible: true, collidable: false, interactable: false, triggerable: true },
+         { h: 20, w: 20, x: 0, y: 0 },
+         {
+            key: 'door',
+            destination: 'throneRoom'
+         },
+         { x: 0, y: 0 },
+         0,
          new XSprite(
             { persistent: true, single: false, sticky: false },
             0,
@@ -249,7 +306,10 @@ const throneRoomRoom = new XRoom(
             },
             1,
             [
-               new XTexture({ h: Infinity, w: Infinity, x: 0, y: 0 }, 'assets/game/backgrounds/throne-room-overlay.png')
+               new XTexture(
+                  { h: 20, w: 20, x: 0, y: 0 },
+                  'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_doorX.png'
+               )
             ]
          )
       )
@@ -305,8 +365,15 @@ const link = new XLink(
          [ playerR1Texture, playerR2Texture ]
       )
    },
+   { locked: false },
    3
 );
+
+/* KEYS */
+
+const DEBUG = new XKey('q', 'Q');
+
+/* INITIALIZE */
 
 link.room = throneRoomRoom;
 link.resize();
@@ -314,8 +381,44 @@ addEventListener('resize', () => {
    link.resize();
 });
 
-/* RUNTIME */
+/* LISTEN */
+
+link.on('interact', {
+   priority: 0,
+   script ({ metadata }: XEntity) {
+      if (link.locked === false) {
+         switch (metadata.key) {
+            case 'toriel-throne':
+               alert('TORI!!');
+               break;
+            case 'asgore-throne':
+               alert('GOREY!!');
+               break;
+         }
+      }
+   }
+});
+
+link.on('trigger', {
+   priority: 0,
+   script ({ metadata }: XEntity) {
+      if (metadata.key === 'door') {
+         switch (metadata.destination) {
+            case 'throneRoom':
+               link.room = throneRoomRoom;
+               playerEntity.position = { x: 100, y: 470 };
+               break;
+            case 'nextRoom':
+               link.room = nextRoomRoom;
+               playerEntity.position = { x: 0, y: 30 };
+               break;
+         }
+      }
+   }
+});
+
+/* RUN */
 
 Promise.all(X.assets).then(() => {
-   setInterval(() => link.render(true), 1000 / 30);
+   setInterval(() => link.render(DEBUG.active), 1000 / 30);
 });
