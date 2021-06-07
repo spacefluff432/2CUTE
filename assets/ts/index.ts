@@ -389,10 +389,10 @@ link.on('interact', {
       if (link.locked === false) {
          switch (metadata.key) {
             case 'toriel-throne':
-               alert('TORI!!');
+               console.log('TORI!!');
                break;
             case 'asgore-throne':
-               alert('GOREY!!');
+               console.log('GOREY!!');
                break;
          }
       }
