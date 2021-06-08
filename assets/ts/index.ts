@@ -259,16 +259,74 @@ addEventListener('resize', () => {
 // render at ~30FPS
 XCore.ready(() => setInterval(() => overworld.render(), 1e3 / 30));
 
+const textElement = document.createElement('x');
+textElement.innerHTML = '<span>* Howdy!</span>';
+
+const asgoreSprite = new XSprite({
+   steps: 10,
+   state: { active: true },
+   textures: [
+      new XTexture({
+         source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_asgore_face0_0.png'
+      }),
+      new XTexture({
+         source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_asgore_face0_1.png'
+      })
+   ]
+});
+
 // menu test code
 const menu = new XMenu({
    element: menu1,
    items: {
       a: new XItem({
-         content: 'testie',
+         content () {
+            const texture = asgoreSprite.compute();
+            if (texture) return texture.image;
+         },
          style: {
-            fontFamily: 'Determination'
+            content: {
+               height: '80%',
+               width: '80%',
+               margin: '10%',
+               imageRendering: 'pixelated'
+            }
+         }
+      }),
+      b: new XItem({
+         content: () => textElement,
+         style: {
+            item: {
+               display: 'flex',
+               alignItems: 'center',
+               justifyContent: 'center'
+            },
+            content: {
+               height: '3.75em',
+               lineHeight: '1.25em',
+               width: '100%',
+               paddingLeft: '10px',
+               fontFamily: 'Determination',
+               color: '#ffffffff',
+               fontSize: '30px',
+               display: 'block'
+            }
          }
       })
+   },
+   style: {
+      cssText: '--box-width:600px',
+      border: '3px solid #ffffffff',
+      margin: 'auto',
+      position: 'absolute',
+      width: 'var(--box-width)',
+      height: '150px',
+      top: '20px',
+      left: 'calc(50% - (var(--box-width) / 2))',
+      backgroundColor: '#000000ff',
+      display: 'grid',
+      gridTemplateColumns: '150px 1fr',
+      gridTemplateAreas: "'a b'"
    }
 });
 

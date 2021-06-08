@@ -448,32 +448,27 @@ const XWorld = (() => {
     };
 })();
 class XItem {
-    constructor({ content = '', element = document.createElement('x'), style = { height: '100%', width: '100%' } } = {}) {
-        this.content = content;
+    constructor({ content: content1 = () => { }, element = document.createElement('x'), style: { content: content2 = {}, item = {} } = {} } = {}) {
+        this.content = content1;
         this.element = element;
-        this.style = style;
+        this.style = { content: content2, item };
     }
     tick() {
-        Object.assign(this.element.style, this.style);
-        if (typeof this.content === 'string') {
-            this.element.textContent = this.content;
+        Object.assign(this.element.style, this.style.item);
+        const current = this.element.firstElementChild;
+        const next = this.content();
+        if (next) {
+            Object.assign(next.style, this.style.content);
+            current && (current === next || current.remove());
+            this.element.firstElementChild || this.element.appendChild(next);
         }
         else {
-            const texture = this.content.compute();
-            const current = this.element.firstElementChild;
-            if (texture) {
-                current && (current === texture.image || current.remove());
-                this.element.firstElementChild || this.element.appendChild(texture.image);
-                // handle texture.bounds in css style declaration
-            }
-            else {
-                current && current.remove();
-            }
+            current && current.remove();
         }
     }
 }
 class XMenu {
-    constructor({ element = document.createElement('x'), items = {}, style = { backgroundColor: '#000000ff', color: '#ffffffff', display: 'grid' } } = {}) {
+    constructor({ element = document.createElement('x'), items = {}, style = {} } = {}) {
         this.element = element;
         this.items = items;
         this.style = style;
@@ -493,4 +488,12 @@ class XMenu {
         for (const x of next)
             elements.has(x) || this.element.appendChild(x);
     }
+}
+class XReader extends XHost {
+    constructor() {
+        super(...arguments);
+        this.queue = [];
+        this.state = {};
+    }
+    tick() { }
 }

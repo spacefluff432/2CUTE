@@ -1,3 +1,8 @@
+@font-face {
+   font-family: 'Determination';
+   src: url('../font/determination.woff');
+}
+
 body {
    width: 100%;
    height: 100%;
@@ -13,10 +18,9 @@ canvas {
    background-color: #00000000;
 }
 
-test {
-   position: absolute;
-   top: 0;
-   left: 0;
-   width: 200px;
-   height: 200px;
+img {
+   -ms-interpolation-mode: nearest-neighbor;
+   image-rendering: -webkit-optimize-contrast;
+   image-rendering: -moz-crisp-edges;
+   image-rendering: pixelated;
 }

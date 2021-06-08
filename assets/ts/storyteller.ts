@@ -624,42 +624,38 @@ const XWorld = (() => {
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+type XItemStyle = { content: XOptional<CSSStyleDeclaration>; item: XOptional<CSSStyleDeclaration> };
 type XMenuItems = { [$: string]: XItem };
-type XItemStyle = XOptional<CSSStyleDeclaration>;
 
 class XItem {
-   content: string | XSprite;
+   content: () => HTMLElement | void;
    element: HTMLElement;
    style: XItemStyle;
    constructor (
       {
-         content = '',
+         content: content1 = () => {},
          element = document.createElement('x'),
-         style = { height: '100%', width: '100%' }
+         style: { content: content2 = {}, item = {} } = {}
       }: {
-         content?: string | XSprite;
+         content?: () => HTMLElement | void;
          element?: HTMLElement;
-         style?: XItemStyle;
+         style?: XOptional<XItemStyle>;
       } = {}
    ) {
-      this.content = content;
+      this.content = content1;
       this.element = element;
-      this.style = style;
+      this.style = { content: content2, item };
    }
    tick () {
-      Object.assign(this.element.style, this.style);
-      if (typeof this.content === 'string') {
-         this.element.textContent = this.content;
+      Object.assign(this.element.style, this.style.item);
+      const current = this.element.firstElementChild;
+      const next = this.content();
+      if (next) {
+         Object.assign(next.style, this.style.content);
+         current && (current === next || current.remove());
+         this.element.firstElementChild || this.element.appendChild(next);
       } else {
-         const texture = this.content.compute();
-         const current = this.element.firstElementChild;
-         if (texture) {
-            current && (current === texture.image || current.remove());
-            this.element.firstElementChild || this.element.appendChild(texture.image);
-            // handle texture.bounds in css style declaration
-         } else {
-            current && current.remove();
-         }
+         current && current.remove();
       }
    }
 }
@@ -667,17 +663,17 @@ class XItem {
 class XMenu {
    element: HTMLElement;
    items: XMenuItems;
-   style: XItemStyle;
+   style: XOptional<CSSStyleDeclaration>;
    constructor (
       {
          element = document.createElement('x'),
          items = {},
-         style = { backgroundColor: '#000000ff', color: '#ffffffff', display: 'grid' }
+         style = {}
       }: {
          element?: HTMLElement;
          items?: XMenuItems;
          state?: { access?: boolean; visibility?: boolean };
-         style?: XItemStyle;
+         style?: XOptional<CSSStyleDeclaration>;
       } = {}
    ) {
       this.element = element;
@@ -697,4 +693,10 @@ class XMenu {
       for (const x of elements) next.has(x) || (elements.has(x) && this.element.removeChild(x));
       for (const x of next) elements.has(x) || this.element.appendChild(x);
    }
+}
+
+class XReader extends XHost {
+   queue: string[] = [];
+   state = {};
+   tick () {}
 }
