@@ -12,3 +12,11 @@ canvas {
    grid-area: c;
    background-color: #00000000;
 }
+
+test {
+   position: absolute;
+   top: 0;
+   left: 0;
+   width: 200px;
+   height: 200px;
+}
