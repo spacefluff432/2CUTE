@@ -4,7 +4,7 @@ declare const menu1: HTMLElement;
 
 function roomWall (bounds: XBounds) {
    return new XEntity({
-      attributes: { collidable: true },
+      attributes: { collide: true },
       bounds: { h: bounds.h, w: bounds.w, x: 0, y: 0 },
       position: { x: bounds.x, y: bounds.y }
    });
@@ -18,7 +18,7 @@ function staticSprite (source: string) {
 }
 
 const player = new XEntity({
-   attributes: { collidable: true, visible: true },
+   attributes: { collide: true, see: true },
    bounds: { h: 5, w: 20 },
    sprite: new XSprite({
       attributes: { persistent: true },
@@ -35,7 +35,7 @@ const player = new XEntity({
 const throneRoomRoom = new XRoom({
    entities: [
       new XEntity({
-         attributes: { backdrop: true, visible: true },
+         attributes: { backdrop: true, see: true },
          sprite: staticSprite('assets/game/backgrounds/throne-room.png')
       }),
       roomWall({ h: 20, w: 40, x: 140, y: -20 }),
@@ -62,30 +62,30 @@ const throneRoomRoom = new XRoom({
       roomWall({ h: 45, w: 70, x: 210, y: 120 }),
       roomWall({ h: 65, w: 45, x: 140, y: 360 }),
       new XEntity({
-         attributes: { triggerable: true },
+         attributes: { trigger: true },
          bounds: { h: 20, w: 60 },
          metadata: { key: 'door', destination: 'nextRoom' },
          position: { x: 80, y: 480 }
       }),
       new XEntity({
-         attributes: { interactable: true },
+         attributes: { interact: true },
          bounds: { h: 55, w: 80 },
          metadata: { key: 'asgore-throne', interact: 0 },
          position: { x: 205, y: 115 }
       }),
       new XEntity({
-         attributes: { interactable: true },
+         attributes: { interact: true },
          bounds: { h: 75, w: 55 },
          metadata: { key: 'toriel-throne', interact: 0 },
          position: { x: 135, y: 355 }
       }),
       new XEntity({
-         attributes: { visible: true },
+         attributes: { see: true },
          depth: 10,
          sprite: staticSprite('assets/game/backgrounds/throne-room-overlay.png')
       }),
       new XEntity({
-         attributes: { visible: true },
+         attributes: { see: true },
          depth: 10,
          sprite: staticSprite('assets/game/backgrounds/throne-room-overlay.png')
       })
@@ -96,7 +96,7 @@ const throneRoomRoom = new XRoom({
 const nextRoomRoom = new XRoom({
    entities: [
       new XEntity({
-         attributes: { visible: true, triggerable: true },
+         attributes: { see: true, trigger: true },
          bounds: { h: 20, w: 20 },
          metadata: { key: 'door', destination: 'throneRoom' },
          sprite: new XSprite({
@@ -205,7 +205,7 @@ const overworld = new XOverworld({
 overworld.on('interact', {
    priority: 0,
    script ({ metadata }: XEntity) {
-      if (overworld.movement === true) {
+      if (overworld.move === true) {
          switch (metadata.key) {
             case 'toriel-throne':
                console.log('TORI!!');
@@ -236,7 +236,7 @@ overworld.on('trigger', {
    }
 });
 
-/* SPRINT KEY!! */
+// sprint key
 overworld.keys.x.on('down', {
    priority: 0,
    script () {
@@ -251,6 +251,7 @@ overworld.keys.x.on('up', {
    }
 });
 
+// auto resize
 overworld.update(innerHeight, innerWidth);
 addEventListener('resize', () => {
    overworld.update(innerHeight, innerWidth);

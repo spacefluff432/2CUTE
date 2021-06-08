@@ -10,19 +10,18 @@
 ///// needs more optimizating //////////////////////////////////////////////////////////////////////
 
 type XBounds = { h: number; w: number; x: number; y: number };
-type XEntityAttributes = {
-   backdrop: boolean;
-   collidable: boolean;
-   interactable: boolean;
-   triggerable: boolean;
-   visible: boolean;
-};
-type XEntityMetadata = { [$: string]: any };
+type XEntityAttributes = { backdrop: boolean; collide: boolean; interact: boolean; trigger: boolean; see: boolean };
+type XItemStyle = { content: XOptional<CSSStyleDeclaration>; item: XOptional<CSSStyleDeclaration> };
+type XKeyed<X> = { [k: string]: X };
 type XListener = ((...data: any[]) => any) | { priority: number; script: (...data: any[]) => any };
-type XOptional<X> = { [$ in keyof X]?: X[$] };
+type XOptional<X> = { [k in keyof X]?: X[k] };
+type XOverworldKeys = { u: XKey; l: XKey; d: XKey; r: XKey; z: XKey; x: XKey; c: XKey };
+type XOverworldSprites = { u: XSprite; l: XSprite; d: XSprite; r: XSprite };
+type XOverworldState = { detect: boolean; move: boolean };
 type XPosition = { x: number; y: number };
 type XRendererState = { scale: number };
 type XRoomAttributes = { overworld: boolean };
+type XSpeakerState = { sprite: string; voice: string };
 type XSpriteAttributes = { persistent: boolean; single: boolean; sticky: boolean };
 type XSpriteState = { active: boolean; index: number; step: number };
 
@@ -43,23 +42,17 @@ class XEntity {
    attributes: XEntityAttributes;
    bounds: XBounds;
    depth: number;
-   metadata: XEntityMetadata;
+   metadata: XKeyed<any>;
    position: XPosition;
-   sprite?: XSprite;
+   sprite: XSprite | void;
    constructor (
       {
-         attributes: {
-            backdrop = false,
-            collidable = false,
-            interactable = false,
-            triggerable = false,
-            visible = false
-         } = {
+         attributes: { backdrop = false, collide = false, interact = false, trigger = false, see = false } = {
             backdrop: false,
-            collidable: false,
-            interactable: false,
-            triggerable: false,
-            visible: false
+            collide: false,
+            interact: false,
+            trigger: false,
+            see: false
          },
          bounds: { h = 0, w = 0, x: x1 = 0, y: y1 = 0 } = {},
          depth = 0,
@@ -70,17 +63,17 @@ class XEntity {
          attributes?: XOptional<XEntityAttributes>;
          bounds?: XOptional<XBounds>;
          depth?: number;
-         metadata?: XEntityMetadata;
+         metadata?: XKeyed<any>;
          position?: XOptional<XPosition>;
          sprite?: XSprite;
       } = {}
    ) {
-      this.attributes = { backdrop, collidable, interactable, triggerable, visible };
+      this.attributes = { backdrop, collide, interact, trigger, see };
       this.bounds = { h, w, x: x1, y: y1 };
       this.depth = depth;
       this.metadata = metadata;
       this.position = { x: x2, y: y2 };
-      sprite && (this.sprite = sprite);
+      this.sprite = sprite;
    }
 }
 
@@ -181,6 +174,35 @@ class XRenderer {
    }
 }
 
+class XSound {
+   audio: HTMLAudioElement;
+   constructor (
+      {
+         source = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
+      }: { source?: string } = {}
+   ) {
+      this.audio = XSound.audio(source);
+   }
+   static cache: Map<string, HTMLAudioElement> = new Map();
+   static audio (source: string) {
+      const audio = XSound.cache.get(source) || new Audio(source);
+      if (!XSound.cache.has(source)) {
+         XSound.cache.set(source, audio);
+         XCore.add(
+            new Promise((resolve, reject) => {
+               audio.addEventListener('load', () => {
+                  resolve();
+               });
+               audio.addEventListener('error', () => {
+                  reject();
+               });
+            })
+         );
+      }
+      return audio;
+   }
+}
+
 class XSprite {
    attributes: XSpriteAttributes;
    default: number;
@@ -250,7 +272,7 @@ class XSprite {
    }
 }
 
-class Superset<X> implements Set<X> {
+class XSet<X> implements Set<X> {
    state: Set<Set<X>>;
    get collection () {
       return new Set([ ...this.state ].map(a => [ ...a ]).flat());
@@ -262,13 +284,13 @@ class Superset<X> implements Set<X> {
       this.state = new Set(state);
    }
    add (value: X): this {
-      throw new ReferenceError('This superset has no defined adder!');
+      throw new ReferenceError('This XSet has no defined adder!');
    }
    clear () {
       for (const a of this.state) a.clear();
    }
    delete (value: X): boolean {
-      throw new ReferenceError('This superset has no defined deleter!');
+      throw new ReferenceError('This XSet has no defined deleter!');
    }
    forEach (callbackfn: Parameters<Set<X>['forEach']>[0], thisArg?: Parameters<Set<X>['forEach']>[1]): void {
       return this.collection.forEach(callbackfn, thisArg);
@@ -291,15 +313,15 @@ class Superset<X> implements Set<X> {
    [Symbol.toStringTag]: string;
 }
 
-class XRoom extends Superset<XEntity> {
+class XRoom extends XSet<XEntity> {
    backdrops: Set<XEntity> = new Set();
    bounds: XBounds;
-   collidables: Set<XEntity> = new Set();
-   interactables: Set<XEntity> = new Set();
+   collides: Set<XEntity> = new Set();
+   interacts: Set<XEntity> = new Set();
    player: XEntity;
-   triggerables: Set<XEntity> = new Set();
-   visibles: Set<XEntity> = new Set();
-   state = new Set([ this.backdrops, this.collidables, this.interactables, this.triggerables, this.visibles ]);
+   triggers: Set<XEntity> = new Set();
+   sees: Set<XEntity> = new Set();
+   state = new Set([ this.backdrops, this.collides, this.interacts, this.triggers, this.sees ]);
    constructor (
       {
          bounds: { h = 0, w = 0, x = 0, y = 0 } = {},
@@ -318,19 +340,19 @@ class XRoom extends Superset<XEntity> {
    }
    add (entity: XEntity) {
       entity.attributes.backdrop && this.backdrops.add(entity);
-      entity.attributes.collidable && this.collidables.add(entity);
-      entity.attributes.interactable && this.interactables.add(entity);
-      entity.attributes.triggerable && this.triggerables.add(entity);
-      entity.attributes.backdrop || (entity.attributes.visible && this.visibles.add(entity));
+      entity.attributes.collide && this.collides.add(entity);
+      entity.attributes.interact && this.interacts.add(entity);
+      entity.attributes.trigger && this.triggers.add(entity);
+      entity.attributes.backdrop || (entity.attributes.see && this.sees.add(entity));
       return this;
    }
    delete (entity: XEntity) {
       let state = true;
       entity.attributes.backdrop && (this.backdrops.delete(entity) || (state = false));
-      entity.attributes.collidable && (this.collidables.delete(entity) || (state = false));
-      entity.attributes.interactable && (this.interactables.delete(entity) || (state = false));
-      entity.attributes.triggerable && (this.triggerables.delete(entity) || (state = false));
-      entity.attributes.backdrop || (entity.attributes.visible && (this.visibles.delete(entity) || (state = false)));
+      entity.attributes.collide && (this.collides.delete(entity) || (state = false));
+      entity.attributes.interact && (this.interacts.delete(entity) || (state = false));
+      entity.attributes.trigger && (this.triggers.delete(entity) || (state = false));
+      entity.attributes.backdrop || (entity.attributes.see && (this.sees.delete(entity) || (state = false)));
       return state;
    }
 }
@@ -341,7 +363,7 @@ class XTexture {
    constructor (
       {
          bounds: { h = Infinity, w = Infinity, x = 0, y = 0 } = {},
-         source = 'data:image/gif;base64,R0lGODlhAAAAAAAAACwAAAAAAAAAADs='
+         source = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=='
       }: { bounds?: XOptional<XBounds>; source?: string } = {}
    ) {
       this.bounds = { h, w, x, y };
@@ -376,11 +398,7 @@ class XTexture {
 //    ## ### ##   ##     ##   ##   ###    ##          ##    ###
 //    #########   #########   ##    ###   #########   ########
 //
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-type XOverworldKeys = { u: XKey; l: XKey; d: XKey; r: XKey; z: XKey; x: XKey; c: XKey };
-type XOverworldSprites = { u: XSprite; l: XSprite; d: XSprite; r: XSprite };
-type XOverworldState = { detection: boolean; movement: boolean };
+///// imagine using unitale ////////////////////////////////////////////////////////////////////////
 
 class XKey extends XHost {
    keys: Set<string>;
@@ -417,18 +435,18 @@ class XOverworld extends XHost {
    speed: number;
    sprites: XOverworldSprites;
    state: XOverworldState;
-   get detection () {
-      return this.state.detection;
+   get detect () {
+      return this.state.detect;
    }
-   set detection (value) {
-      this.state.detection = value;
+   set detect (value) {
+      this.state.detect = value;
    }
-   get movement () {
-      return this.state.movement;
+   get move () {
+      return this.state.move;
    }
-   set movement (value) {
-      this.state.movement = value;
-      if (this.state.movement) {
+   set move (value) {
+      this.state.move = value;
+      if (this.state.move) {
          this.keys.u.active && this.sprites.u.enable();
          this.keys.l.active && this.sprites.l.enable();
          this.keys.d.active && this.sprites.d.enable();
@@ -456,7 +474,7 @@ class XOverworld extends XHost {
          room = new XRoom(),
          speed = 1,
          sprites: { u: u2 = new XSprite(), l: l2 = new XSprite(), d: d2 = new XSprite(), r: r2 = new XSprite() } = {},
-         state: { detection = true, movement = true } = {}
+         state: { detect = true, move = true } = {}
       }: {
          background?: XRenderer;
          foreground?: XRenderer;
@@ -474,17 +492,17 @@ class XOverworld extends XHost {
       this.room = room;
       this.speed = speed;
       this.sprites = { u: u2, l: l2, d: d2, r: r2 };
-      this.state = { detection, movement };
-      this.keys.u.on('up', () => this.state.movement && this.sprites.u.disable());
-      this.keys.l.on('up', () => this.state.movement && this.sprites.l.disable());
-      this.keys.d.on('up', () => this.state.movement && this.sprites.d.disable());
-      this.keys.r.on('up', () => this.state.movement && this.sprites.r.disable());
-      this.keys.u.on('down', () => this.state.movement && this.sprites.u.enable());
-      this.keys.l.on('down', () => this.state.movement && this.sprites.l.enable());
-      this.keys.d.on('down', () => this.state.movement && this.sprites.d.enable());
-      this.keys.r.on('down', () => this.state.movement && this.sprites.r.enable());
+      this.state = { detect, move };
+      this.keys.u.on('up', () => this.state.move && this.sprites.u.disable());
+      this.keys.l.on('up', () => this.state.move && this.sprites.l.disable());
+      this.keys.d.on('up', () => this.state.move && this.sprites.d.disable());
+      this.keys.r.on('up', () => this.state.move && this.sprites.r.disable());
+      this.keys.u.on('down', () => this.state.move && this.sprites.u.enable());
+      this.keys.l.on('down', () => this.state.move && this.sprites.l.enable());
+      this.keys.d.on('down', () => this.state.move && this.sprites.d.enable());
+      this.keys.r.on('down', () => this.state.move && this.sprites.r.enable());
       this.keys.z.on('down', () => {
-         for (const a of XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.interactables)) {
+         for (const a of XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.interacts)) {
             this.fire('interact', a);
          }
       });
@@ -500,11 +518,11 @@ class XOverworld extends XHost {
    render () {
       const queue: Set<XEntity> = new Set();
       const origin = Object.assign({}, this.room.player.position);
-      if (this.movement) {
+      if (this.move) {
          const keys = { u: this.keys.u.active, l: this.keys.l.active, d: this.keys.d.active, r: this.keys.r.active };
          if (keys.l || keys.r) {
             this.room.player.position.x -= keys.l ? this.speed : -this.speed;
-            const collisions = XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.collidables);
+            const collisions = XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.collides);
             if (collisions.size > 0) {
                this.room.player.position = Object.assign({}, origin);
                let index = 0;
@@ -520,7 +538,7 @@ class XOverworld extends XHost {
          if (keys.u || keys.d) {
             const origin = Object.assign({}, this.room.player.position);
             this.room.player.position.y += keys.u ? this.speed : -this.speed;
-            const collisions = XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.collidables);
+            const collisions = XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.collides);
             if (collisions.size > 0) {
                this.room.player.position = Object.assign({}, origin);
                let index = 0;
@@ -559,12 +577,12 @@ class XOverworld extends XHost {
             this.background.render(XWorld.center(this.room.player), this.room.player, ...this.room.backdrops);
          }
       }
-      this.foreground.render(XWorld.center(this.room.player), this.room.player, ...this.room.visibles);
-      if (this.movement) {
+      this.foreground.render(XWorld.center(this.room.player), this.room.player, ...this.room.sees);
+      if (this.move) {
          for (const a of queue) this.fire('collide', a);
       }
-      if (this.detection) {
-         for (const a of XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.triggerables)) {
+      if (this.detect) {
+         for (const a of XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.triggers)) {
             this.fire('trigger', a);
          }
       }
@@ -622,10 +640,7 @@ const XWorld = (() => {
 //    ##     ##   ##          ##    ###   ##     ##
 //    ##     ##   #########   ##     ##   #########
 //
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-type XItemStyle = { content: XOptional<CSSStyleDeclaration>; item: XOptional<CSSStyleDeclaration> };
-type XMenuItems = { [$: string]: XItem };
+////// where it all began //////////////////////////////////////////////////////////////////////////
 
 class XItem {
    content: () => HTMLElement | void;
@@ -662,7 +677,7 @@ class XItem {
 
 class XMenu {
    element: HTMLElement;
-   items: XMenuItems;
+   items: XKeyed<XItem>;
    style: XOptional<CSSStyleDeclaration>;
    constructor (
       {
@@ -671,8 +686,7 @@ class XMenu {
          style = {}
       }: {
          element?: HTMLElement;
-         items?: XMenuItems;
-         state?: { access?: boolean; visibility?: boolean };
+         items?: XKeyed<XItem>;
          style?: XOptional<CSSStyleDeclaration>;
       } = {}
    ) {
@@ -696,7 +710,93 @@ class XMenu {
 }
 
 class XReader extends XHost {
-   queue: string[] = [];
-   state = {};
-   tick () {}
+   lines: string[] = [];
+   state = { mode: 'empty', text: '', skip: false };
+   add (...text: string[]) {
+      const lines = text.join('\n').split('\n').map(line => line.trim()).filter(line => line.length > 0);
+      if (lines.length > 0) {
+         this.lines.push(...lines);
+         if (this.state.mode === 'empty') {
+            this.state.mode = 'idle';
+            this.read();
+         }
+      }
+   }
+   advance () {
+      this.lines.splice(0, 1);
+      this.read();
+   }
+   parse (text: string) {
+      if (text.startsWith('[') && text.endsWith(']')) {
+         const style: Map<string, string> = new Map();
+         for (const property of text.slice(1, -1).split('|')) {
+            if (property.includes(':')) {
+               const [ key, value ] = property.split(':').slice(0, 2);
+               style.set(key, value);
+            } else {
+               style.set(property, 'true');
+            }
+         }
+         return style;
+      } else {
+         return text;
+      }
+   }
+   async read () {
+      if (this.state.mode === 'idle') {
+         if (this.lines.length > 0) {
+            const line = this.parse(this.lines[0]);
+            if (typeof line === 'string') {
+               this.state.mode = 'read';
+               for (const { code: a, char: b } of this.fire('read')) {
+                  let index = 0;
+                  while (index < line.length - 1) {
+                     const char = line[index++];
+                     if (char === '{') {
+                        const code = line.slice(index, line.indexOf('}', index));
+                        index = index + code.length + 1;
+                        await a(code);
+                     } else {
+                        await b(char);
+                     }
+                  }
+               }
+               this.state.mode = 'idle';
+               this.fire('idle');
+            } else {
+               for (const [ key, value ] of line) this.fire('style', [ key, value ]);
+               this.advance();
+            }
+         } else {
+            this.state.mode = 'empty';
+            this.fire('empty');
+         }
+      }
+   }
+}
+
+class XSpeaker {
+   sprites: XKeyed<XSprite>;
+   state: XSpeakerState;
+   voices: XKeyed<XSound>;
+   constructor (
+      {
+         sprites = {},
+         state: { sprite = 'default', voice = 'default' } = {},
+         voices = {}
+      }: { sprites?: XKeyed<XSprite>; state?: XOptional<XSpeakerState>; voices?: XKeyed<XSound> } = {}
+   ) {
+      this.sprites = sprites;
+      this.state = { sprite, voice };
+      this.voices = voices;
+   }
+}
+
+class XDialogue {
+   reader: XReader;
+   speakers: XKeyed<XSpeaker>;
+   constructor ({ reader = new XReader(), speakers = {} }: { reader?: XReader; speakers?: XKeyed<XSpeaker> }) {
+      this.reader = reader;
+      this.speakers = speakers;
+   }
 }
