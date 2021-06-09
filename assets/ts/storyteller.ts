@@ -10,6 +10,7 @@
 ///// needs more optimizating //////////////////////////////////////////////////////////////////////
 
 type XBounds = { h: number; w: number; x: number; y: number };
+type XDialogueState = { active: boolean; speaker: string; text: string };
 type XEntityAttributes = { backdrop: boolean; collide: boolean; interact: boolean; trigger: boolean; see: boolean };
 type XItemStyle = { content: XOptional<CSSStyleDeclaration>; item: XOptional<CSSStyleDeclaration> };
 type XKeyed<X> = { [k: string]: X };
@@ -17,12 +18,11 @@ type XListener = ((...data: any[]) => any) | { priority: number; script: (...dat
 type XOptional<X> = { [k in keyof X]?: X[k] };
 type XOverworldKeys = { u: XKey; l: XKey; d: XKey; r: XKey; z: XKey; x: XKey; c: XKey };
 type XOverworldSprites = { u: XSprite; l: XSprite; d: XSprite; r: XSprite };
-type XOverworldState = { detect: boolean; move: boolean };
+type XOverworldState = { detect: boolean; interact: boolean; move: boolean };
 type XPosition = { x: number; y: number };
 type XRendererState = { scale: number };
-type XRoomAttributes = { overworld: boolean };
 type XSpeakerState = { sprite: string; voice: string };
-type XSpriteAttributes = { persistent: boolean; single: boolean; sticky: boolean };
+type XSpriteAttributes = { persist: boolean; hold: boolean };
 type XSpriteState = { active: boolean; index: number; step: number };
 
 const XCore = (() => {
@@ -89,11 +89,14 @@ class XHost {
    fire (name: string, ...data: any[]) {
       if (this.events.has(name)) {
          return [ ...this.events.get(name)! ]
-            .sort((a, b) => {
-               return (typeof a === 'function' ? 0 : a.priority) - (typeof b === 'function' ? 0 : b.priority);
+            .sort((listener1, listener2) => {
+               return (
+                  (typeof listener1 === 'function' ? 0 : listener1.priority) -
+                  (typeof listener2 === 'function' ? 0 : listener2.priority)
+               );
             })
-            .map(a => {
-               return (typeof a === 'function' ? a : a.script)(...data);
+            .map(listener => {
+               return (typeof listener === 'function' ? listener : listener.script)(...data);
             });
       } else {
          return [];
@@ -135,9 +138,9 @@ class XRenderer {
          (position.x * -1 + this.size.x / 2) * this.state.scale,
          (position.y + this.size.y / 2) * this.state.scale
       );
-      for (const a of entities.sort((a, b) => a.depth - b.depth)) {
-         if (a.sprite) {
-            const texture = a.sprite.compute();
+      for (const entity of entities.sort((entity1, entity2) => entity1.depth - entity2.depth)) {
+         if (entity.sprite) {
+            const texture = entity.sprite.compute();
             if (texture) {
                const width = isFinite(texture.bounds.w) ? texture.bounds.w : texture.image.width;
                const height = isFinite(texture.bounds.h) ? texture.bounds.h : texture.image.height;
@@ -147,8 +150,8 @@ class XRenderer {
                   texture.bounds.y,
                   width,
                   height,
-                  a.position.x,
-                  a.position.y * -1 - height,
+                  entity.position.x,
+                  entity.position.y * -1 - height,
                   width,
                   height
                );
@@ -213,10 +216,9 @@ class XSprite {
    textures: XTexture[];
    constructor (
       {
-         attributes: { persistent = false, single = false, sticky = false } = {
-            persistent: false,
-            single: false,
-            sticky: false
+         attributes: { persist = false, hold = false } = {
+            persist: false,
+            hold: false
          },
          default: $default = 0,
          rotation = 0,
@@ -238,7 +240,7 @@ class XSprite {
          textures?: Iterable<XTexture>;
       } = {}
    ) {
-      this.attributes = { persistent, single, sticky };
+      this.attributes = { persist, hold };
       this.default = $default;
       this.rotation = rotation;
       this.scale = scale;
@@ -247,7 +249,7 @@ class XSprite {
       this.textures = [ ...textures ];
    }
    compute () {
-      if (this.state.active || this.attributes.persistent) {
+      if (this.state.active || this.attributes.persist) {
          const texture = this.textures[this.state.index];
          if (this.state.active && ++this.state.step >= this.steps) {
             this.state.step = 0;
@@ -260,13 +262,13 @@ class XSprite {
    }
    disable () {
       if (this.state.active) {
-         this.attributes.sticky || ((this.state.step = 0), (this.state.index = this.default));
+         this.attributes.hold || ((this.state.step = 0), (this.state.index = this.default));
          this.state.active = false;
       }
    }
    enable () {
       if (!this.state.active) {
-         this.attributes.sticky || ((this.state.step = 0), (this.state.index = this.default));
+         this.attributes.hold || ((this.state.step = 0), (this.state.index = this.default));
          this.state.active = true;
       }
    }
@@ -275,7 +277,7 @@ class XSprite {
 class XSet<X> implements Set<X> {
    state: Set<Set<X>>;
    get collection () {
-      return new Set([ ...this.state ].map(a => [ ...a ]).flat());
+      return new Set([ ...this.state ].map(set => [ ...set ]).flat());
    }
    get size () {
       return this.collection.size;
@@ -287,7 +289,7 @@ class XSet<X> implements Set<X> {
       throw new ReferenceError('This XSet has no defined adder!');
    }
    clear () {
-      for (const a of this.state) a.clear();
+      for (const set of this.state) set.clear();
    }
    delete (value: X): boolean {
       throw new ReferenceError('This XSet has no defined deleter!');
@@ -336,7 +338,7 @@ class XRoom extends XSet<XEntity> {
       super();
       this.bounds = { h, w, x, y };
       this.player = player;
-      for (const a of entities) this.add(a);
+      for (const entity of entities) this.add(entity);
    }
    add (entity: XEntity) {
       entity.attributes.backdrop && this.backdrops.add(entity);
@@ -441,6 +443,12 @@ class XOverworld extends XHost {
    set detect (value) {
       this.state.detect = value;
    }
+   get interact () {
+      return this.state.interact;
+   }
+   set interact (value) {
+      this.state.interact = value;
+   }
    get move () {
       return this.state.move;
    }
@@ -474,7 +482,7 @@ class XOverworld extends XHost {
          room = new XRoom(),
          speed = 1,
          sprites: { u: u2 = new XSprite(), l: l2 = new XSprite(), d: d2 = new XSprite(), r: r2 = new XSprite() } = {},
-         state: { detect = true, move = true } = {}
+         state: { detect = true, interact = true, move = true } = {}
       }: {
          background?: XRenderer;
          foreground?: XRenderer;
@@ -492,7 +500,7 @@ class XOverworld extends XHost {
       this.room = room;
       this.speed = speed;
       this.sprites = { u: u2, l: l2, d: d2, r: r2 };
-      this.state = { detect, move };
+      this.state = { detect, interact, move };
       this.keys.u.on('up', () => this.state.move && this.sprites.u.disable());
       this.keys.l.on('up', () => this.state.move && this.sprites.l.disable());
       this.keys.d.on('up', () => this.state.move && this.sprites.d.disable());
@@ -502,8 +510,10 @@ class XOverworld extends XHost {
       this.keys.d.on('down', () => this.state.move && this.sprites.d.enable());
       this.keys.r.on('down', () => this.state.move && this.sprites.r.enable());
       this.keys.z.on('down', () => {
-         for (const a of XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.interacts)) {
-            this.fire('interact', a);
+         if (this.interact) {
+            for (const entity of XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.interacts)) {
+               this.fire('interact', entity);
+            }
          }
       });
       this.refresh();
@@ -532,7 +542,7 @@ class XOverworld extends XHost {
                   collision = XWorld.intersection(XWorld.bounds(this.room.player), ...collisions).size > 0;
                }
                collision && (this.room.player.position.x += keys.l ? 1 : -1);
-               for (const a of collisions) queue.add(a);
+               for (const entity of collisions) queue.add(entity);
             }
          }
          if (keys.u || keys.d) {
@@ -550,7 +560,7 @@ class XOverworld extends XHost {
                collision && (this.room.player.position.y -= keys.u ? 1 : -1);
                // this line enables the frisk dance
                collision && index === 1 && keys.u && keys.d && this.room.player.position.y--;
-               for (const a of collisions) queue.add(a);
+               for (const entity of collisions) queue.add(entity);
             }
          }
          if (this.room.player.position.x < origin.x) {
@@ -579,11 +589,11 @@ class XOverworld extends XHost {
       }
       this.foreground.render(XWorld.center(this.room.player), this.room.player, ...this.room.sees);
       if (this.move) {
-         for (const a of queue) this.fire('collide', a);
+         for (const entity of queue) this.fire('collide', entity);
       }
       if (this.detect) {
-         for (const a of XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.triggers)) {
-            this.fire('trigger', a);
+         for (const entity of XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.triggers)) {
+            this.fire('trigger', entity);
          }
       }
    }
@@ -620,10 +630,10 @@ const XWorld = (() => {
       },
       intersection ({ x = 0, y = 0, h = 0, w = 0 }: XBounds, ...entities: XEntity[]) {
          const list: Set<XEntity> = new Set();
-         for (const a of entities) {
-            const bounds = XWorld.bounds(a);
+         for (const entity of entities) {
+            const bounds = XWorld.bounds(entity);
             if (x < bounds.x + bounds.w && x + w > bounds.x && y < bounds.y + bounds.h && y + h > bounds.y) {
-               list.add(a);
+               list.add(entity);
             }
          }
          return list;
@@ -641,6 +651,132 @@ const XWorld = (() => {
 //    ##     ##   #########   ##     ##   #########
 //
 ////// where it all began //////////////////////////////////////////////////////////////////////////
+
+class XDialogue extends XHost {
+   advance: XKey;
+   menu: XMenu;
+   interval: number;
+   reader: XReader;
+   skip: XKey;
+   speakers: XKeyed<XSpeaker>;
+   state: XDialogueState;
+   get speaker () {
+      return this.speakers[this.state.speaker];
+   }
+   constructor (
+      {
+         advance = new XKey(),
+         menu = new XMenu(),
+         interval = 0,
+         reader = new XReader(),
+         speakers = {},
+         skip = new XKey(),
+         state: { active = false, speaker = 'default', text = '' } = {}
+      }: {
+         advance?: XKey;
+         menu?: XMenu;
+         interval?: number;
+         reader?: XReader;
+         speakers?: XKeyed<XSpeaker>;
+         skip?: XKey;
+         state?: XOptional<XDialogueState>;
+      } = {}
+   ) {
+      super();
+      this.advance = advance;
+      this.menu = menu;
+      this.interval = interval;
+      this.reader = reader;
+      this.speakers = speakers;
+      this.skip = skip;
+      this.state = { active, speaker, text };
+      this.reader.on('idle', () => {
+         const speaker = this.speaker;
+         speaker && speaker.sprite.disable();
+      });
+      this.reader.on('read', () => {
+         const speaker = this.speaker;
+         speaker && speaker.sprite.enable();
+         this.state.text = '';
+         if (!this.state.active) {
+            this.state.active = true;
+            this.menu.style.opacity = '1';
+            this.fire('enable');
+         }
+         let skip = false;
+         let interval = this.interval;
+         return {
+            char: async (char: string) => {
+               await Promise.race([
+                  new Promise(resolve => {
+                     setTimeout(() => resolve(0), interval);
+                     interval === this.interval || (interval = this.interval);
+                  }),
+                  new Promise(resolve => {
+                     if (skip) {
+                        resolve(0);
+                     } else {
+                        const listener = () => {
+                           skip = true;
+                           resolve(0);
+                           this.skip.off('down', listener);
+                        };
+                        this.skip.on('down', listener);
+                     }
+                  })
+               ]);
+               this.state.text += char;
+            },
+            code: async (code: string) => {
+               switch (code[0]) {
+                  case '^':
+                     interval = Number(code[1]) * (this.interval * 2);
+                     break;
+                  case '!':
+                     switch (code.slice(1)) {
+                        case 'advance':
+                           this.reader.advance();
+                           break;
+                     }
+                     break;
+               }
+            }
+         };
+      });
+      this.reader.on('empty', () => {
+         this.state.text = '';
+         if (this.state.active) {
+            this.state.active = false;
+            this.menu.style.opacity = '0';
+            this.fire('disable');
+         }
+      });
+      this.reader.on('style', ([ key, value ]: [string, string]) => {
+         switch (key) {
+            case 'speaker':
+               this.state.speaker = value;
+               break;
+            case 'voice':
+               this.speaker.state.voice = value;
+               break;
+            case 'sprite':
+               this.speaker.state.sprite = value;
+               break;
+         }
+      });
+      this.advance.on('down', () => this.state.active && this.reader.advance());
+   }
+   computeImage () {
+      const speaker = this.speaker;
+      if (speaker) {
+         const texture = speaker.sprite.compute();
+         if (texture) return texture.image;
+      }
+   }
+   computeText () {
+      return this.state.text;
+   }
+}
 
 class XItem {
    content: () => HTMLElement | void;
@@ -699,13 +835,13 @@ class XMenu {
       const elements: Set<ChildNode> = new Set();
       this.element.childNodes.forEach(x => elements.add(x));
       const next: Set<ChildNode> = new Set();
-      for (const x in this.items) {
-         const item = this.items[x];
+      for (const key in this.items) {
+         const item = this.items[key];
          item.tick();
          next.add(item.element);
       }
-      for (const x of elements) next.has(x) || (elements.has(x) && this.element.removeChild(x));
-      for (const x of next) elements.has(x) || this.element.appendChild(x);
+      for (const node of elements) next.has(node) || (elements.has(node) && this.element.removeChild(node));
+      for (const node of next) elements.has(node) || this.element.appendChild(node);
    }
 }
 
@@ -748,23 +884,23 @@ class XReader extends XHost {
             const line = this.parse(this.lines[0]);
             if (typeof line === 'string') {
                this.state.mode = 'read';
-               for (const { code: a, char: b } of this.fire('read')) {
+               for (const { code: code1, char: char1 } of this.fire('read')) {
                   let index = 0;
-                  while (index < line.length - 1) {
-                     const char = line[index++];
-                     if (char === '{') {
-                        const code = line.slice(index, line.indexOf('}', index));
-                        index = index + code.length + 1;
-                        await a(code);
+                  while (index < line.length) {
+                     const char2 = line[index++];
+                     if (char2 === '{') {
+                        const code2 = line.slice(index, line.indexOf('}', index));
+                        index = index + code2.length + 1;
+                        await code1(code2);
                      } else {
-                        await b(char);
+                        await char1(char2);
                      }
                   }
                }
                this.state.mode = 'idle';
                this.fire('idle');
             } else {
-               for (const [ key, value ] of line) this.fire('style', [ key, value ]);
+               for (const entry of line) this.fire('style', entry);
                this.advance();
             }
          } else {
@@ -779,6 +915,9 @@ class XSpeaker {
    sprites: XKeyed<XSprite>;
    state: XSpeakerState;
    voices: XKeyed<XSound>;
+   get sprite () {
+      return this.sprites[this.state.sprite];
+   }
    constructor (
       {
          sprites = {},
@@ -789,14 +928,5 @@ class XSpeaker {
       this.sprites = sprites;
       this.state = { sprite, voice };
       this.voices = voices;
-   }
-}
-
-class XDialogue {
-   reader: XReader;
-   speakers: XKeyed<XSpeaker>;
-   constructor ({ reader = new XReader(), speakers = {} }: { reader?: XReader; speakers?: XKeyed<XSpeaker> }) {
-      this.reader = reader;
-      this.speakers = speakers;
    }
 }

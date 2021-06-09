@@ -1,5 +1,10 @@
 {
    "devDependencies": {
+      "terser": "5.7.0",
       "typescript": "4.4.0-dev.20210607"
+   },
+   "scripts": {
+      "tsc": "tsc --watch",
+      "terser": "npx terser ../js/storyteller.js -c -m -o ../../dist/storyteller.js"
    }
 }
