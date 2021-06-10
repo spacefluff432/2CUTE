@@ -1,7 +1,86 @@
 // mimic undertale env
 const game = {
+    souls: {
+        determination: new XSprite({
+            attributes: { persist: true },
+            textures: [
+                new XTexture({
+                    source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_heart_1.png'
+                }),
+                new XTexture({
+                    source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_heart_0.png'
+                })
+            ]
+        }),
+        bravery: new XSprite({
+            attributes: { persist: true },
+            textures: [
+                new XTexture({
+                    source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_heartorange_1.png'
+                }),
+                new XTexture({
+                    source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_heartorange_0.png'
+                })
+            ]
+        }),
+        justice: new XSprite({
+            attributes: { persist: true },
+            textures: [
+                new XTexture({
+                    source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_heartyellow_1.png'
+                }),
+                new XTexture({
+                    source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_heartyellow_0.png'
+                })
+            ]
+        }),
+        kindness: new XSprite({
+            attributes: { persist: true },
+            textures: [
+                new XTexture({
+                    source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_heartgreen_1.png'
+                }),
+                new XTexture({
+                    source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_heartgreen_0.png'
+                })
+            ]
+        }),
+        patience: new XSprite({
+            attributes: { persist: true },
+            textures: [
+                new XTexture({
+                    source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_heartaqua_1.png'
+                }),
+                new XTexture({
+                    source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_heartaqua_0.png'
+                })
+            ]
+        }),
+        integrity: new XSprite({
+            attributes: { persist: true },
+            textures: [
+                new XTexture({
+                    source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_heartblue_1.png'
+                }),
+                new XTexture({
+                    source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_heartblue_0.png'
+                })
+            ]
+        }),
+        perserverance: new XSprite({
+            attributes: { persist: true },
+            textures: [
+                new XTexture({
+                    source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_heartpurple_1.png'
+                }),
+                new XTexture({
+                    source: 'https://raw.githubusercontent.com/Rovoska/undertale/master/sprites/images/spr_heartpurple_0.png'
+                })
+            ]
+        })
+    },
     speed: 3,
-    state: { interact: false },
+    state: { interact: false, soul: 'determination', menu: 'none' },
     get interact() {
         return game.state.interact;
     },
@@ -14,6 +93,10 @@ const game = {
             overworld.state.active = true;
         }
     },
+    get soul() {
+        //@ts-expect-error
+        return game.souls[game.state.soul];
+    },
     door(to, from) {
         overworld.state.room = to;
         for (const { metadata: { key, room }, position } of overworld.room.entities) {
@@ -25,6 +108,7 @@ const game = {
         overworld.render();
     }
 };
+const renderer = new XRenderer({ canvas: canvas2, size: { x: 320, y: 240 }, attributes: { animate: true } });
 const overworld = new XOverworld({
     // player movement keys
     keys: {
@@ -38,7 +122,7 @@ const overworld = new XOverworld({
     },
     layers: {
         below: new XRenderer({ canvas: canvas1, size: { x: 320, y: 240 } }),
-        default: new XRenderer({ canvas: canvas2, size: { x: 320, y: 240 }, attributes: { animate: true } }),
+        default: renderer,
         above: new XRenderer({ canvas: canvas3, size: { x: 320, y: 240 } })
     },
     // player entity
@@ -267,7 +351,6 @@ const dialogueText = document.createElement('x-item');
 const dialogueMenu = new XItem({
     children: [
         new XItem({
-            priority: -5,
             element: () => {
                 const sprite = dialogue.sprite;
                 if (sprite) {
@@ -298,26 +381,98 @@ const dialogueMenu = new XItem({
         })
     ],
     style: {
-        cssText: () => `--x-width: ${canvas2.width * 0.9}px; --x-height: ${canvas2.height / 3}px`,
+        cssText: () => `--x-border: ${renderer.state.scale * 3}px; --x-width: ${canvas2.width * 0.9}px; --x-height: ${canvas2.height /
+            3}px`,
         backgroundColor: '#000000ff',
-        border: '3px solid #ffffffff',
+        border: 'var(--x-border) solid #ffffffff',
         display: 'none',
         gridTemplateAreas: "'face text'",
         gridTemplateColumns: `var(--x-height) 1fr`,
         height: 'var(--x-height)',
         margin: 'calc(var(--x-height) / 10) calc(50% - var(--x-width) / 2)',
+        position: 'relative',
         width: 'var(--x-width)'
     }
 });
-const menu = new XItem({
-    element: menu1,
-    children: [dialogueMenu],
+// sidebar selector menu
+let sidebarIndex = 0;
+const sidebarOptions = ['ITEM', 'STAT', 'CELL'];
+const sidebarMenu = new XItem({
+    children: [
+        new XItem({
+            style: {
+                backgroundColor: '#000000ff',
+                border: 'var(--x-border) solid #ffffffff',
+                height: '95%',
+                width: '90%',
+                boxSizing: 'border-box'
+            }
+        }),
+        new XItem({
+            children: sidebarOptions.map((option, index) => {
+                const optionElement = document.createElement('x-item');
+                optionElement.innerHTML = option;
+                return new XItem({
+                    children: [
+                        // soul container
+                        new XItem({
+                            element: () => {
+                                if (sidebarIndex === index) {
+                                    const texture = game.soul.compute();
+                                    if (texture) {
+                                        return texture.image;
+                                    }
+                                }
+                            },
+                            style: {
+                                height: 'calc(var(--x-option) / 2)',
+                                width: 'calc(var(--x-option) / 2)',
+                                margin: 'calc(var(--x-option) / 4)',
+                                gridArea: 'soul'
+                            }
+                        }),
+                        // text container
+                        new XItem({
+                            element: optionElement,
+                            style: {
+                                color: '#ffffffff',
+                                letterSpacing: 'calc(var(--x-border) * -0.3)',
+                                gridArea: 'option',
+                                fontFamily: 'Determination'
+                            }
+                        })
+                    ],
+                    style: {
+                        display: 'grid',
+                        fontSize: 'var(--x-size)',
+                        gridTemplateColumns: 'var(--x-option) 1fr',
+                        gridTemplateAreas: "'soul option'",
+                        width: '82%',
+                        marginLeft: '9%'
+                    }
+                });
+            }),
+            style: {
+                cssText: () => `--x-size: ${canvas2.height / 15}px; --x-option: calc(var(--x-size) * 1.1)`,
+                backgroundColor: '#000000ff',
+                border: `var(--x-border) solid #ffffffff`,
+                height: '95%',
+                width: '90%',
+                boxSizing: 'border-box',
+                paddingTop: '10%',
+                display: 'grid',
+                gridTemplateRows: `${sidebarOptions.map(() => 'var(--x-option)').join(' ')}`
+            }
+        })
+    ],
     style: {
-        height: () => `${canvas2.height}px`,
-        left: () => `${canvas2.offsetLeft}px`,
-        position: 'absolute',
-        top: () => `${canvas2.offsetTop}px`,
-        width: () => `${canvas2.width}px`
+        cssText: () => `--x-border: ${renderer.state.scale * 3}px; --x-width: ${canvas2.width *
+            0.25}px; --x-height: ${canvas2.height * 0.6}px`,
+        display: 'none',
+        gridTemplateRows: '3.5fr 5fr',
+        height: 'var(--x-height)',
+        width: 'var(--x-width)',
+        margin: '5%'
     }
 });
 // overworld extensions
@@ -338,6 +493,82 @@ const menu = new XItem({
                 break;
         }
     });
+}
+// overworld menu navigation
+{
+    // sound that plays when you arrow over an option
+    const menuHighlight = new XSound({
+        source: 'assets/game/sfx/highlight.mp3'
+    });
+    // sound that plays when u select option
+    const menuSelect = new XSound({
+        source: 'assets/game/sfx/select.mp3'
+    });
+    // maps 'c' key as menu
+    overworld.keys.c.on('down', () => {
+        if (game.state.menu === 'none') {
+            game.interact = true;
+            game.state.menu = 'sidebar';
+            sidebarMenu.style.display = 'grid';
+        }
+    });
+    // maps z key to selection
+    overworld.keys.z.on('down', () => {
+        switch (game.state.menu) {
+            case 'sidebar':
+                switch (sidebarOptions[sidebarIndex]) {
+                    case 'ITEM':
+                        console.log('items!');
+                        break;
+                    case 'STAT':
+                        console.log('stats!');
+                        break;
+                    case 'CELL':
+                        console.log('cells? bacteria? wohoho...');
+                        break;
+                }
+                break;
+            default:
+                return;
+        }
+        //@ts-expect-error
+        menuSelect.audio.cloneNode().play();
+    });
+    // allow 'x' key to exit menus
+    overworld.keys.x.on('down', () => {
+        switch (game.state.menu) {
+            case 'sidebar':
+                game.state.menu = 'none';
+                game.interact = false;
+                sidebarMenu.style.display = 'none';
+                break;
+        }
+    });
+    // map directional keys to selection
+    {
+        overworld.keys.d.on('down', () => {
+            switch (game.state.menu) {
+                case 'sidebar':
+                    ++sidebarIndex === sidebarOptions.length && (sidebarIndex = 0);
+                    break;
+                default:
+                    return;
+            }
+            //@ts-expect-error
+            menuHighlight.audio.cloneNode().play();
+        });
+        overworld.keys.u.on('down', () => {
+            switch (game.state.menu) {
+                case 'sidebar':
+                    --sidebarIndex === -1 && (sidebarIndex = sidebarOptions.length - 1);
+                    break;
+                default:
+                    return;
+            }
+            //@ts-expect-error
+            menuHighlight.audio.cloneNode().play();
+        });
+    }
 }
 // menu extensions
 {
@@ -374,6 +605,18 @@ const menu = new XItem({
         }
     });
 }
+// menu container
+const menu = new XItem({
+    element: menu1,
+    children: [/* battleMenu,*/ dialogueMenu, sidebarMenu],
+    style: {
+        height: () => `${canvas2.height}px`,
+        left: () => `${canvas2.offsetLeft}px`,
+        position: 'absolute',
+        top: () => `${canvas2.offsetTop}px`,
+        width: () => `${canvas2.width}px`
+    }
+});
 // set initial room (todo: use LOAD screen)
 overworld.state.room = 'throneRoom';
 // activate overworld
