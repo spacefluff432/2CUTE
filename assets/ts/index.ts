@@ -660,7 +660,7 @@ const menu = new XItem({
          case 'sidebar':
             game.state.menu = 'dialoguer';
             sidebarMenu.style.display = 'none';
-            dialogue.add(`[sprite:happygore|speed:200]\nYou selected: ${sidebarOptions[sidebarIndex]}`);
+            dialogue.add(`[sprite:happygore|speed:200|voice:asgore]\nYou selected: ${sidebarOptions[sidebarIndex]}`);
             break;
          default:
             return;
