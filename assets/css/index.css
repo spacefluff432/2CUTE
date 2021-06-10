@@ -3,6 +3,11 @@
    src: url('../font/determination.woff');
 }
 
+@font-face {
+   font-family: 'Crypt Of Tomorrow';
+   src: url('../font/crypt-of-tomorrow.woff');
+}
+
 * {
    user-select: none;
 }
@@ -29,4 +34,8 @@ img {
    image-rendering: -moz-crisp-edges;
    image-rendering: -o-pixelated;
    image-rendering: pixelated;
+}
+
+x-item {
+   display: block;
 }

@@ -1,5 +1,7 @@
 // mimic undertale env
 const game = {
+    speed: 3,
+    state: { interact: false, soul: 'determination', menu: 'none' },
     souls: {
         determination: new XSprite({
             attributes: { persist: true },
@@ -79,18 +81,16 @@ const game = {
             ]
         })
     },
-    speed: 3,
-    state: { interact: false, soul: 'determination', menu: 'none' },
     get interact() {
         return game.state.interact;
     },
     set interact(value) {
         game.state.interact = value;
         if (value) {
-            overworld.state.active = false;
+            overworld.disable();
         }
         else {
-            overworld.state.active = true;
+            overworld.enable();
         }
     },
     get soul() {
@@ -121,9 +121,9 @@ const overworld = new XOverworld({
         c: new XKey('c', 'C', 'Control')
     },
     layers: {
-        below: new XRenderer({ canvas: canvas1, size: { x: 320, y: 240 } }),
+        below: new XRenderer({ canvas: canvas1, size: renderer.size }),
         default: renderer,
-        above: new XRenderer({ canvas: canvas3, size: { x: 320, y: 240 } })
+        above: new XRenderer({ canvas: canvas3, size: renderer.size })
     },
     // player entity
     player: new XEntity({
@@ -362,9 +362,9 @@ const dialogueMenu = new XItem({
             },
             style: {
                 gridArea: 'face',
-                height: '80%',
-                margin: '10%',
-                width: '80%'
+                width: () => truePX(50),
+                height: () => truePX(50),
+                margin: () => truePX(10)
             }
         }),
         new XItem({
@@ -372,8 +372,6 @@ const dialogueMenu = new XItem({
             style: {
                 cssText: () => `--x-size: ${canvas2.height / 15}px`,
                 color: '#ffffffff',
-                display: 'block',
-                fontFamily: 'Determination',
                 fontSize: 'calc(var(--x-size) * 0.9)',
                 lineHeight: 'var(--x-size)',
                 margin: 'calc(var(--x-size) / 2)'
@@ -381,98 +379,206 @@ const dialogueMenu = new XItem({
         })
     ],
     style: {
-        cssText: () => `--x-border: ${renderer.state.scale * 3}px; --x-width: ${canvas2.width * 0.9}px; --x-height: ${canvas2.height /
-            3}px`,
+        position: 'absolute',
+        left: () => truePX(16),
+        width: () => truePX(283),
+        top: () => truePX(160),
+        height: () => truePX(70),
+        color: '#ffffffff',
         backgroundColor: '#000000ff',
-        border: 'var(--x-border) solid #ffffffff',
-        display: 'none',
+        fontSize: () => truePX(20),
+        border: () => `${truePX(3)} solid #ffffffff`,
         gridTemplateAreas: "'face text'",
-        gridTemplateColumns: `var(--x-height) 1fr`,
-        height: 'var(--x-height)',
-        margin: 'calc(var(--x-height) / 10) calc(50% - var(--x-width) / 2)',
-        position: 'relative',
-        width: 'var(--x-width)'
+        gridTemplateColumns: () => `${truePX(70)} 1fr`,
+        display: 'none'
     }
 });
+function truePX(position) {
+    return `${position * renderer.state.scale}px`;
+}
 // sidebar selector menu
 let sidebarIndex = 0;
 const sidebarOptions = ['ITEM', 'STAT', 'CELL'];
 const sidebarMenu = new XItem({
+    style: { display: 'none' },
     children: [
         new XItem({
             style: {
-                backgroundColor: '#000000ff',
-                border: 'var(--x-border) solid #ffffffff',
-                height: '95%',
-                width: '90%',
-                boxSizing: 'border-box'
-            }
-        }),
-        new XItem({
-            children: sidebarOptions.map((option, index) => {
-                const optionElement = document.createElement('x-item');
-                optionElement.innerHTML = option;
-                return new XItem({
+                position: 'absolute',
+                left: () => truePX(16),
+                width: () => truePX(65),
+                top: () => truePX(26),
+                height: () => truePX(49),
+                border: () => `${truePX(3)} solid #ffffffff`,
+                backgroundColor: '#000000ff'
+            },
+            children: [
+                new XItem({
+                    style: {
+                        width: () => truePX(58),
+                        height: () => truePX(53),
+                        margin: () => `${truePX(5)} ${truePX(4)}`,
+                        marginRight: '0',
+                        display: 'grid',
+                        gridTemplateRows: () => `${truePX(16)} 1fr`
+                    },
                     children: [
-                        // soul container
                         new XItem({
-                            element: () => {
-                                if (sidebarIndex === index) {
-                                    const texture = game.soul.compute();
-                                    if (texture) {
-                                        return texture.image;
-                                    }
-                                }
-                            },
+                            element: (() => {
+                                const element = document.createElement('x-item');
+                                element.innerHTML = 'Chara';
+                                return element;
+                            })(),
                             style: {
-                                height: 'calc(var(--x-option) / 2)',
-                                width: 'calc(var(--x-option) / 2)',
-                                margin: 'calc(var(--x-option) / 4)',
-                                gridArea: 'soul'
+                                fontSize: () => truePX(15),
+                                letterSpacing: () => truePX(-1),
+                                marginLeft: () => truePX(-1),
+                                lineHeight: () => truePX(9)
                             }
                         }),
-                        // text container
                         new XItem({
-                            element: optionElement,
                             style: {
-                                color: '#ffffffff',
-                                letterSpacing: 'calc(var(--x-border) * -0.3)',
-                                gridArea: 'option',
-                                fontFamily: 'Determination'
-                            }
+                                display: 'grid',
+                                gridTemplateRows: `1fr 1fr 1fr`,
+                                gridTemplateColumns: () => `${truePX(14)} 1fr`,
+                                height: () => truePX(23),
+                                gap: () => truePX(3),
+                                fontFamily: 'Crypt Of Tomorrow',
+                                fontSize: () => truePX(7),
+                                letterSpacing: () => truePX(0),
+                                lineHeight: () => truePX(5)
+                            },
+                            children: [
+                                new XItem({
+                                    element: (() => {
+                                        const element = document.createElement('x-item');
+                                        element.innerHTML = 'LV';
+                                        return element;
+                                    })()
+                                }),
+                                new XItem({
+                                    element: (() => {
+                                        const element = document.createElement('x-item');
+                                        element.innerHTML = '1';
+                                        return element;
+                                    })()
+                                }),
+                                new XItem({
+                                    element: (() => {
+                                        const element = document.createElement('x-item');
+                                        element.innerHTML = 'HP';
+                                        return element;
+                                    })()
+                                }),
+                                new XItem({
+                                    element: (() => {
+                                        const element = document.createElement('x-item');
+                                        element.innerHTML = '20/20';
+                                        return element;
+                                    })()
+                                }),
+                                new XItem({
+                                    element: (() => {
+                                        const element = document.createElement('x-item');
+                                        element.innerHTML = 'G';
+                                        return element;
+                                    })()
+                                }),
+                                new XItem({
+                                    element: (() => {
+                                        const element = document.createElement('x-item');
+                                        element.innerHTML = '66';
+                                        return element;
+                                    })()
+                                })
+                            ]
                         })
-                    ],
-                    style: {
-                        display: 'grid',
-                        fontSize: 'var(--x-size)',
-                        gridTemplateColumns: 'var(--x-option) 1fr',
-                        gridTemplateAreas: "'soul option'",
-                        width: '82%',
-                        marginLeft: '9%'
-                    }
-                });
-            }),
+                    ]
+                })
+            ]
+        }),
+        new XItem({
             style: {
-                cssText: () => `--x-size: ${canvas2.height / 15}px; --x-option: calc(var(--x-size) * 1.1)`,
-                backgroundColor: '#000000ff',
-                border: `var(--x-border) solid #ffffffff`,
-                height: '95%',
-                width: '90%',
-                boxSizing: 'border-box',
-                paddingTop: '10%',
-                display: 'grid',
-                gridTemplateRows: `${sidebarOptions.map(() => 'var(--x-option)').join(' ')}`
-            }
+                position: 'absolute',
+                left: () => truePX(16),
+                width: () => truePX(65),
+                top: () => truePX(84),
+                height: () => truePX(68),
+                border: () => `${truePX(3)} solid #ffffffff`,
+                backgroundColor: '#000000ff'
+            },
+            children: [
+                new XItem({
+                    style: {
+                        width: () => truePX(58),
+                        height: () => truePX(53),
+                        margin: () => truePX(7),
+                        marginRight: '0',
+                        display: 'grid',
+                        gridTemplateRows: `1fr 1fr 1fr`,
+                        gap: () => truePX(1)
+                    },
+                    children: sidebarOptions.map((option, index) => {
+                        const optionElement = document.createElement('x-item');
+                        optionElement.innerHTML = option;
+                        return new XItem({
+                            style: {
+                                height: '100%',
+                                width: '100%',
+                                display: 'grid',
+                                gridTemplateAreas: "'soul option'",
+                                gridTemplateColumns: () => `${truePX(13)} 1fr`,
+                                gap: () => truePX(1)
+                            },
+                            children: [
+                                // soul container
+                                new XItem({
+                                    style: {
+                                        gridArea: 'soul',
+                                        width: () => truePX(9),
+                                        height: () => truePX(9),
+                                        margin: () => `${truePX(4)} ${truePX(2)}`
+                                    },
+                                    element: () => {
+                                        if (sidebarIndex === index) {
+                                            const texture = game.soul.compute();
+                                            if (texture) {
+                                                return texture.image;
+                                            }
+                                        }
+                                    }
+                                }),
+                                // text container
+                                new XItem({
+                                    element: optionElement,
+                                    style: {
+                                        gridArea: 'option',
+                                        margin: () => `${truePX(4)} ${truePX(2)}`,
+                                        fontSize: () => truePX(15),
+                                        letterSpacing: () => truePX(-1),
+                                        lineHeight: () => truePX(9)
+                                    }
+                                })
+                            ]
+                        });
+                    })
+                })
+            ]
         })
-    ],
+    ]
+});
+// menu container
+const menu = new XItem({
+    element: menu1,
+    children: [/* battleMenu,*/ dialogueMenu, sidebarMenu],
     style: {
-        cssText: () => `--x-border: ${renderer.state.scale * 3}px; --x-width: ${canvas2.width *
-            0.25}px; --x-height: ${canvas2.height * 0.6}px`,
-        display: 'none',
-        gridTemplateRows: '3.5fr 5fr',
-        height: 'var(--x-height)',
-        width: 'var(--x-width)',
-        margin: '5%'
+        position: 'absolute',
+        left: () => `${canvas2.offsetLeft}px`,
+        width: () => `${canvas2.width}px`,
+        top: () => `${canvas2.offsetTop}px`,
+        height: () => `${canvas2.height}px`,
+        color: '#ffffffff',
+        fontFamily: 'Determination'
     }
 });
 // overworld extensions
@@ -510,23 +616,18 @@ const sidebarMenu = new XItem({
             game.interact = true;
             game.state.menu = 'sidebar';
             sidebarMenu.style.display = 'grid';
+            //@ts-expect-error
+            menuHighlight.audio.cloneNode().play();
+            sidebarIndex = 0;
         }
     });
     // maps z key to selection
     overworld.keys.z.on('down', () => {
         switch (game.state.menu) {
             case 'sidebar':
-                switch (sidebarOptions[sidebarIndex]) {
-                    case 'ITEM':
-                        console.log('items!');
-                        break;
-                    case 'STAT':
-                        console.log('stats!');
-                        break;
-                    case 'CELL':
-                        console.log('cells? bacteria? wohoho...');
-                        break;
-                }
+                game.state.menu = 'dialoguer';
+                sidebarMenu.style.display = 'none';
+                dialogue.add(`[sprite:happygore|speed:200]\nYou selected: ${sidebarOptions[sidebarIndex]}`);
                 break;
             default:
                 return;
@@ -576,6 +677,7 @@ const sidebarMenu = new XItem({
     dialogue.on('start', () => (dialogueMenu.style.display = 'grid'));
     // close dialogue when done reading and relinquish control
     dialogue.on('stop', () => {
+        game.state.menu = 'none';
         dialogueMenu.style.display = 'none';
         setTimeout(() => {
             game.interact = false;
@@ -599,24 +701,13 @@ const sidebarMenu = new XItem({
             if (!game.interact) {
                 if (metadata.key === 'trivia') {
                     game.interact = true;
+                    game.state.menu = 'dialoguer';
                     dialogue.add(...metadata.trivia);
                 }
             }
         }
     });
 }
-// menu container
-const menu = new XItem({
-    element: menu1,
-    children: [/* battleMenu,*/ dialogueMenu, sidebarMenu],
-    style: {
-        height: () => `${canvas2.height}px`,
-        left: () => `${canvas2.offsetLeft}px`,
-        position: 'absolute',
-        top: () => `${canvas2.offsetTop}px`,
-        width: () => `${canvas2.width}px`
-    }
-});
 // set initial room (todo: use LOAD screen)
 overworld.state.room = 'throneRoom';
 // activate overworld
