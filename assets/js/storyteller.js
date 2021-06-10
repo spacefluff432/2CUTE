@@ -18,29 +18,16 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-const XCore = (() => {
-    const storage = new Set();
-    return {
-        storage,
-        add(promise) {
-            XCore.storage.add(promise);
-        },
-        ready(script) {
-            Promise.all(XCore.storage).then(script);
-        }
-    };
-})();
 class XEntity {
-    constructor({ attributes: { backdrop = false, collide = false, interact = false, trigger = false, see = false } = {
-        backdrop: false,
+    constructor({ attributes: { collide = false, interact = false, trigger = false } = {
         collide: false,
         interact: false,
-        trigger: false,
-        see: false
-    }, bounds: { h = 0, w = 0, x: x1 = 0, y: y1 = 0 } = {}, depth = 0, metadata = {}, position: { x: x2 = 0, y: y2 = 0 } = {}, sprite } = {}) {
-        this.attributes = { backdrop, collide, interact, trigger, see };
+        trigger: false
+    }, bounds: { h = 0, w = 0, x: x1 = 0, y: y1 = 0 } = {}, depth = 0, layer = 'default', metadata = {}, position: { x: x2 = 0, y: y2 = 0 } = {}, sprite } = {}) {
+        this.attributes = { collide, interact, trigger };
         this.bounds = { h, w, x: x1, y: y1 };
         this.depth = depth;
+        this.renderer = layer;
         this.metadata = metadata;
         this.position = { x: x2, y: y2 };
         this.sprite = sprite;
@@ -74,30 +61,41 @@ class XHost {
     }
 }
 class XRenderer {
-    constructor({ canvas = document.createElement('canvas'), size: { x = 1000, y = 1000 } = {} } = {}) {
+    constructor({ attributes: { animate = false } = {}, canvas = document.createElement('canvas'), size: { x = 1000, y = 1000 } = {} } = {}) {
         this.state = { scale: 1 };
+        this.attributes = { animate };
         this.canvas = canvas;
         this.size = { x, y };
         this.refresh();
     }
-    refresh() {
-        this.context = this.canvas.getContext('2d');
-        this.context.imageSmoothingEnabled = false;
+    align(position) {
+        return {
+            x: (position.x * -1 + this.size.x / 2) * this.state.scale,
+            y: (position.y + this.size.y / 2) * this.state.scale
+        };
     }
-    render(position, ...entities) {
-        this.context.resetTransform();
-        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        this.context.setTransform(this.state.scale, 0, 0, this.state.scale, (position.x * -1 + this.size.x / 2) * this.state.scale, (position.y + this.size.y / 2) * this.state.scale);
+    draw(position, ...entities) {
+        const origin = this.align(position);
+        this.context.setTransform(this.state.scale, 0, 0, this.state.scale, origin.x, origin.y);
         for (const entity of entities.sort((entity1, entity2) => entity1.depth - entity2.depth)) {
             if (entity.sprite) {
                 const texture = entity.sprite.compute();
                 if (texture) {
                     const width = isFinite(texture.bounds.w) ? texture.bounds.w : texture.image.width;
                     const height = isFinite(texture.bounds.h) ? texture.bounds.h : texture.image.height;
+                    // TODO: HANDLE SPRITE ROTATION AND SCALE
                     this.context.drawImage(texture.image, texture.bounds.x, texture.bounds.y, width, height, entity.position.x, entity.position.y * -1 - height, width, height);
                 }
             }
         }
+    }
+    erase() {
+        this.context.resetTransform();
+        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+    refresh() {
+        this.context = this.canvas.getContext('2d');
+        this.context.imageSmoothingEnabled = false;
     }
     rescale(height = this.canvas.height, width = this.canvas.width) {
         const ratio = this.size.x / this.size.y;
@@ -125,8 +123,8 @@ class XSound {
         const audio = XSound.cache.get(source) || new Audio(source);
         if (!XSound.cache.has(source)) {
             XSound.cache.set(source, audio);
-            XCore.add(new Promise((resolve, reject) => {
-                audio.addEventListener('load', () => {
+            X.add(new Promise((resolve, reject) => {
+                audio.addEventListener('canplay', () => {
                     resolve();
                 });
                 audio.addEventListener('error', () => {
@@ -142,23 +140,19 @@ class XSprite {
     constructor({ attributes: { persist = false, hold = false } = {
         persist: false,
         hold: false
-    }, default: $default = 0, rotation = 0, scale = 1, state: { active = false, index = 0, step = 0 } = {
-        active: false,
-        index: 0,
-        step: 0
-    }, steps = 1, textures = [] } = {}) {
+    }, default: $default = 0, rotation = 0, scale = 1, interval = 1, textures = [] } = {}) {
+        this.state = { active: false, index: 0, step: 0 };
         this.attributes = { persist, hold };
         this.default = $default;
         this.rotation = rotation;
         this.scale = scale;
-        this.state = { active, index, step };
-        this.steps = steps;
+        this.interval = interval;
         this.textures = [...textures];
     }
     compute() {
         if (this.state.active || this.attributes.persist) {
             const texture = this.textures[this.state.index];
-            if (this.state.active && ++this.state.step >= this.steps) {
+            if (this.state.active && ++this.state.step >= this.interval) {
                 this.state.step = 0;
                 if (++this.state.index >= this.textures.length) {
                     this.state.index = 0;
@@ -169,87 +163,46 @@ class XSprite {
     }
     disable() {
         if (this.state.active) {
-            this.attributes.hold || ((this.state.step = 0), (this.state.index = this.default));
             this.state.active = false;
+            this.attributes.hold || ((this.state.step = 0), (this.state.index = this.default));
         }
     }
     enable() {
         if (!this.state.active) {
-            this.attributes.hold || ((this.state.step = 0), (this.state.index = this.default));
             this.state.active = true;
+            this.attributes.hold || ((this.state.step = 0), (this.state.index = this.default));
         }
     }
 }
-class XSet {
-    constructor(...state) {
-        this.state = new Set(state);
-    }
-    get collection() {
-        return new Set([...this.state].map(set => [...set]).flat());
-    }
-    get size() {
-        return this.collection.size;
-    }
-    add(value) {
-        throw new ReferenceError('This XSet has no defined adder!');
-    }
-    clear() {
-        for (const set of this.state)
-            set.clear();
-    }
-    delete(value) {
-        throw new ReferenceError('This XSet has no defined deleter!');
-    }
-    forEach(callbackfn, thisArg) {
-        return this.collection.forEach(callbackfn, thisArg);
-    }
-    has(value) {
-        return this.collection.has(value);
-    }
-    entries() {
-        return this.collection.entries();
-    }
-    keys() {
-        return this.collection.keys();
-    }
-    values() {
-        return this.collection.values();
-    }
-    [Symbol.iterator]() {
-        return this.collection[Symbol.iterator]();
-    }
-}
-Symbol.toStringTag;
-class XRoom extends XSet {
-    constructor({ bounds: { h = 0, w = 0, x = 0, y = 0 } = {}, entities = [], player = new XEntity() } = {}) {
-        super();
-        this.backdrops = new Set();
-        this.collides = new Set();
-        this.interacts = new Set();
-        this.triggers = new Set();
-        this.sees = new Set();
-        this.state = new Set([this.backdrops, this.collides, this.interacts, this.triggers, this.sees]);
+class XRoom {
+    constructor({ bounds: { h = 0, w = 0, x = 0, y = 0 } = {}, entities = [] } = {}) {
+        this.collidables = new Set();
+        this.entities = new Set();
+        this.interactables = new Set();
+        this.layers = new Map();
+        this.triggerables = new Set();
         this.bounds = { h, w, x, y };
-        this.player = player;
         for (const entity of entities)
             this.add(entity);
     }
-    add(entity) {
-        entity.attributes.backdrop && this.backdrops.add(entity);
-        entity.attributes.collide && this.collides.add(entity);
-        entity.attributes.interact && this.interacts.add(entity);
-        entity.attributes.trigger && this.triggers.add(entity);
-        entity.attributes.backdrop || (entity.attributes.see && this.sees.add(entity));
-        return this;
+    add(...entities) {
+        for (const entity of entities) {
+            this.entities.add(entity);
+            entity.attributes.collide && this.collidables.add(entity);
+            entity.attributes.interact && this.interactables.add(entity);
+            entity.attributes.trigger && this.triggerables.add(entity);
+            this.layers.has(entity.renderer) || this.layers.set(entity.renderer, new Set());
+            this.layers.get(entity.renderer).add(entity);
+        }
     }
-    delete(entity) {
-        let state = true;
-        entity.attributes.backdrop && (this.backdrops.delete(entity) || (state = false));
-        entity.attributes.collide && (this.collides.delete(entity) || (state = false));
-        entity.attributes.interact && (this.interacts.delete(entity) || (state = false));
-        entity.attributes.trigger && (this.triggers.delete(entity) || (state = false));
-        entity.attributes.backdrop || (entity.attributes.see && (this.sees.delete(entity) || (state = false)));
-        return state;
+    remove(...entities) {
+        for (const entity of entities) {
+            this.entities.delete(entity);
+            entity.attributes.collide && this.collidables.delete(entity);
+            entity.attributes.interact && this.interactables.delete(entity);
+            entity.attributes.trigger && this.triggerables.delete(entity);
+            this.layers.has(entity.renderer) && this.layers.get(entity.renderer).delete(entity);
+        }
     }
 }
 class XTexture {
@@ -261,7 +214,7 @@ class XTexture {
         const image = XTexture.cache.get(source) || Object.assign(new Image(), { src: source });
         if (!XTexture.cache.has(source)) {
             XTexture.cache.set(source, image);
-            XCore.add(new Promise((resolve, reject) => {
+            X.add(new Promise((resolve, reject) => {
                 image.addEventListener('load', () => {
                     resolve();
                 });
@@ -310,191 +263,169 @@ class XKey extends XHost {
     }
 }
 class XOverworld extends XHost {
-    constructor({ background = new XRenderer(), foreground = new XRenderer(), keys: { u: u1 = new XKey(), l: l1 = new XKey(), d: d1 = new XKey(), r: r1 = new XKey(), z = new XKey(), x = new XKey(), c = new XKey() } = {}, room = new XRoom(), speed = 1, sprites: { u: u2 = new XSprite(), l: l2 = new XSprite(), d: d2 = new XSprite(), r: r2 = new XSprite() } = {}, state: { detect = true, interact = true, move = true } = {} } = {}) {
+    constructor({ layers = {}, keys: { u: u1 = new XKey(), l: l1 = new XKey(), d: d1 = new XKey(), r: r1 = new XKey(), z = new XKey(), x = new XKey(), c = new XKey() } = {}, player = new XEntity(), rooms = {}, speed = 1, sprites: { u: u2 = new XSprite(), l: l2 = new XSprite(), d: d2 = new XSprite(), r: r2 = new XSprite() } = {} } = {}) {
         super();
-        this.background = background;
-        this.foreground = foreground;
+        this.state = { active: false, room: 'default' };
         this.keys = { u: u1, l: l1, d: d1, r: r1, z, x, c };
-        this.room = room;
+        this.player = player;
+        this.layers = new Map(Object.entries(layers));
+        this.rooms = rooms;
         this.speed = speed;
         this.sprites = { u: u2, l: l2, d: d2, r: r2 };
-        this.state = { detect, interact, move };
-        this.keys.u.on('up', () => this.state.move && this.sprites.u.disable());
-        this.keys.l.on('up', () => this.state.move && this.sprites.l.disable());
-        this.keys.d.on('up', () => this.state.move && this.sprites.d.disable());
-        this.keys.r.on('up', () => this.state.move && this.sprites.r.disable());
-        this.keys.u.on('down', () => this.state.move && this.sprites.u.enable());
-        this.keys.l.on('down', () => this.state.move && this.sprites.l.enable());
-        this.keys.d.on('down', () => this.state.move && this.sprites.d.enable());
-        this.keys.r.on('down', () => this.state.move && this.sprites.r.enable());
+        this.keys.u.on('up', () => this.state.active && this.sprites.u.disable());
+        this.keys.l.on('up', () => this.state.active && this.sprites.l.disable());
+        this.keys.d.on('up', () => this.state.active && this.sprites.d.disable());
+        this.keys.r.on('up', () => this.state.active && this.sprites.r.disable());
+        this.keys.u.on('down', () => this.state.active && this.sprites.u.enable());
+        this.keys.l.on('down', () => this.state.active && this.sprites.l.enable());
+        this.keys.d.on('down', () => this.state.active && this.sprites.d.enable());
+        this.keys.r.on('down', () => this.state.active && this.sprites.r.enable());
         this.keys.z.on('down', () => {
-            if (this.interact) {
-                for (const entity of XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.interacts)) {
+            const room = this.room;
+            if (room && this.state.active) {
+                for (const entity of X.intersection(X.bounds(this.player), ...room.interactables)) {
                     this.fire('interact', entity);
                 }
             }
         });
         this.refresh();
     }
-    get detect() {
-        return this.state.detect;
+    get room() {
+        return this.rooms[this.state.room];
     }
-    set detect(value) {
-        this.state.detect = value;
-    }
-    get interact() {
-        return this.state.interact;
-    }
-    set interact(value) {
-        this.state.interact = value;
-    }
-    get move() {
-        return this.state.move;
-    }
-    set move(value) {
-        this.state.move = value;
-        if (this.state.move) {
-            this.keys.u.active && this.sprites.u.enable();
-            this.keys.l.active && this.sprites.l.enable();
-            this.keys.d.active && this.sprites.d.enable();
-            this.keys.r.active && this.sprites.r.enable();
-        }
-        else {
+    disable() {
+        if (this.state.active) {
+            this.state.active = false;
             this.sprites.u.disable();
             this.sprites.l.disable();
             this.sprites.d.disable();
             this.sprites.r.disable();
         }
     }
-    refresh() {
-        this.background.refresh();
-        this.foreground.refresh();
-        XCore.ready(() => {
-            this.background.render(XWorld.center(this.room.player), this.room.player, ...this.room.backdrops);
-        });
+    enable() {
+        if (!this.state.active) {
+            this.state.active = true;
+            this.keys.u.active && this.sprites.u.enable();
+            this.keys.l.active && this.sprites.l.enable();
+            this.keys.d.active && this.sprites.d.enable();
+            this.keys.r.active && this.sprites.r.enable();
+        }
     }
-    render() {
-        const queue = new Set();
-        const origin = Object.assign({}, this.room.player.position);
-        if (this.move) {
-            const keys = { u: this.keys.u.active, l: this.keys.l.active, d: this.keys.d.active, r: this.keys.r.active };
-            if (keys.l || keys.r) {
-                this.room.player.position.x -= keys.l ? this.speed : -this.speed;
-                const collisions = XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.collides);
+    refresh() {
+        for (const renderer of this.layers.values())
+            renderer.refresh();
+        X.ready(() => this.render());
+    }
+    render(animate = false) {
+        const room = this.room;
+        if (room) {
+            const center = X.center(this.player);
+            for (const [key, renderer] of this.layers) {
+                if (renderer.attributes.animate === animate) {
+                    renderer.erase();
+                    if (room.layers.has(key)) {
+                        const entities = [...room.layers.get(key)];
+                        key === this.player.renderer && entities.push(this.player);
+                        renderer.draw(center, ...entities);
+                    }
+                }
+            }
+        }
+    }
+    rescale(height, width) {
+        for (const renderer of this.layers.values())
+            renderer.rescale(height, width);
+    }
+    tick() {
+        const room = this.room;
+        if (room && this.state.active) {
+            const queue = new Set();
+            const origin = Object.assign({}, this.player.position);
+            if (this.keys.l.active || this.keys.r.active) {
+                this.player.position.x -= this.keys.l.active ? this.speed : -this.speed;
+                const collisions = X.intersection(X.bounds(this.player), ...room.collidables);
                 if (collisions.size > 0) {
-                    this.room.player.position = Object.assign({}, origin);
+                    this.player.position = Object.assign({}, origin);
                     let index = 0;
                     let collision = false;
                     while (!collision && ++index < this.speed) {
-                        this.room.player.position.x -= keys.l ? 1 : -1;
-                        collision = XWorld.intersection(XWorld.bounds(this.room.player), ...collisions).size > 0;
+                        this.player.position.x -= this.keys.l.active ? 1 : -1;
+                        collision = X.intersection(X.bounds(this.player), ...collisions).size > 0;
                     }
-                    collision && (this.room.player.position.x += keys.l ? 1 : -1);
+                    collision && (this.player.position.x += this.keys.l.active ? 1 : -1);
                     for (const entity of collisions)
                         queue.add(entity);
                 }
             }
-            if (keys.u || keys.d) {
-                const origin = Object.assign({}, this.room.player.position);
-                this.room.player.position.y += keys.u ? this.speed : -this.speed;
-                const collisions = XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.collides);
+            if (this.keys.u.active || this.keys.d.active) {
+                const origin = Object.assign({}, this.player.position);
+                this.player.position.y += this.keys.u.active ? this.speed : -this.speed;
+                const collisions = X.intersection(X.bounds(this.player), ...room.collidables);
                 if (collisions.size > 0) {
-                    this.room.player.position = Object.assign({}, origin);
+                    this.player.position = Object.assign({}, origin);
                     let index = 0;
                     let collision = false;
                     while (!collision && ++index < this.speed) {
-                        this.room.player.position.y += keys.u ? 1 : -1;
-                        collision = XWorld.intersection(XWorld.bounds(this.room.player), ...collisions).size > 0;
+                        this.player.position.y += this.keys.u.active ? 1 : -1;
+                        collision = X.intersection(X.bounds(this.player), ...collisions).size > 0;
                     }
-                    collision && (this.room.player.position.y -= keys.u ? 1 : -1);
-                    // this line enables the frisk dance
-                    collision && index === 1 && keys.u && keys.d && this.room.player.position.y--;
+                    collision && (this.player.position.y -= this.keys.u.active ? 1 : -1);
                     for (const entity of collisions)
                         queue.add(entity);
+                    // TEH FRISK DANCE
+                    collision && index === 1 && this.keys.u.active && this.keys.d.active && this.player.position.y--;
                 }
             }
-            if (this.room.player.position.x < origin.x) {
-                this.room.player.sprite = this.sprites.l;
+            if (this.player.position.x < origin.x) {
+                this.player.sprite = this.sprites.l;
                 this.sprites.l.enable();
             }
-            else if (this.room.player.position.x > origin.x) {
-                this.room.player.sprite = this.sprites.r;
+            else if (this.player.position.x > origin.x) {
+                this.player.sprite = this.sprites.r;
                 this.sprites.r.enable();
             }
             else {
                 this.sprites.l.disable();
                 this.sprites.r.disable();
+                if (this.keys.l.active) {
+                    this.player.sprite = this.sprites.l;
+                }
+                else if (this.keys.r.active) {
+                    this.player.sprite = this.sprites.r;
+                }
+                if (this.keys.u.active) {
+                    this.player.sprite = this.sprites.u;
+                }
+                else if (this.keys.d.active) {
+                    this.player.sprite = this.sprites.d;
+                }
             }
-            if (this.room.player.position.y > origin.y) {
-                this.room.player.sprite = this.sprites.u;
+            if (this.player.position.y > origin.y) {
+                this.player.sprite = this.sprites.u;
                 this.sprites.u.enable();
             }
-            else if (this.room.player.position.y < origin.y) {
-                this.room.player.sprite = this.sprites.d;
+            else if (this.player.position.y < origin.y) {
+                this.player.sprite = this.sprites.d;
                 this.sprites.d.enable();
             }
             else {
                 this.sprites.u.disable();
                 this.sprites.d.disable();
             }
-            if (this.room.player.position.x !== origin.x || this.room.player.position.y !== origin.y) {
-                this.background.render(XWorld.center(this.room.player), this.room.player, ...this.room.backdrops);
-            }
-        }
-        this.foreground.render(XWorld.center(this.room.player), this.room.player, ...this.room.sees);
-        if (this.move) {
             for (const entity of queue)
                 this.fire('collide', entity);
-        }
-        if (this.detect) {
-            for (const entity of XWorld.intersection(XWorld.bounds(this.room.player), ...this.room.triggers)) {
+            for (const entity of X.intersection(X.bounds(this.player), ...room.triggerables))
                 this.fire('trigger', entity);
-            }
+            if (this.player.position.x !== origin.x || this.player.position.y !== origin.y)
+                this.render();
         }
-    }
-    rescale(height, width) {
-        this.background.rescale(height, width);
-        this.foreground.rescale(height, width);
+        this.render(true);
     }
     update(height, width) {
         this.rescale(height, width);
         this.refresh();
     }
 }
-const XWorld = (() => {
-    return {
-        bounds(entity) {
-            return {
-                x: entity.position.x + entity.bounds.x + Math.min(entity.bounds.w, 0),
-                y: entity.position.y + entity.bounds.y + Math.min(entity.bounds.h, 0),
-                w: Math.abs(entity.bounds.w),
-                h: Math.abs(entity.bounds.h)
-            };
-        },
-        center(entity) {
-            if (entity.sprite) {
-                const image = entity.sprite.textures[entity.sprite.state.index].image;
-                return {
-                    x: entity.position.x + image.width / 2,
-                    y: entity.position.y + image.height / 2
-                };
-            }
-            else {
-                return entity.position;
-            }
-        },
-        intersection({ x = 0, y = 0, h = 0, w = 0 }, ...entities) {
-            const list = new Set();
-            for (const entity of entities) {
-                const bounds = XWorld.bounds(entity);
-                if (x < bounds.x + bounds.w && x + w > bounds.x && y < bounds.y + bounds.h && y + h > bounds.y) {
-                    list.add(entity);
-                }
-            }
-            return list;
-        }
-    };
-})();
 //
 //    #########   #########   ##     ##   ##     ##
 //    ## ### ##   ##          ###    ##   ##     ##
@@ -504,170 +435,71 @@ const XWorld = (() => {
 //    ##     ##   ##          ##    ###   ##     ##
 //    ##     ##   #########   ##     ##   #########
 //
-////// where it all began //////////////////////////////////////////////////////////////////////////
-class XDialogue extends XHost {
-    constructor({ advance = new XKey(), menu = new XMenu(), interval = 0, reader = new XReader(), speakers = {}, skip = new XKey(), state: { active = false, speaker = 'default', text = '' } = {} } = {}) {
-        super();
-        this.advance = advance;
-        this.menu = menu;
-        this.interval = interval;
-        this.reader = reader;
-        this.speakers = speakers;
-        this.skip = skip;
-        this.state = { active, speaker, text };
-        this.reader.on('idle', () => {
-            const speaker = this.speaker;
-            speaker && speaker.sprite.disable();
-        });
-        this.reader.on('read', () => {
-            const speaker = this.speaker;
-            speaker && speaker.sprite.enable();
-            this.state.text = '';
-            if (!this.state.active) {
-                this.state.active = true;
-                this.menu.style.opacity = '1';
-                this.fire('enable');
-            }
-            let skip = false;
-            let interval = this.interval;
-            return {
-                char: (char) => __awaiter(this, void 0, void 0, function* () {
-                    yield Promise.race([
-                        new Promise(resolve => {
-                            setTimeout(() => resolve(0), interval);
-                            interval === this.interval || (interval = this.interval);
-                        }),
-                        new Promise(resolve => {
-                            if (skip) {
-                                resolve(0);
-                            }
-                            else {
-                                const listener = () => {
-                                    skip = true;
-                                    resolve(0);
-                                    this.skip.off('down', listener);
-                                };
-                                this.skip.on('down', listener);
-                            }
-                        })
-                    ]);
-                    this.state.text += char;
-                }),
-                code: (code) => __awaiter(this, void 0, void 0, function* () {
-                    switch (code[0]) {
-                        case '^':
-                            interval = Number(code[1]) * (this.interval * 2);
-                            break;
-                        case '!':
-                            switch (code.slice(1)) {
-                                case 'advance':
-                                    this.reader.advance();
-                                    break;
-                            }
-                            break;
-                    }
-                })
-            };
-        });
-        this.reader.on('empty', () => {
-            this.state.text = '';
-            if (this.state.active) {
-                this.state.active = false;
-                this.menu.style.opacity = '0';
-                this.fire('disable');
-            }
-        });
-        this.reader.on('style', ([key, value]) => {
-            switch (key) {
-                case 'speaker':
-                    this.state.speaker = value;
-                    break;
-                case 'voice':
-                    this.speaker.state.voice = value;
-                    break;
-                case 'sprite':
-                    this.speaker.state.sprite = value;
-                    break;
-            }
-        });
-        this.advance.on('down', () => this.state.active && this.reader.advance());
-    }
-    get speaker() {
-        return this.speakers[this.state.speaker];
-    }
-    computeImage() {
-        const speaker = this.speaker;
-        if (speaker) {
-            const texture = speaker.sprite.compute();
-            if (texture)
-                return texture.image;
-        }
-    }
-    computeText() {
-        return this.state.text;
-    }
-}
+///// where it all began ///////////////////////////////////////////////////////////////////////////
 class XItem {
-    constructor({ content: content1 = () => { }, element = document.createElement('x'), style: { content: content2 = {}, item = {} } = {} } = {}) {
-        this.content = content1;
+    constructor({ children, element = document.createElement('x-item'), priority = 0, style = {} } = {}) {
+        this.children = children && [...children];
         this.element = element;
-        this.style = { content: content2, item };
-    }
-    tick() {
-        Object.assign(this.element.style, this.style.item);
-        const current = this.element.firstElementChild;
-        const next = this.content();
-        if (next) {
-            Object.assign(next.style, this.style.content);
-            current && (current === next || current.remove());
-            this.element.firstElementChild || this.element.appendChild(next);
-        }
-        else {
-            current && current.remove();
-        }
-    }
-}
-class XMenu {
-    constructor({ element = document.createElement('x'), items = {}, style = {} } = {}) {
-        this.element = element;
-        this.items = items;
+        this.priority = priority;
         this.style = style;
     }
-    tick() {
-        Object.assign(this.element.style, this.style);
-        const elements = new Set();
-        this.element.childNodes.forEach(x => elements.add(x));
-        const next = new Set();
-        for (const key in this.items) {
-            const item = this.items[key];
-            item.tick();
-            next.add(item.element);
+    compute() {
+        const element = typeof this.element === 'function' ? this.element() : this.element;
+        if (element) {
+            for (const key in this.style) {
+                const property = this.style[key];
+                element.style[key] = (typeof property === 'function' ? property() : property) || '';
+            }
+            if (this.children) {
+                //@ts-expect-error
+                const current = new Set(element.children);
+                const next = [];
+                for (const child of this.children.sort((child1, child2) => child1.priority - child2.priority)) {
+                    const element = child.compute();
+                    element && next.push(element);
+                }
+                for (const child of current)
+                    next.includes(child) || (current.has(child) && child.remove());
+                for (const child of next) {
+                    if (!current.has(child)) {
+                        const siblings = next.slice(next.indexOf(child) + 1).filter(child => current.has(child));
+                        if (siblings.length > 0) {
+                            element.insertBefore(child, siblings[0]);
+                        }
+                        else {
+                            element.appendChild(child);
+                        }
+                    }
+                }
+            }
+            return element;
         }
-        for (const node of elements)
-            next.has(node) || (elements.has(node) && this.element.removeChild(node));
-        for (const node of next)
-            elements.has(node) || this.element.appendChild(node);
     }
 }
 class XReader extends XHost {
-    constructor() {
-        super(...arguments);
+    constructor({ char = (char) => __awaiter(this, void 0, void 0, function* () { }), code = (code) => __awaiter(this, void 0, void 0, function* () { }) } = {}) {
+        super();
         this.lines = [];
-        this.state = { mode: 'empty', text: '', skip: false };
+        this.mode = 'none';
+        this.char = char;
+        this.code = code;
     }
     add(...text) {
         const lines = text.join('\n').split('\n').map(line => line.trim()).filter(line => line.length > 0);
         if (lines.length > 0) {
             this.lines.push(...lines);
-            if (this.state.mode === 'empty') {
-                this.state.mode = 'idle';
+            if (this.mode === 'none') {
+                this.mode = 'idle';
+                this.fire('start');
                 this.read();
             }
         }
     }
     advance() {
-        this.lines.splice(0, 1);
-        this.read();
+        if (this.mode === 'idle') {
+            this.lines.splice(0, 1);
+            this.read();
+        }
     }
     parse(text) {
         if (text.startsWith('[') && text.endsWith(']')) {
@@ -689,26 +521,25 @@ class XReader extends XHost {
     }
     read() {
         return __awaiter(this, void 0, void 0, function* () {
-            if (this.state.mode === 'idle') {
+            if (this.mode === 'idle') {
                 if (this.lines.length > 0) {
                     const line = this.parse(this.lines[0]);
                     if (typeof line === 'string') {
-                        this.state.mode = 'read';
-                        for (const { code: code1, char: char1 } of this.fire('read')) {
-                            let index = 0;
-                            while (index < line.length) {
-                                const char2 = line[index++];
-                                if (char2 === '{') {
-                                    const code2 = line.slice(index, line.indexOf('}', index));
-                                    index = index + code2.length + 1;
-                                    yield code1(code2);
-                                }
-                                else {
-                                    yield char1(char2);
-                                }
+                        this.mode = 'read';
+                        this.fire('read');
+                        let index = 0;
+                        while (index < line.length) {
+                            const char = line[index++];
+                            if (char === '{') {
+                                const code = line.slice(index, line.indexOf('}', index));
+                                index = index + code.length + 1;
+                                yield this.code(code);
+                            }
+                            else {
+                                yield this.char(char);
                             }
                         }
-                        this.state.mode = 'idle';
+                        this.mode = 'idle';
                         this.fire('idle');
                     }
                     else {
@@ -718,20 +549,214 @@ class XReader extends XHost {
                     }
                 }
                 else {
-                    this.state.mode = 'empty';
-                    this.fire('empty');
+                    this.mode = 'none';
+                    this.fire('stop');
                 }
             }
         });
     }
 }
-class XSpeaker {
-    constructor({ sprites = {}, state: { sprite = 'default', voice = 'default' } = {}, voices = {} } = {}) {
+class XDialogue extends XReader {
+    constructor({ interval = 0, sprites = {}, sounds = {} } = {}) {
+        super({
+            char: (char) => __awaiter(this, void 0, void 0, function* () {
+                yield this.skip(this.interval, () => {
+                    //@ts-expect-error
+                    char === ' ' || (this.sound && this.sound.audio.cloneNode().play());
+                });
+                this.state.text.push(char);
+                this.fire('text', this.compute());
+            }),
+            code: (code) => __awaiter(this, void 0, void 0, function* () {
+                switch (code[0]) {
+                    case '!':
+                        this.fire('skip');
+                        setTimeout(() => this.advance());
+                        break;
+                    case '^':
+                        const number = +code.slice(1);
+                        isFinite(number) && (yield this.skip(number * this.interval));
+                        break;
+                    case '&':
+                        switch (code.slice(1)) {
+                            case 'u':
+                            case 'x':
+                                this.state.text.push(String.fromCharCode(parseInt(code.slice(2), 16)));
+                                break;
+                        }
+                        break;
+                    case '|':
+                        this.state.text.push('<br>');
+                        break;
+                    case '<':
+                    case '>':
+                        this.state.text.push(`{${code}}`);
+                }
+            })
+        });
+        this.state = { sprite: '', text: String.prototype.split(''), skip: false, sound: '' };
+        this.interval = interval;
         this.sprites = sprites;
-        this.state = { sprite, voice };
-        this.voices = voices;
+        this.sounds = sounds;
+        this.on('style', ([key, value]) => {
+            switch (key) {
+                case 'sound':
+                    this.state.sound = value;
+                    break;
+                case 'sprite':
+                    let active = this.sprite ? this.sprite.state.active : false;
+                    this.state.sprite = value;
+                    this.sprite && this.sprite[active ? 'enable' : 'disable']();
+                    break;
+                case 'interval':
+                    const number = +value;
+                    isFinite(number) && (this.interval = number);
+                    break;
+            }
+        });
+        this.on('read', () => {
+            this.sprite && this.sprite.enable();
+            this.state.skip = false;
+            this.state.text = [];
+            this.fire('text', this.compute());
+        });
+        this.on('idle', () => {
+            this.sprite && this.sprite.disable();
+        });
+    }
+    get sound() {
+        return this.sounds[this.state.sound || 'default'];
     }
     get sprite() {
-        return this.sprites[this.state.sprite];
+        return this.sprites[this.state.sprite || 'default'];
+    }
+    compute() {
+        let text = '';
+        const tails = [];
+        for (const section of this.state.text) {
+            if (section.startsWith('{') && section.endsWith('}')) {
+                switch (section[1]) {
+                    case '<':
+                        let attributes = '';
+                        const [tag, properties] = section.slice(2, -1).split('?');
+                        new URLSearchParams(properties).forEach((value, key) => (attributes += ` ${key}="${value}"`));
+                        text += `<${tag}${attributes}>`;
+                        tails.push(`</${tag}>`);
+                        break;
+                    case '>':
+                        tails.length > 0 && (text += tails.pop());
+                        break;
+                }
+            }
+            else {
+                text += section;
+            }
+        }
+        while (tails.length > 0)
+            text += tails.pop();
+        return text;
+    }
+    skip(interval, callback = () => { }) {
+        return Promise.race([
+            X.pause(interval).then(() => this.state.skip || callback()),
+            new Promise(resolve => {
+                if (this.state.skip) {
+                    resolve(0);
+                }
+                else {
+                    X.once(this, 'skip', () => {
+                        this.state.skip = true;
+                        resolve(0);
+                    });
+                }
+            })
+        ]);
     }
 }
+//
+//    #########   #########   #########   #########
+//    ## ### ##      ###      ##          ##
+//    ##  #  ##      ###      ##          ##
+//    ##     ##      ###      #########   ##
+//    ##     ##      ###             ##   ##
+//    ##     ##      ###             ##   ##
+//    ##     ##   #########   #########   #########
+//
+///// nerdiest shit on the block ///////////////////////////////////////////////////////////////////
+const X = (() => {
+    const storage = new Set();
+    return {
+        storage,
+        add(promise) {
+            X.storage.add(promise);
+        },
+        bounds(entity) {
+            return {
+                x: entity.position.x + entity.bounds.x + Math.min(entity.bounds.w, 0),
+                y: entity.position.y + entity.bounds.y + Math.min(entity.bounds.h, 0),
+                w: Math.abs(entity.bounds.w),
+                h: Math.abs(entity.bounds.h)
+            };
+        },
+        center(entity) {
+            if (entity.sprite) {
+                const image = entity.sprite.textures[entity.sprite.state.index].image;
+                return {
+                    x: entity.position.x + image.width / 2,
+                    y: entity.position.y + image.height / 2
+                };
+            }
+            else {
+                return entity.position;
+            }
+        },
+        helper: {
+            wallEntity(bounds) {
+                return new XEntity({
+                    attributes: { collide: true },
+                    bounds: { h: bounds.h, w: bounds.w, x: 0, y: 0 },
+                    position: { x: bounds.x, y: bounds.y }
+                });
+            },
+            staticSprite(source) {
+                return new XSprite({
+                    attributes: { persist: true },
+                    textures: [new XTexture({ source })]
+                });
+            }
+        },
+        intersection({ x = 0, y = 0, h = 0, w = 0 }, ...entities) {
+            const list = new Set();
+            for (const entity of entities) {
+                const bounds = X.bounds(entity);
+                if (x < bounds.x + bounds.w && x + w > bounds.x && y < bounds.y + bounds.h && y + h > bounds.y) {
+                    list.add(entity);
+                }
+            }
+            return list;
+        },
+        once(host, name, listener) {
+            const script = (...data) => {
+                host.off(name, script);
+                return (typeof listener === 'function' ? listener : listener.script)(...data);
+            };
+            host.on(name, script);
+        },
+        pause(time) {
+            return new Promise(resolve => setTimeout(() => resolve(), time));
+        },
+        ready(script) {
+            Promise.all(X.storage).then(script);
+        }
+    };
+})();
+class XEnvironment {
+    constructor() {
+        this.entities = {};
+        this.rooms = {};
+        this.sounds = {};
+        this.sprites = {};
+        this.textures = {};
+    }
+}
+// Out!Code - 2̸̾̂9̶͌͝5̷̌̓7̴̍͊

@@ -7,14 +7,15 @@ body {
    width: 100%;
    height: 100%;
    margin: 0;
+   display: -ms-grid;
    display: grid;
    background-color: #000000ff;
-   grid-template-areas: 'a a a' 'b c d' 'e e e';
+   grid-template-areas: 'a a a' 'b canvas c' 'd d d';
 }
 
 canvas {
    margin: auto;
-   grid-area: c;
+   grid-area: canvas;
    background-color: #00000000;
 }
 
@@ -22,5 +23,6 @@ img {
    -ms-interpolation-mode: nearest-neighbor;
    image-rendering: -webkit-optimize-contrast;
    image-rendering: -moz-crisp-edges;
+   image-rendering: -o-pixelated;
    image-rendering: pixelated;
 }
