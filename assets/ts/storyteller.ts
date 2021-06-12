@@ -11,12 +11,28 @@
 
 type XBounds = { h: number; w: number; x: number; y: number };
 type XEntityAttributes = { collide: boolean; interact: boolean; trigger: boolean };
-type XItemStyle = { [k in keyof CSSStyleDeclaration]?: CSSStyleDeclaration[k] | (() => CSSStyleDeclaration[k]) };
+
+type XItemStyle = {
+   [k in keyof CSSStyleDeclaration]: CSSStyleDeclaration[k] | ((element?: HTMLElement) => CSSStyleDeclaration[k])
+};
+
 type XKeyed<X> = { [k: string]: X };
 type XListener = ((...data: any[]) => any) | { priority: number; script: (...data: any[]) => any };
+type XNavigatorType = 'horizontal' | 'none' | 'vertical';
 type XOptional<X> = { [k in keyof X]?: X[k] };
-type XOverworldKeys = { u: XKey; l: XKey; d: XKey; r: XKey; z: XKey; x: XKey; c: XKey };
-type XOverworldSprites = { u: XSprite; l: XSprite; d: XSprite; r: XSprite };
+
+type XOverworldBinds = {
+   up: string;
+   left: string;
+   down: string;
+   right: string;
+   interact: string;
+   special: string;
+   menu: string;
+};
+
+type XOverworldSprites = { up: XSprite; left: XSprite; down: XSprite; right: XSprite };
+type XOverworldWrapper = { layer: string; item: XItem };
 type XPosition = { x: number; y: number };
 type XRendererAttributes = { animate: boolean };
 type XSpriteAttributes = { persist: boolean; hold: boolean };
@@ -94,33 +110,28 @@ class XRenderer {
    canvas: HTMLCanvasElement;
    //@ts-expect-error
    context: CanvasRenderingContext2D;
-   size: XPosition;
-   state = { scale: 1 };
    constructor (
       {
          attributes: { animate = false } = {},
-         canvas = document.createElement('canvas'),
-         size: { x = 1000, y = 1000 } = {}
+         canvas = document.createElement('canvas')
       }: {
          attributes?: XOptional<XRendererAttributes>;
          canvas?: HTMLCanvasElement;
-         size?: XOptional<XPosition>;
       } = {}
    ) {
       this.attributes = { animate };
       this.canvas = canvas;
-      this.size = { x, y };
-      this.refresh();
+      this.reload();
    }
-   align (position: XPosition) {
-      return {
-         x: (position.x * -1 + this.size.x / 2) * this.state.scale,
-         y: (position.y + this.size.y / 2) * this.state.scale
-      };
-   }
-   draw (position: XPosition, ...entities: XEntity[]) {
-      const origin = this.align(position);
-      this.context.setTransform(this.state.scale, 0, 0, this.state.scale, origin.x, origin.y);
+   draw (size: XPosition, position: XPosition, scale: number, ...entities: XEntity[]) {
+      this.context.setTransform(
+         scale,
+         0,
+         0,
+         scale,
+         (position.x * -1 + size.x / 2) * scale,
+         (position.y + size.y / 2) * scale
+      );
       for (const entity of entities.sort((entity1, entity2) => entity1.depth - entity2.depth)) {
          if (entity.sprite) {
             const texture = entity.sprite.compute();
@@ -147,25 +158,9 @@ class XRenderer {
       this.context.resetTransform();
       this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
    }
-   refresh () {
+   reload () {
       this.context = this.canvas.getContext('2d')!;
       this.context.imageSmoothingEnabled = false;
-   }
-   rescale (height: number = this.canvas.height, width: number = this.canvas.width) {
-      const ratio = this.size.x / this.size.y;
-      if (width / height > ratio) {
-         this.canvas.width = height * ratio;
-         this.canvas.height = height;
-         this.state.scale = height / this.size.y;
-      } else {
-         this.canvas.width = width;
-         this.canvas.height = width / ratio;
-         this.state.scale = width / this.size.x;
-      }
-   }
-   update (height?: number, width?: number) {
-      this.rescale(height, width);
-      this.refresh();
    }
 }
 
@@ -188,7 +183,8 @@ class XSound {
                audio.addEventListener('canplay', () => {
                   resolve();
                });
-               audio.addEventListener('error', () => {
+               audio.addEventListener('error', reason => {
+                  console.error('ASSET LOAD FAILED!', audio.src, reason);
                   reject();
                });
             })
@@ -342,6 +338,89 @@ class XTexture {
 //
 ///// imagine using unitale ////////////////////////////////////////////////////////////////////////
 
+class XItem {
+   children: XItem[] | void;
+   element: Element | string | void | (() => Element | string | void);
+   priority: number;
+   renderer: XRenderer | void;
+   state: { element: HTMLElement | void; fragment: string; node: Element | void } = {
+      element: void 0,
+      fragment: '',
+      node: void 0
+   };
+   style: XOptional<XItemStyle>;
+   constructor (
+      {
+         children,
+         element = document.createElement('div'),
+         priority = 0,
+         renderer,
+         style = {}
+      }: {
+         children?: Iterable<XItem>;
+         element?: Element | string | void | (() => Element | string | void);
+         priority?: number;
+         renderer?: XRenderer;
+         style?: XOptional<XItemStyle>;
+      } = {}
+   ) {
+      this.children = children && [ ...children ].sort((child1, child2) => child1.priority - child2.priority);
+      this.element = element;
+      this.priority = priority;
+      this.renderer = renderer;
+      this.style = style;
+   }
+   compute (scale = 1) {
+      let element = typeof this.element === 'function' ? this.element() : this.element;
+      if (typeof element === 'string') {
+         if (element === this.state.fragment) {
+            element = this.state.node;
+         } else {
+            this.state.fragment = element;
+            element = document.createRange().createContextualFragment(element).children[0];
+            this.state.node = element;
+         }
+      }
+      if (element instanceof HTMLElement) {
+         for (const key in this.style) {
+            let property = this.style[key];
+            if (property !== void 0) {
+               typeof property === 'function' && (property = property(element));
+               if (scale !== 1) {
+                  property = property
+                     .split(' ')
+                     .map(term => (term.endsWith('px') ? `${+term.slice(0, -2) * scale}px` : term))
+                     .join(' ');
+               }
+               element.style[key] = property;
+            }
+         }
+         if (this.children) {
+            //@ts-expect-error
+            const current: Set<Element> = new Set(element.children);
+            const next: Element[] = [];
+            for (const child of this.children) {
+               const element = child.compute(scale);
+               element && next.push(element);
+            }
+            for (const child of current) next.includes(child) || (current.has(child) && child.remove());
+            for (const child of next) {
+               if (!current.has(child)) {
+                  const siblings = next.slice(next.indexOf(child) + 1).filter(child => current.has(child));
+                  if (siblings.length > 0) {
+                     element.insertBefore(child, siblings[0]);
+                  } else {
+                     element.appendChild(child);
+                  }
+               }
+            }
+         }
+         element === this.state.element || (this.state.element = element);
+         return element;
+      }
+   }
+}
+
 class XKey extends XHost {
    keys: Set<string>;
    states: Set<string> = new Set();
@@ -369,185 +448,456 @@ class XKey extends XHost {
    }
 }
 
+class XNavigator {
+   from: ((overworld: XOverworld, navigator: string | null) => void);
+   item: XItem;
+   next:
+      | string
+      | null
+      | void
+      | (string | null | void)[]
+      | ((overworld: XOverworld) => string | null | void | (string | null | void)[]);
+   prev: string | null | void | ((overworld: XOverworld) => string | null | void);
+   size: number | ((overworld: XOverworld) => number);
+   to: ((overworld: XOverworld, navigator: string | null) => void);
+   type: string | ((overworld: XOverworld) => string);
+   constructor (
+      {
+         from = () => {},
+         item = new XItem(),
+         next,
+         prev,
+         size = 0,
+         to = () => {},
+         type = 'none'
+      }: {
+         from?: ((overworld: XOverworld, navigator: string | null) => void);
+         item?: XItem;
+         next?:
+            | string
+            | null
+            | void
+            | (string | null | void)[]
+            | ((overworld: XOverworld) => string | null | void | (string | null | void)[]);
+         prev?: string | null | void | ((overworld: XOverworld) => string | null | void);
+         size?: number | ((overworld: XOverworld) => number);
+         to?: ((overworld: XOverworld, navigator: string | null) => void);
+         type?: XNavigatorType | ((overworld: XOverworld) => XNavigatorType);
+      } = {}
+   ) {
+      this.from = from;
+      this.item = item;
+      this.next = next;
+      this.prev = prev;
+      this.size = size;
+      this.to = to;
+      this.type = type;
+   }
+}
+
 class XOverworld extends XHost {
-   keys: XOverworldKeys;
+   binds: XOverworldBinds;
+   dialogue: XDialogue;
+   keys: XKeyed<XKey>;
+   layers: XKeyed<XRenderer>;
+   main: string;
+   navigators: XKeyed<XNavigator>;
    player: XEntity;
-   layers: Map<string, XRenderer>;
    rooms: XKeyed<XRoom>;
+   size: XPosition;
    speed: number;
    sprites: XOverworldSprites;
-   state = { active: false, room: 'default' };
+   state: {
+      bounds: XBounds;
+      index: number;
+      movement: boolean;
+      navigator: string | null;
+      scale: number;
+      room: string;
+   } = {
+      bounds: { w: 0, h: 0, x: 0, y: 0 },
+      index: 0,
+      movement: false,
+      navigator: null,
+      scale: 1,
+      room: 'default'
+   };
+   wrapper: XItem;
+   get up (): XKey | void {
+      return this.keys[this.binds.up];
+   }
+   get left (): XKey | void {
+      return this.keys[this.binds.left];
+   }
+   get down (): XKey | void {
+      return this.keys[this.binds.down];
+   }
+   get right (): XKey | void {
+      return this.keys[this.binds.right];
+   }
+   get interact (): XKey | void {
+      return this.keys[this.binds.interact];
+   }
+   get menu (): XKey | void {
+      return this.keys[this.binds.menu];
+   }
+   get navigator (): XNavigator | void {
+      return this.state.navigator === null ? void 0 : this.navigators[this.state.navigator];
+   }
    get room (): XRoom | void {
       return this.rooms[this.state.room];
    }
+   get special (): XKey | void {
+      return this.keys[this.binds.special];
+   }
    constructor (
       {
-         layers = {},
-         keys: {
-            u: u1 = new XKey(),
-            l: l1 = new XKey(),
-            d: d1 = new XKey(),
-            r: r1 = new XKey(),
-            z = new XKey(),
-            x = new XKey(),
-            c = new XKey()
+         binds: {
+            up: up1 = '',
+            left: left1 = '',
+            down: down1 = '',
+            right: right1 = '',
+            interact = '',
+            menu = '',
+            special = ''
          } = {},
+         dialogue = new XDialogue(),
+         keys = {},
+         layers = {},
+         main = 'default',
+         navigators = {},
          player = new XEntity(),
          rooms = {},
+         size: { x = 0, y = 0 } = {},
          speed = 1,
-         sprites: { u: u2 = new XSprite(), l: l2 = new XSprite(), d: d2 = new XSprite(), r: r2 = new XSprite() } = {}
+         sprites: {
+            up: up2 = new XSprite(),
+            left: left2 = new XSprite(),
+            down: down2 = new XSprite(),
+            right: right2 = new XSprite()
+         } = {},
+         wrapper
       }: {
+         binds?: XOptional<XOverworldBinds>;
+         dialogue?: XDialogue;
+         keys?: XKeyed<XKey>;
          layers?: XKeyed<XRenderer>;
-         keys?: XOptional<XOverworldKeys>;
+         navigators?: XKeyed<XNavigator>;
+         main?: string;
          player?: XEntity;
          rooms?: XKeyed<XRoom>;
+         size?: XOptional<XPosition>;
          speed?: number;
          sprites?: XOptional<XOverworldSprites>;
+         wrapper?: Element;
       } = {}
    ) {
       super();
-      this.keys = { u: u1, l: l1, d: d1, r: r1, z, x, c };
+      this.binds = { up: up1, left: left1, down: down1, right: right1, interact, menu, special };
+      this.dialogue = dialogue;
+      this.keys = keys;
+      this.layers = layers;
+      this.main = main;
+      this.navigators = navigators;
       this.player = player;
-      this.layers = new Map(Object.entries(layers));
       this.rooms = rooms;
+      this.size = { x, y };
       this.speed = speed;
-      this.sprites = { u: u2, l: l2, d: d2, r: r2 };
-      this.keys.u.on('up', () => this.state.active && this.sprites.u.disable());
-      this.keys.l.on('up', () => this.state.active && this.sprites.l.disable());
-      this.keys.d.on('up', () => this.state.active && this.sprites.d.disable());
-      this.keys.r.on('up', () => this.state.active && this.sprites.r.disable());
-      this.keys.u.on('down', () => this.state.active && this.sprites.u.enable());
-      this.keys.l.on('down', () => this.state.active && this.sprites.l.enable());
-      this.keys.d.on('down', () => this.state.active && this.sprites.d.enable());
-      this.keys.r.on('down', () => this.state.active && this.sprites.r.enable());
-      this.keys.z.on('down', () => {
-         const room = this.room;
-         if (room && this.state.active) {
-            for (const entity of X.intersection(X.bounds(this.player), ...room.interactables)) {
-               this.fire('interact', entity);
-            }
-         }
+      this.sprites = { up: up2, left: left2, down: down2, right: right2 };
+      this.wrapper = new XItem({
+         element: wrapper instanceof HTMLElement ? wrapper : void 0,
+         style: {
+            backgroundColor: '#000000ff',
+            display: 'grid',
+            gridTemplateAreas: "'a a a' 'b c d' 'e e e'",
+            height: '100%',
+            margin: '0',
+            position: 'relative',
+            width: '100%'
+         },
+         children: [
+            ...Object.values(this.layers).map(
+               layer =>
+                  new XItem({
+                     element: layer.canvas,
+                     style: {
+                        gridArea: 'c',
+                        margin: 'auto'
+                     }
+                  })
+            ),
+            ...Object.values(this.navigators).map(
+               ({ item }) =>
+                  new XItem({
+                     children: [ item ],
+                     style: {
+                        gridArea: 'c',
+                        height: () => `${this.size.y}px`,
+                        margin: 'auto',
+                        position: 'relative',
+                        width: () => `${this.size.x}px`
+                     }
+                  })
+            )
+         ]
       });
-      this.refresh();
+      if (this.up) {
+         this.up.on('down', () => {
+            const navigator = this.navigator;
+            if (navigator && navigator.type === 'vertical') {
+               if (this.state.index > 0) {
+                  this.state.index--;
+               } else {
+                  const size = typeof navigator.size === 'function' ? navigator.size(this) : navigator.size;
+                  this.state.index = size - 1;
+               }
+            }
+         });
+      }
+      if (this.left) {
+         this.left.on('down', () => {
+            const navigator = this.navigator;
+            if (navigator && navigator.type === 'horizontal') {
+               if (this.state.index > 0) {
+                  this.state.index--;
+               } else {
+                  const size = typeof navigator.size === 'function' ? navigator.size(this) : navigator.size;
+                  this.state.index = size - 1;
+               }
+            }
+         });
+      }
+      if (this.down) {
+         this.down.on('down', () => {
+            const navigator = this.navigator;
+            if (navigator && navigator.type === 'vertical') {
+               const size = typeof navigator.size === 'function' ? navigator.size(this) : navigator.size;
+               if (this.state.index < size - 1) {
+                  this.state.index++;
+               } else {
+                  this.state.index = 0;
+               }
+            }
+         });
+      }
+      if (this.right) {
+         this.right.on('down', () => {
+            const navigator = this.navigator;
+            if (navigator && navigator.type === 'horizontal') {
+               const size = typeof navigator.size === 'function' ? navigator.size(this) : navigator.size;
+               if (this.state.index < size - 1) {
+                  this.state.index++;
+               } else {
+                  this.state.index = 0;
+               }
+            }
+         });
+      }
+      if (this.interact) {
+         this.interact.on('down', () => {
+            const navigator = this.navigator;
+            if (navigator) {
+               let option = typeof navigator.next === 'function' ? navigator.next(this) : navigator.next;
+               option instanceof Array && (option = option[this.state.index]);
+               if (option === null) {
+                  navigator.to(this, null);
+                  this.state.navigator = null;
+                  this.state.movement = true;
+               } else if (typeof option === 'string' && option in this.navigators) {
+                  navigator.to(this, option);
+                  this.state.index = 0;
+                  this.navigators[option].from(this, this.state.navigator);
+                  this.state.navigator = option;
+               }
+            } else {
+               const room = this.room;
+               if (room && this.state.movement) {
+                  for (const entity of X.intersection(X.bounds(this.player), ...room.interactables)) {
+                     this.fire('interact', entity);
+                  }
+               }
+            }
+         });
+      }
+      if (this.special) {
+         this.special.on('down', () => {
+            const navigator = this.navigator;
+            if (navigator) {
+               const option = typeof navigator.prev === 'function' ? navigator.prev(this) : navigator.prev;
+               if (option === null) {
+                  navigator.to(this, null);
+                  this.state.navigator = null;
+                  this.state.movement = true;
+               } else if (typeof option === 'string' && option in this.navigators) {
+                  navigator.to(this, option);
+                  this.state.index = 0;
+                  this.navigators[option].from(this, this.state.navigator!);
+                  this.state.navigator = option;
+               }
+            }
+         });
+      }
+      if (this.menu) {
+         this.menu.on('down', () => {
+            if (this.state.navigator === null) {
+               const navigator = this.navigators[this.main];
+               if (navigator) {
+                  navigator.from(this, null);
+                  this.state.navigator = this.main;
+                  this.state.movement = false;
+               }
+            }
+         });
+      }
    }
    disable () {
-      if (this.state.active) {
-         this.state.active = false;
-         this.sprites.u.disable();
-         this.sprites.l.disable();
-         this.sprites.d.disable();
-         this.sprites.r.disable();
+      if (this.state.movement) {
+         this.state.movement = false;
+         this.sprites.up.disable();
+         this.sprites.left.disable();
+         this.sprites.down.disable();
+         this.sprites.right.disable();
       }
    }
    enable () {
-      if (!this.state.active) {
-         this.state.active = true;
-         this.keys.u.active && this.sprites.u.enable();
-         this.keys.l.active && this.sprites.l.enable();
-         this.keys.d.active && this.sprites.d.enable();
-         this.keys.r.active && this.sprites.r.enable();
+      if (!this.state.movement) {
+         this.state.movement = true;
+         this.up && this.up.active && this.sprites.up.enable();
+         this.left && this.left.active && this.sprites.left.enable();
+         this.down && this.down.active && this.sprites.down.enable();
+         this.right && this.right.active && this.sprites.right.enable();
       }
    }
    refresh () {
-      for (const renderer of this.layers.values()) renderer.refresh();
-      X.ready(() => this.render());
+      const element = this.wrapper.compute(this.state.scale);
+      if (element) {
+         let { width, height } = element.getBoundingClientRect();
+         if (width !== this.state.bounds.w || height !== this.state.bounds.h) {
+            this.state.bounds.w = width;
+            this.state.bounds.h = height;
+            const ratio = this.size.x / this.size.y;
+            if (this.state.bounds.w / this.state.bounds.h > ratio) {
+               width = height * ratio;
+               this.state.scale = height / this.size.y;
+            } else {
+               height = width / ratio;
+               this.state.scale = width / this.size.x;
+            }
+            for (const renderer of Object.values(this.layers)) {
+               renderer.canvas.width = width;
+               renderer.canvas.height = height;
+               renderer.reload();
+            }
+            this.render();
+         }
+      }
    }
    render (animate = false) {
       const room = this.room;
       if (room) {
          const center = X.center(this.player);
-         for (const [ key, renderer ] of this.layers) {
+         for (const [ key, renderer ] of Object.entries(this.layers)) {
             if (renderer.attributes.animate === animate) {
                renderer.erase();
                if (room.layers.has(key)) {
                   const entities = [ ...room.layers.get(key)! ];
                   key === this.player.renderer && entities.push(this.player);
-                  renderer.draw(center, ...entities);
+                  // TODO: DON'T MONKEY-PATCH!
+                  renderer.draw(this.size, center, this.state.scale, ...entities);
                }
             }
          }
       }
    }
-   rescale (height?: number, width?: number) {
-      for (const renderer of this.layers.values()) renderer.rescale(height, width);
+   teleport (room: string) {
+      this.state.room = room;
+      X.ready(() => this.render());
    }
    tick () {
+      this.refresh();
       const room = this.room;
-      if (room && this.state.active) {
+      if (room && this.state.movement) {
          const queue: Set<XEntity> = new Set();
          const origin = Object.assign({}, this.player.position);
-         if (this.keys.l.active || this.keys.r.active) {
-            this.player.position.x -= this.keys.l.active ? this.speed : -this.speed;
+         const up = this.up && this.up.active;
+         const left = this.left && this.left.active;
+         const down = this.down && this.down.active;
+         const right = this.right && this.right.active;
+         if (left || right) {
+            this.player.position.x -= left ? this.speed : -this.speed;
             const collisions = X.intersection(X.bounds(this.player), ...room.collidables);
             if (collisions.size > 0) {
                this.player.position = Object.assign({}, origin);
                let index = 0;
                let collision = false;
                while (!collision && ++index < this.speed) {
-                  this.player.position.x -= this.keys.l.active ? 1 : -1;
+                  this.player.position.x -= left ? 1 : -1;
                   collision = X.intersection(X.bounds(this.player), ...collisions).size > 0;
                }
-               collision && (this.player.position.x += this.keys.l.active ? 1 : -1);
+               collision && (this.player.position.x += left ? 1 : -1);
                for (const entity of collisions) queue.add(entity);
             }
          }
-         if (this.keys.u.active || this.keys.d.active) {
+         if (up || down) {
             const origin = Object.assign({}, this.player.position);
-            this.player.position.y += this.keys.u.active ? this.speed : -this.speed;
+            this.player.position.y += up ? this.speed : -this.speed;
             const collisions = X.intersection(X.bounds(this.player), ...room.collidables);
             if (collisions.size > 0) {
                this.player.position = Object.assign({}, origin);
                let index = 0;
                let collision = false;
                while (!collision && ++index < this.speed) {
-                  this.player.position.y += this.keys.u.active ? 1 : -1;
+                  this.player.position.y += up ? 1 : -1;
                   collision = X.intersection(X.bounds(this.player), ...collisions).size > 0;
                }
-               collision && (this.player.position.y -= this.keys.u.active ? 1 : -1);
+               collision && (this.player.position.y -= up ? 1 : -1);
                for (const entity of collisions) queue.add(entity);
                // TEH FRISK DANCE
-               collision && index === 1 && this.keys.u.active && this.keys.d.active && this.player.position.y--;
+               if (collision && index === 1 && up && down) {
+                  this.player.position.y -= 2;
+               }
             }
          }
          if (this.player.position.x < origin.x) {
-            this.player.sprite = this.sprites.l;
-            this.sprites.l.enable();
+            this.player.sprite = this.sprites.left;
+            this.sprites.left.enable();
          } else if (this.player.position.x > origin.x) {
-            this.player.sprite = this.sprites.r;
-            this.sprites.r.enable();
+            this.player.sprite = this.sprites.right;
+            this.sprites.right.enable();
          } else {
-            this.sprites.l.disable();
-            this.sprites.r.disable();
-            if (this.keys.l.active) {
-               this.player.sprite = this.sprites.l;
-            } else if (this.keys.r.active) {
-               this.player.sprite = this.sprites.r;
+            this.sprites.left.disable();
+            this.sprites.right.disable();
+            if (left) {
+               this.player.sprite = this.sprites.left;
+            } else if (right) {
+               this.player.sprite = this.sprites.right;
             }
-            if (this.keys.u.active) {
-               this.player.sprite = this.sprites.u;
-            } else if (this.keys.d.active) {
-               this.player.sprite = this.sprites.d;
+            if (up) {
+               this.player.sprite = this.sprites.up;
+            } else if (down) {
+               this.player.sprite = this.sprites.down;
             }
          }
          if (this.player.position.y > origin.y) {
-            this.player.sprite = this.sprites.u;
-            this.sprites.u.enable();
+            this.player.sprite = this.sprites.up;
+            this.sprites.up.enable();
          } else if (this.player.position.y < origin.y) {
-            this.player.sprite = this.sprites.d;
-            this.sprites.d.enable();
+            this.player.sprite = this.sprites.down;
+            this.sprites.down.enable();
          } else {
-            this.sprites.u.disable();
-            this.sprites.d.disable();
+            this.sprites.up.disable();
+            this.sprites.down.disable();
          }
          for (const entity of queue) this.fire('collide', entity);
          for (const entity of X.intersection(X.bounds(this.player), ...room.triggerables)) this.fire('trigger', entity);
          if (this.player.position.x !== origin.x || this.player.position.y !== origin.y) this.render();
+      } else {
+         this.sprites.up.disable();
+         this.sprites.left.disable();
+         this.sprites.down.disable();
+         this.sprites.right.disable();
       }
       this.render(true);
-   }
-   update (height?: number, width?: number) {
-      this.rescale(height, width);
-      this.refresh();
    }
 }
 
@@ -561,61 +911,6 @@ class XOverworld extends XHost {
 //    ##     ##   #########   ##     ##   #########
 //
 ///// where it all began ///////////////////////////////////////////////////////////////////////////
-
-class XItem {
-   children: XItem[] | void;
-   element: HTMLElement | void | (() => HTMLElement | void);
-   priority: number;
-   style: XItemStyle;
-   constructor (
-      {
-         children,
-         element = document.createElement('x-item'),
-         priority = 0,
-         style = {}
-      }: {
-         children?: Iterable<XItem>;
-         element?: HTMLElement | void | (() => HTMLElement | void);
-         priority?: number;
-         style?: XItemStyle;
-      } = {}
-   ) {
-      this.children = children && [ ...children ];
-      this.element = element;
-      this.priority = priority;
-      this.style = style;
-   }
-   compute () {
-      const element = typeof this.element === 'function' ? this.element() : this.element;
-      if (element) {
-         for (const key in this.style) {
-            const property = this.style[key];
-            element.style[key] = (typeof property === 'function' ? property() : property) || '';
-         }
-         if (this.children) {
-            //@ts-expect-error
-            const current: Set<HTMLElement> = new Set(element.children);
-            const next: HTMLElement[] = [];
-            for (const child of this.children.sort((child1, child2) => child1.priority - child2.priority)) {
-               const element = child.compute();
-               element && next.push(element);
-            }
-            for (const child of current) next.includes(child) || (current.has(child) && child.remove());
-            for (const child of next) {
-               if (!current.has(child)) {
-                  const siblings = next.slice(next.indexOf(child) + 1).filter(child => current.has(child));
-                  if (siblings.length > 0) {
-                     element.insertBefore(child, siblings[0]);
-                  } else {
-                     element.appendChild(child);
-                  }
-               }
-            }
-         }
-         return element;
-      }
-   }
-}
 
 class XReader extends XHost {
    lines: string[] = [];
@@ -855,30 +1150,11 @@ const X = (() => {
          };
       },
       center (entity: XEntity) {
-         if (entity.sprite) {
-            const image = entity.sprite.textures[entity.sprite.state.index].image;
-            return {
-               x: entity.position.x + image.width / 2,
-               y: entity.position.y + image.height / 2
-            };
-         } else {
-            return entity.position;
-         }
-      },
-      helper: {
-         wallEntity (bounds: XBounds) {
-            return new XEntity({
-               attributes: { collide: true },
-               bounds: { h: bounds.h, w: bounds.w, x: 0, y: 0 },
-               position: { x: bounds.x, y: bounds.y }
-            });
-         },
-         staticSprite (source: string) {
-            return new XSprite({
-               attributes: { persist: true },
-               textures: [ new XTexture({ source }) ]
-            });
-         }
+         const bounds = X.bounds(entity);
+         return {
+            x: entity.position.x + bounds.w / 2,
+            y: entity.position.y + bounds.h / 2
+         };
       },
       intersection ({ x = 0, y = 0, h = 0, w = 0 }: XBounds, ...entities: XEntity[]) {
          const list: Set<XEntity> = new Set();
@@ -901,17 +1177,11 @@ const X = (() => {
          return new Promise(resolve => setTimeout(() => resolve(), time));
       },
       ready (script: () => void) {
-         Promise.all(X.storage).then(script);
+         Promise.all(X.storage).then(script).catch(() => {
+            script();
+         });
       }
    };
 })();
-
-class XEnvironment {
-   entities: XKeyed<XEntity> = {};
-   rooms: XKeyed<XRoom> = {};
-   sounds: XKeyed<XSound> = {};
-   sprites: XKeyed<XSprite> = {};
-   textures: XKeyed<XTexture> = {};
-}
 
 // Out!Code - 2̸̾̂9̶͌͝5̷̌̓7̴̍͊
