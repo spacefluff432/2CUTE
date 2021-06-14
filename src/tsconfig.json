@@ -1,0 +1,10 @@
+{
+   "compilerOptions": {
+      "declaration": true,
+      "lib": [ "ESNext", "DOM" ],
+      "outDir": "./../dist",
+      "rootDir": "./",
+      "strict": true,
+      "target": "ES2015"
+   }
+}

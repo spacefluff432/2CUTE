@@ -9,36 +9,66 @@
 //
 ///// needs more optimizating //////////////////////////////////////////////////////////////////////
 
-type XBounds = { h: number; w: number; x: number; y: number };
-type XEntityAttributes = { collide: boolean; interact: boolean; trigger: boolean };
+export type XBounds = { h: number; w: number; x: number; y: number };
+export type XEntityAttributes = { collide: boolean; interact: boolean; trigger: boolean };
+export type XKeyed<X> = { [k: string]: X };
+export type XListener = ((...data: any[]) => any) | { priority: number; script: (...data: any[]) => any };
+export type XOptional<X> = { [k in keyof X]?: X[k] };
+export type XPosition = { x: number; y: number };
+export type XRendererAttributes = { animate: boolean };
+export type XSpriteAttributes = { persist: boolean; hold: boolean };
 
-type XItemStyle = {
-   [k in keyof CSSStyleDeclaration]: CSSStyleDeclaration[k] | ((element?: HTMLElement) => CSSStyleDeclaration[k])
-};
+export const X = (() => {
+   const storage: Set<Promise<void>> = new Set();
+   return {
+      storage,
+      add (promise: Promise<void>) {
+         X.storage.add(promise);
+      },
+      bounds (entity: XEntity) {
+         return {
+            x: entity.position.x + entity.bounds.x + Math.min(entity.bounds.w, 0),
+            y: entity.position.y + entity.bounds.y + Math.min(entity.bounds.h, 0),
+            w: Math.abs(entity.bounds.w),
+            h: Math.abs(entity.bounds.h)
+         };
+      },
+      center (entity: XEntity) {
+         const bounds = X.bounds(entity);
+         return {
+            x: entity.position.x + bounds.w / 2,
+            y: entity.position.y + bounds.h / 2
+         };
+      },
+      intersection ({ x = 0, y = 0, h = 0, w = 0 }: XBounds, ...entities: XEntity[]) {
+         const list: Set<XEntity> = new Set();
+         for (const entity of entities) {
+            const bounds = X.bounds(entity);
+            if (x < bounds.x + bounds.w && x + w > bounds.x && y < bounds.y + bounds.h && y + h > bounds.y) {
+               list.add(entity);
+            }
+         }
+         return list;
+      },
+      once (host: XHost, name: string, listener: XListener) {
+         const script = (...data: any[]) => {
+            host.off(name, script);
+            return (typeof listener === 'function' ? listener : listener.script)(...data);
+         };
+         host.on(name, script);
+      },
+      pause (time: number): Promise<void> {
+         return new Promise(resolve => setTimeout(() => resolve(), time));
+      },
+      ready (script: () => void) {
+         Promise.all(X.storage).then(script).catch(() => {
+            script();
+         });
+      }
+   };
+})();
 
-type XKeyed<X> = { [k: string]: X };
-type XListener = ((...data: any[]) => any) | { priority: number; script: (...data: any[]) => any };
-type XNavigatorType = 'horizontal' | 'none' | 'vertical';
-type XOptional<X> = { [k in keyof X]?: X[k] };
-
-type XOverworldBinds = {
-   up: string;
-   left: string;
-   down: string;
-   right: string;
-   interact: string;
-   special: string;
-   menu: string;
-};
-
-type XOverworldSprites = { up: XSprite; left: XSprite; down: XSprite; right: XSprite };
-type XOverworldWrapper = { layer: string; item: XItem };
-type XPosition = { x: number; y: number };
-type XRendererAttributes = { animate: boolean };
-type XSpriteAttributes = { persist: boolean; hold: boolean };
-type XStrategy = { delay: number; duration: number; modulator: (bullet: XBullet, lifetime: number) => void };
-
-class XHost {
+export class XHost {
    events: Map<string, Set<XListener>> = new Map();
    on (name: string, listener: XListener) {
       this.events.has(name) || this.events.set(name, new Set());
@@ -65,14 +95,17 @@ class XHost {
    }
 }
 
-class XEntity extends XHost {
+export class XEntity extends XHost {
    attributes: XEntityAttributes;
    bounds: XBounds;
    depth: number;
+   direction: number;
    metadata: XKeyed<any>;
    position: XPosition;
    renderer: string;
+   speed: number;
    sprite: XSprite | void;
+   state = { lifetime: 0 };
    constructor (
       {
          attributes: { collide = false, interact = false, trigger = false } = {
@@ -82,17 +115,21 @@ class XEntity extends XHost {
          },
          bounds: { h = 0, w = 0, x: x1 = 0, y: y1 = 0 } = {},
          depth = 0,
+         direction = 0,
          metadata = {},
          position: { x: x2 = 0, y: y2 = 0 } = {},
          renderer = '',
+         speed = 0,
          sprite
       }: {
          attributes?: XOptional<XEntityAttributes>;
          bounds?: XOptional<XBounds>;
          depth?: number;
+         direction?: number;
          metadata?: XKeyed<any>;
          position?: XOptional<XPosition>;
          renderer?: string;
+         speed?: number;
          sprite?: XSprite | void;
       } = {}
    ) {
@@ -100,14 +137,22 @@ class XEntity extends XHost {
       this.attributes = { collide, interact, trigger };
       this.bounds = { h, w, x: x1, y: y1 };
       this.depth = depth;
+      this.direction = direction;
       this.metadata = metadata;
       this.position = { x: x2, y: y2 };
+      this.speed = speed;
       this.renderer = renderer;
       this.sprite = sprite;
    }
+   tick (modulator?: XModulator) {
+      modulator && modulator(this, this.state.lifetime++);
+      const radians = (this.direction % 360) * Math.PI / 180;
+      this.position.x += this.speed * Math.cos(radians);
+      this.position.y += this.speed * Math.sin(radians);
+   }
 }
 
-class XRenderer {
+export class XRenderer {
    attributes: XRendererAttributes;
    canvas: HTMLCanvasElement;
    //@ts-expect-error
@@ -167,7 +212,7 @@ class XRenderer {
    }
 }
 
-class XSound {
+export class XSound {
    audio: HTMLAudioElement;
    constructor (
       {
@@ -197,7 +242,7 @@ class XSound {
    }
 }
 
-class XSprite {
+export class XSprite {
    attributes: XSpriteAttributes;
    default: number;
    rotation: number;
@@ -258,7 +303,7 @@ class XSprite {
    }
 }
 
-class XRoom {
+export class XRoom {
    bounds: XBounds;
    collidables: Set<XEntity> = new Set();
    entities: Set<XEntity> = new Set();
@@ -298,7 +343,7 @@ class XRoom {
    }
 }
 
-class XTexture {
+export class XTexture {
    bounds: XBounds;
    image: HTMLImageElement;
    constructor (
@@ -341,7 +386,14 @@ class XTexture {
 //
 ///// imagine using unitale ////////////////////////////////////////////////////////////////////////
 
-class XItem {
+export type XItemStyle = {
+   [k in keyof CSSStyleDeclaration]: CSSStyleDeclaration[k] | ((element?: HTMLElement) => CSSStyleDeclaration[k])
+};
+
+export type XModulator = (entity: XEntity, lifetime: number) => void;
+export type XNavigatorType = 'horizontal' | 'none' | 'vertical';
+
+export class XItem {
    children: XItem[] | void;
    element: Element | string | void | (() => Element | string | void);
    priority: number;
@@ -393,6 +445,7 @@ class XItem {
                   property = property
                      .split(' ')
                      .map(term => (term.endsWith('px') ? `${+term.slice(0, -2) * scale}px` : term))
+                     .map(term => (term.endsWith('px)') ? `${+term.slice(0, -3) * scale}px)` : term))
                      .join(' ');
                }
                element.style[key] = property;
@@ -424,7 +477,7 @@ class XItem {
    }
 }
 
-class XKey extends XHost {
+export class XKey extends XHost {
    keys: Set<string>;
    states: Set<string> = new Set();
    get active () {
@@ -451,7 +504,7 @@ class XKey extends XHost {
    }
 }
 
-class XNavigator {
+export class XNavigator {
    from: ((atlas: XAtlas, navigator: string | null) => void);
    item: XItem;
    next:
@@ -498,7 +551,7 @@ class XNavigator {
    }
 }
 
-class XAtlas {
+export class XAtlas {
    elements: XKeyed<XItem>;
    menu: string;
    navigators: XKeyed<XNavigator>;
@@ -541,30 +594,28 @@ class XAtlas {
       this.size = { x, y };
    }
    attach (navigator: string, overworld: XOverworld) {
-      if (navigator in this.elements) overworld.wrapper.children!.push(this.elements[navigator]);
+      if (navigator in this.elements) {
+         const element = this.elements[navigator];
+         const children = overworld.wrapper.children!;
+         if (!children.includes(element)) {
+            overworld.wrapper.children!.push(this.elements[navigator]);
+         }
+      }
    }
    detach (navigator: string, overworld: XOverworld) {
       if (navigator in this.elements) {
+         const element = this.elements[navigator];
          const children = overworld.wrapper.children!;
-         children.splice(children.indexOf(this.elements[navigator]), 1);
+         if (children.includes(element)) {
+            children.splice(children.indexOf(element), 1);
+         }
       }
    }
    navigate (action: 'menu' | 'move' | 'next' | 'prev', type = '', shift: -1 | 0 | 1 = 0) {
       const navigator = this.navigator;
       switch (action) {
          case 'menu':
-            if (navigator) {
-               navigator.to(this, null);
-               this.state.index = -1;
-               this.state.navigator = null;
-            } else {
-               const navigator = this.navigators[this.menu];
-               if (navigator) {
-                  this.state.index = 0;
-                  navigator.from(this, this.state.navigator);
-                  this.state.navigator = this.menu;
-               }
-            }
+            this.switch(navigator ? null : this.menu);
             break;
          case 'move':
             if (navigator && navigator.type === type) {
@@ -587,55 +638,51 @@ class XAtlas {
             break;
          case 'next':
          case 'prev':
-            let destination: string | null | void = null;
             if (navigator) {
                const provider = navigator[action];
                let result = typeof provider === 'function' ? provider(this) : provider;
-               destination = result && typeof result === 'object' ? result[this.state.index] : result;
-            }
-            if (typeof destination === 'string' && destination in this.navigators) {
-               navigator && navigator.to(this, destination);
-               this.state.index = 0;
-               this.navigators[destination].from(this, this.state.navigator);
-               this.state.navigator = destination;
-            } else if (destination === null) {
-               navigator && navigator.to(this, destination);
-               this.state.index = -1;
-               this.state.navigator = null;
+               this.switch(result && typeof result === 'object' ? result[this.state.index] : result);
+            } else {
+               this.switch(null);
             }
             break;
       }
    }
+   switch (destination: string | null | void) {
+      const navigator = this.navigator;
+      if (typeof destination === 'string' && destination in this.navigators) {
+         navigator && navigator.to(this, destination);
+         this.state.index = 0;
+         this.navigators[destination].from(this, this.state.navigator);
+         this.state.navigator = destination;
+      } else if (destination === null) {
+         navigator && navigator.to(this, null);
+         this.state.index = -1;
+         this.state.navigator = null;
+      }
+   }
 }
 
-class XOverworld extends XHost {
+export class XOverworld extends XHost {
    layers: XKeyed<XRenderer>;
-   player: XEntity;
-   rooms: XKeyed<XRoom>;
+   player: XEntity | null = null;
+   room: XRoom | null = null;
    size: XPosition;
    state: {
       bounds: XBounds;
       scale: number;
-      room: string;
    } = {
       bounds: { w: 0, h: 0, x: 0, y: 0 },
-      scale: 1,
-      room: ''
+      scale: 1
    };
    wrapper: XItem;
-   get room (): XRoom | void {
-      return this.rooms[this.state.room];
-   }
    constructor (
       {
          layers = {},
-         player = new XEntity(),
-         rooms = {},
          size: { x = 0, y = 0 } = {},
          wrapper
       }: {
          layers?: XKeyed<XRenderer>;
-         player?: XEntity;
          rooms?: XKeyed<XRoom>;
          size?: XOptional<XPosition>;
          wrapper?: Element;
@@ -643,8 +690,6 @@ class XOverworld extends XHost {
    ) {
       super();
       this.layers = layers;
-      this.player = player;
-      this.rooms = rooms;
       this.size = { x, y };
       this.wrapper = new XItem({
          element: wrapper instanceof HTMLElement ? wrapper : void 0,
@@ -657,7 +702,7 @@ class XOverworld extends XHost {
             position: 'relative',
             width: '100%'
          },
-         children: Object.entries(this.layers).map(([ key, layer ]) => {
+         children: Object.values(this.layers).map(layer => {
             return new XItem({ element: layer.canvas, style: { gridArea: 'c', margin: 'auto' } });
          })
       });
@@ -689,22 +734,36 @@ class XOverworld extends XHost {
    render (animate = false) {
       const room = this.room;
       if (room) {
-         const center = X.center(this.player);
+         const center = this.player ? X.center(this.player) : { x: this.size.x / 2, y: this.size.y / 2 };
          for (const [ key, renderer ] of Object.entries(this.layers)) {
             if (renderer.attributes.animate === animate) {
                renderer.erase();
-               if (room.layers.has(key) || key === this.player.renderer) {
+               if (room.layers.has(key) || (this.player && key === this.player.renderer)) {
                   const entities = [ ...(room.layers.get(key) || []) ];
-                  key === this.player.renderer && entities.push(this.player);
-                  renderer.draw(this.size, center, this.state.scale, ...entities);
+                  this.player && key === this.player.renderer && entities.push(this.player);
+                  const zero = { x: room.bounds.x + this.size.x / 2, y: room.bounds.y + this.size.y / 2 };
+                  renderer.draw(
+                     this.size,
+                     {
+                        x: Math.min(Math.max(center.x, zero.x), zero.x + room.bounds.w),
+                        y: Math.min(Math.max(center.y, zero.y), zero.y + room.bounds.h)
+                     },
+                     this.state.scale,
+                     ...entities
+                  );
                }
             }
          }
       }
    }
+   tick (modulator?: XModulator) {
+      if (this.room) {
+         for (const entity of this.room.entities) entity.tick(modulator);
+      }
+   }
 }
 
-class XReader extends XHost {
+export class XReader extends XHost {
    lines: string[] = [];
    mode = 'none';
    char: (char: string) => Promise<void>;
@@ -787,7 +846,7 @@ class XReader extends XHost {
    }
 }
 
-class XDialogue extends XReader {
+export class XDialogue extends XReader {
    interval: number;
    sprites: XKeyed<XSprite>;
    state = { sprite: '', text: String.prototype.split(''), skip: false, sound: '' };
@@ -926,6 +985,7 @@ class XDialogue extends XReader {
 //
 ///// where most engines begin and end /////////////////////////////////////////////////////////////
 
+/*
 class XBullet extends XEntity {
    angle: number;
    hitbox: Set<XBounds>;
@@ -1042,66 +1102,4 @@ class XAttack extends XHost {
       for (const bullet of this.patterns.keys()) bullet.tick();
    }
 }
-
-//
-//    #########   #########   #########   #########
-//    ## ### ##      ###      ##          ##
-//    ##  #  ##      ###      ##          ##
-//    ##     ##      ###      #########   ##
-//    ##     ##      ###             ##   ##
-//    ##     ##      ###             ##   ##
-//    ##     ##   #########   #########   #########
-//
-///// nerdiest shit on the block ///////////////////////////////////////////////////////////////////
-
-const X = (() => {
-   const storage: Set<Promise<void>> = new Set();
-   return {
-      storage,
-      add (promise: Promise<void>) {
-         X.storage.add(promise);
-      },
-      bounds (entity: XEntity) {
-         return {
-            x: entity.position.x + entity.bounds.x + Math.min(entity.bounds.w, 0),
-            y: entity.position.y + entity.bounds.y + Math.min(entity.bounds.h, 0),
-            w: Math.abs(entity.bounds.w),
-            h: Math.abs(entity.bounds.h)
-         };
-      },
-      center (entity: XEntity) {
-         const bounds = X.bounds(entity);
-         return {
-            x: entity.position.x + bounds.w / 2,
-            y: entity.position.y + bounds.h / 2
-         };
-      },
-      intersection ({ x = 0, y = 0, h = 0, w = 0 }: XBounds, ...entities: XEntity[]) {
-         const list: Set<XEntity> = new Set();
-         for (const entity of entities) {
-            const bounds = X.bounds(entity);
-            if (x < bounds.x + bounds.w && x + w > bounds.x && y < bounds.y + bounds.h && y + h > bounds.y) {
-               list.add(entity);
-            }
-         }
-         return list;
-      },
-      once (host: XHost, name: string, listener: XListener) {
-         const script = (...data: any[]) => {
-            host.off(name, script);
-            return (typeof listener === 'function' ? listener : listener.script)(...data);
-         };
-         host.on(name, script);
-      },
-      pause (time: number): Promise<void> {
-         return new Promise(resolve => setTimeout(() => resolve(), time));
-      },
-      ready (script: () => void) {
-         Promise.all(X.storage).then(script).catch(() => {
-            script();
-         });
-      }
-   };
-})();
-
-// Out!Code - 2̸̾̂9̶͌͝5̷̌̓7̴̍͊
+*/

@@ -1,4 +1,9 @@
 @font-face {
+   font-family: 'Crypt Of Tomorrow';
+   src: url('../font/crypt-of-tomorrow.woff');
+}
+
+@font-face {
    font-family: 'Determination Mono';
    src: url('../font/determination-mono.woff');
 }
@@ -6,11 +11,6 @@
 @font-face {
    font-family: 'Determination Sans';
    src: url('../font/determination-sans.ttf');
-}
-
-@font-face {
-   font-family: 'Crypt Of Tomorrow';
-   src: url('../font/crypt-of-tomorrow.woff');
 }
 
 * {

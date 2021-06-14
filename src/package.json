@@ -5,6 +5,6 @@
    },
    "scripts": {
       "tsc": "tsc --watch",
-      "terser": "npx terser ../js/storyteller.js -c -m -o ../../dist/storyteller.js"
+      "terser": "npx terser ../dist/index.js -c -m -o ../dist/index.js"
    }
 }
