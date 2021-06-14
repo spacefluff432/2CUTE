@@ -1,36 +1,36 @@
-export declare type XBounds = {
+declare type XBounds = {
     h: number;
     w: number;
     x: number;
     y: number;
 };
-export declare type XEntityAttributes = {
+declare type XEntityAttributes = {
     collide: boolean;
     interact: boolean;
     trigger: boolean;
 };
-export declare type XKeyed<X> = {
+declare type XKeyed<X> = {
     [k: string]: X;
 };
-export declare type XListener = ((...data: any[]) => any) | {
+declare type XListener = ((...data: any[]) => any) | {
     priority: number;
     script: (...data: any[]) => any;
 };
-export declare type XOptional<X> = {
+declare type XOptional<X> = {
     [k in keyof X]?: X[k];
 };
-export declare type XPosition = {
+declare type XPosition = {
     x: number;
     y: number;
 };
-export declare type XRendererAttributes = {
+declare type XRendererAttributes = {
     animate: boolean;
 };
-export declare type XSpriteAttributes = {
+declare type XSpriteAttributes = {
     persist: boolean;
     hold: boolean;
 };
-export declare const X: {
+declare const X: {
     storage: Set<Promise<void>>;
     add(promise: Promise<void>): void;
     bounds(entity: XEntity): {
@@ -48,13 +48,13 @@ export declare const X: {
     pause(time: number): Promise<void>;
     ready(script: () => void): void;
 };
-export declare class XHost {
+declare class XHost {
     events: Map<string, Set<XListener>>;
     on(name: string, listener: XListener): void;
     off(name: string, listener: XListener): void;
     fire(name: string, ...data: any[]): any[];
 }
-export declare class XEntity extends XHost {
+declare class XEntity extends XHost {
     attributes: XEntityAttributes;
     bounds: XBounds;
     depth: number;
@@ -80,7 +80,7 @@ export declare class XEntity extends XHost {
     });
     tick(modulator?: XModulator): void;
 }
-export declare class XRenderer {
+declare class XRenderer {
     attributes: XRendererAttributes;
     canvas: HTMLCanvasElement;
     context: CanvasRenderingContext2D;
@@ -92,7 +92,7 @@ export declare class XRenderer {
     erase(): void;
     reload(): void;
 }
-export declare class XSound {
+declare class XSound {
     audio: HTMLAudioElement;
     constructor({ source }?: {
         source?: string;
@@ -100,7 +100,7 @@ export declare class XSound {
     static cache: Map<string, HTMLAudioElement>;
     static audio(source: string): HTMLAudioElement;
 }
-export declare class XSprite {
+declare class XSprite {
     attributes: XSpriteAttributes;
     default: number;
     rotation: number;
@@ -124,7 +124,7 @@ export declare class XSprite {
     disable(): void;
     enable(): void;
 }
-export declare class XRoom {
+declare class XRoom {
     bounds: XBounds;
     collidables: Set<XEntity>;
     entities: Set<XEntity>;
@@ -138,7 +138,7 @@ export declare class XRoom {
     add(...entities: XEntity[]): void;
     remove(...entities: XEntity[]): void;
 }
-export declare class XTexture {
+declare class XTexture {
     bounds: XBounds;
     image: HTMLImageElement;
     constructor({ bounds: { h, w, x, y }, source }?: {
@@ -148,12 +148,12 @@ export declare class XTexture {
     static cache: Map<string, HTMLImageElement>;
     static image(source: string): HTMLImageElement;
 }
-export declare type XItemStyle = {
+declare type XItemStyle = {
     [k in keyof CSSStyleDeclaration]: CSSStyleDeclaration[k] | ((element?: HTMLElement) => CSSStyleDeclaration[k]);
 };
-export declare type XModulator = (entity: XEntity, lifetime: number) => void;
-export declare type XNavigatorType = 'horizontal' | 'none' | 'vertical';
-export declare class XItem {
+declare type XModulator = (entity: XEntity, lifetime: number) => void;
+declare type XNavigatorType = 'horizontal' | 'none' | 'vertical';
+declare class XItem {
     children: XItem[] | void;
     element: Element | string | void | (() => Element | string | void);
     priority: number;
@@ -173,13 +173,13 @@ export declare class XItem {
     });
     compute(scale?: number): HTMLElement | undefined;
 }
-export declare class XKey extends XHost {
+declare class XKey extends XHost {
     keys: Set<string>;
     states: Set<string>;
     get active(): boolean;
     constructor(...keys: string[]);
 }
-export declare class XNavigator {
+declare class XNavigator {
     from: ((atlas: XAtlas, navigator: string | null) => void);
     item: XItem;
     next: string | null | void | (string | null | void)[] | ((atlas: XAtlas) => string | null | void | (string | null | void)[]);
@@ -197,7 +197,7 @@ export declare class XNavigator {
         type?: XNavigatorType | ((atlas: XAtlas) => XNavigatorType);
     });
 }
-export declare class XAtlas {
+declare class XAtlas {
     elements: XKeyed<XItem>;
     menu: string;
     navigators: XKeyed<XNavigator>;
@@ -217,7 +217,7 @@ export declare class XAtlas {
     navigate(action: 'menu' | 'move' | 'next' | 'prev', type?: string, shift?: -1 | 0 | 1): void;
     switch(destination: string | null | void): void;
 }
-export declare class XOverworld extends XHost {
+declare class XOverworld extends XHost {
     layers: XKeyed<XRenderer>;
     player: XEntity | null;
     room: XRoom | null;
@@ -237,7 +237,7 @@ export declare class XOverworld extends XHost {
     render(animate?: boolean): void;
     tick(modulator?: XModulator): void;
 }
-export declare class XReader extends XHost {
+declare class XReader extends XHost {
     lines: string[];
     mode: string;
     char: (char: string) => Promise<void>;
@@ -251,7 +251,7 @@ export declare class XReader extends XHost {
     parse(text: string): string | Map<string, string>;
     read(): Promise<void>;
 }
-export declare class XDialogue extends XReader {
+declare class XDialogue extends XReader {
     interval: number;
     sprites: XKeyed<XSprite>;
     state: {

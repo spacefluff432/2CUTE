@@ -1,1 +1,872 @@
-var __awaiter=this&&this.__awaiter||function(t,e,s,i){return new(s||(s=Promise))((function(n,a){function r(t){try{o(i.next(t))}catch(t){a(t)}}function h(t){try{o(i.throw(t))}catch(t){a(t)}}function o(t){var e;t.done?n(t.value):(e=t.value,e instanceof s?e:new s((function(t){t(e)}))).then(r,h)}o((i=i.apply(t,e||[])).next())}))};export const X={storage:new Set,add(t){X.storage.add(t)},bounds:t=>({x:t.position.x+t.bounds.x+Math.min(t.bounds.w,0),y:t.position.y+t.bounds.y+Math.min(t.bounds.h,0),w:Math.abs(t.bounds.w),h:Math.abs(t.bounds.h)}),center(t){const e=X.bounds(t);return{x:t.position.x+e.w/2,y:t.position.y+e.h/2}},intersection({x:t=0,y:e=0,h:s=0,w:i=0},...n){const a=new Set;for(const r of n){const n=X.bounds(r);t<n.x+n.w&&t+i>n.x&&e<n.y+n.h&&e+s>n.y&&a.add(r)}return a},once(t,e,s){const i=(...n)=>(t.off(e,i),("function"==typeof s?s:s.script)(...n));t.on(e,i)},pause:t=>new Promise((e=>setTimeout((()=>e()),t))),ready(t){Promise.all(X.storage).then(t).catch((()=>{t()}))}};export class XHost{constructor(){this.events=new Map}on(t,e){this.events.has(t)||this.events.set(t,new Set),this.events.get(t).add(e)}off(t,e){this.events.has(t)&&this.events.get(t).delete(e)}fire(t,...e){return this.events.has(t)?[...this.events.get(t)].sort(((t,e)=>("function"==typeof t?0:t.priority)-("function"==typeof e?0:e.priority))).map((t=>("function"==typeof t?t:t.script)(...e))):[]}}export class XEntity extends XHost{constructor({attributes:{collide:t=!1,interact:e=!1,trigger:s=!1}={collide:!1,interact:!1,trigger:!1},bounds:{h:i=0,w:n=0,x:a=0,y:r=0}={},depth:h=0,direction:o=0,metadata:c={},position:{x:d=0,y:l=0}={},renderer:u="",speed:p=0,sprite:f}={}){super(),this.state={lifetime:0},this.attributes={collide:t,interact:e,trigger:s},this.bounds={h:i,w:n,x:a,y:r},this.depth=h,this.direction=o,this.metadata=c,this.position={x:d,y:l},this.speed=p,this.renderer=u,this.sprite=f}tick(t){t&&t(this,this.state.lifetime++);const e=this.direction%360*Math.PI/180;this.position.x+=this.speed*Math.cos(e),this.position.y+=this.speed*Math.sin(e)}}export class XRenderer{constructor({attributes:{animate:t=!1}={},canvas:e=document.createElement("canvas")}={}){this.attributes={animate:t},this.canvas=e,this.reload()}draw(t,e,s,...i){this.context.setTransform(s,0,0,s,(-1*e.x+t.x/2)*s,(e.y+t.y/2)*s);for(const t of i.sort(((t,e)=>t.depth-e.depth))){const e=t.sprite;if(e){const s=e.compute();if(s){const i=isFinite(s.bounds.w)?s.bounds.w:s.image.width,n=isFinite(s.bounds.h)?s.bounds.h:s.image.height;this.context.drawImage(s.image,s.bounds.x,s.bounds.y,i,n,t.position.x,-1*t.position.y-n*e.scale,i*e.scale,n*e.scale)}}}}erase(){this.context.resetTransform(),this.context.clearRect(0,0,this.canvas.width,this.canvas.height)}reload(){this.context=this.canvas.getContext("2d"),this.context.imageSmoothingEnabled=!1}}export class XSound{constructor({source:t="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="}={}){this.audio=XSound.audio(t)}static audio(t){const e=XSound.cache.get(t)||new Audio(t);return XSound.cache.has(t)||(XSound.cache.set(t,e),X.add(new Promise(((t,s)=>{e.addEventListener("canplay",(()=>{t()})),e.addEventListener("error",(t=>{console.error("ASSET LOAD FAILED!",e.src,t),s()}))})))),e}}XSound.cache=new Map;export class XSprite{constructor({attributes:{persist:t=!1,hold:e=!1}={persist:!1,hold:!1},default:s=0,rotation:i=0,scale:n=1,interval:a=1,textures:r=[]}={}){this.state={active:!1,index:0,step:0},this.attributes={persist:t,hold:e},this.default=s,this.rotation=i,this.scale=n,this.interval=a,this.textures=[...r]}compute(){if(this.state.active||this.attributes.persist){const t=this.textures[this.state.index];return this.state.active&&++this.state.step>=this.interval&&(this.state.step=0,++this.state.index>=this.textures.length&&(this.state.index=0)),t}}disable(){this.state.active&&(this.state.active=!1,this.attributes.hold||(this.state.step=0,this.state.index=this.default))}enable(){this.state.active||(this.state.active=!0,this.attributes.hold||(this.state.step=0,this.state.index=this.default))}}export class XRoom{constructor({bounds:{h:t=0,w:e=0,x:s=0,y:i=0}={},entities:n=[]}={}){this.collidables=new Set,this.entities=new Set,this.interactables=new Set,this.layers=new Map,this.triggerables=new Set,this.bounds={h:t,w:e,x:s,y:i};for(const t of n)this.add(t)}add(...t){for(const e of t)this.entities.add(e),e.attributes.collide&&this.collidables.add(e),e.attributes.interact&&this.interactables.add(e),e.attributes.trigger&&this.triggerables.add(e),this.layers.has(e.renderer)||this.layers.set(e.renderer,new Set),this.layers.get(e.renderer).add(e)}remove(...t){for(const e of t)this.entities.delete(e),e.attributes.collide&&this.collidables.delete(e),e.attributes.interact&&this.interactables.delete(e),e.attributes.trigger&&this.triggerables.delete(e),this.layers.has(e.renderer)&&this.layers.get(e.renderer).delete(e)}}export class XTexture{constructor({bounds:{h:t=1/0,w:e=1/0,x:s=0,y:i=0}={},source:n="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="}={}){this.bounds={h:t,w:e,x:s,y:i},this.image=XTexture.image(n)}static image(t){const e=XTexture.cache.get(t)||Object.assign(new Image,{src:t});return XTexture.cache.has(t)||(XTexture.cache.set(t,e),X.add(new Promise(((t,s)=>{e.addEventListener("load",(()=>{t()})),e.addEventListener("error",(()=>{s()}))})))),e}}XTexture.cache=new Map;export class XItem{constructor({children:t,element:e=document.createElement("div"),priority:s=0,renderer:i,style:n={}}={}){this.state={element:void 0,fragment:"",node:void 0},this.children=t&&[...t].sort(((t,e)=>t.priority-e.priority)),this.element=e,this.priority=s,this.renderer=i,this.style=n}compute(t=1){let e="function"==typeof this.element?this.element():this.element;if("string"==typeof e&&(e===this.state.fragment?e=this.state.node:(this.state.fragment=e,e=document.createRange().createContextualFragment(e).children[0],this.state.node=e)),e instanceof HTMLElement){for(const s in this.style){let i=this.style[s];void 0!==i&&("function"==typeof i&&(i=i(e)),1!==t&&(i=i.split(" ").map((e=>e.endsWith("px")?+e.slice(0,-2)*t+"px":e)).map((e=>e.endsWith("px)")?+e.slice(0,-3)*t+"px)":e)).join(" ")),e.style[s]=i)}if(this.children){const s=new Set(e.children),i=[];for(const e of this.children){const s=e.compute(t);s&&i.push(s)}for(const t of s)i.includes(t)||s.has(t)&&t.remove();for(const t of i)if(!s.has(t)){const n=i.slice(i.indexOf(t)+1).filter((t=>s.has(t)));n.length>0?e.insertBefore(t,n[0]):e.appendChild(t)}}return e===this.state.element||(this.state.element=e),e}}}export class XKey extends XHost{constructor(...t){super(),this.states=new Set,this.keys=new Set(t),addEventListener("keydown",(t=>{this.keys.has(t.key)&&!this.states.has(t.key)&&(this.states.add(t.key),this.fire("down"))})),addEventListener("keyup",(t=>{this.keys.has(t.key)&&this.states.has(t.key)&&(this.states.delete(t.key),this.fire("up"))})),addEventListener("keypress",(t=>{this.keys.has(t.key)&&this.fire("press")}))}get active(){return this.states.size>0}}export class XNavigator{constructor({from:t=(()=>{}),item:e=new XItem,next:s,prev:i,size:n=0,to:a=(()=>{}),type:r="none"}={}){this.from=t,this.item=e,this.next=s,this.prev=i,this.size=n,this.to=a,this.type=r}}export class XAtlas{constructor({menu:t="",navigators:e={},size:{x:s=0,y:i=0}={}}={}){this.state={index:0,navigator:null},this.elements=Object.fromEntries(Object.entries(e).map((([t,{item:e}])=>[t,new XItem({element:`<div class="storyteller navigator" id="st-nv-${encodeURIComponent(t)}"></div>`,children:[e],style:{gridArea:"c",height:()=>`${this.size.y}px`,margin:"auto",position:"relative",width:()=>`${this.size.x}px`}})]))),this.menu=t,this.navigators=e,this.size={x:s,y:i}}get navigator(){return null===this.state.navigator?void 0:this.navigators[this.state.navigator]}attach(t,e){if(t in this.elements){const s=this.elements[t];e.wrapper.children.includes(s)||e.wrapper.children.push(this.elements[t])}}detach(t,e){if(t in this.elements){const s=this.elements[t],i=e.wrapper.children;i.includes(s)&&i.splice(i.indexOf(s),1)}}navigate(t,e="",s=0){const i=this.navigator;switch(t){case"menu":this.switch(i?null:this.menu);break;case"move":if(i&&i.type===e)if(s>0){("function"==typeof i.size?i.size(this):i.size)-1<=this.state.index?this.state.index=0:this.state.index++}else if(s<0)if(this.state.index<=0){const t="function"==typeof i.size?i.size(this):i.size;this.state.index=t-1}else this.state.index--;break;case"next":case"prev":if(i){const e=i[t];let s="function"==typeof e?e(this):e;this.switch(s&&"object"==typeof s?s[this.state.index]:s)}else this.switch(null)}}switch(t){const e=this.navigator;"string"==typeof t&&t in this.navigators?(e&&e.to(this,t),this.state.index=0,this.navigators[t].from(this,this.state.navigator),this.state.navigator=t):null===t&&(e&&e.to(this,null),this.state.index=-1,this.state.navigator=null)}}export class XOverworld extends XHost{constructor({layers:t={},size:{x:e=0,y:s=0}={},wrapper:i}={}){super(),this.player=null,this.room=null,this.state={bounds:{w:0,h:0,x:0,y:0},scale:1},this.layers=t,this.size={x:e,y:s},this.wrapper=new XItem({element:i instanceof HTMLElement?i:void 0,style:{backgroundColor:"#000000ff",display:"grid",gridTemplateAreas:"'a a a' 'b c d' 'e e e'",height:"100%",margin:"0",position:"relative",width:"100%"},children:Object.values(this.layers).map((t=>new XItem({element:t.canvas,style:{gridArea:"c",margin:"auto"}})))})}refresh(){const t=this.wrapper.compute(this.state.scale);if(t){let{width:e,height:s}=t.getBoundingClientRect();if(e!==this.state.bounds.w||s!==this.state.bounds.h){this.state.bounds.w=e,this.state.bounds.h=s;const t=this.size.x/this.size.y;this.state.bounds.w/this.state.bounds.h>t?(e=s*t,this.state.scale=s/this.size.y):(s=e/t,this.state.scale=e/this.size.x);for(const t of Object.values(this.layers))t.canvas.width=e,t.canvas.height=s,t.reload();this.render()}}}render(t=!1){const e=this.room;if(e){const s=this.player?X.center(this.player):{x:this.size.x/2,y:this.size.y/2};for(const[i,n]of Object.entries(this.layers))if(n.attributes.animate===t&&(n.erase(),e.layers.has(i)||this.player&&i===this.player.renderer)){const t=[...e.layers.get(i)||[]];this.player&&i===this.player.renderer&&t.push(this.player);const a={x:e.bounds.x+this.size.x/2,y:e.bounds.y+this.size.y/2};n.draw(this.size,{x:Math.min(Math.max(s.x,a.x),a.x+e.bounds.w),y:Math.min(Math.max(s.y,a.y),a.y+e.bounds.h)},this.state.scale,...t)}}}tick(t){if(this.room)for(const e of this.room.entities)e.tick(t)}}export class XReader extends XHost{constructor({char:t=(t=>__awaiter(this,void 0,void 0,(function*(){}))),code:e=(t=>__awaiter(this,void 0,void 0,(function*(){})))}={}){super(),this.lines=[],this.mode="none",this.char=t,this.code=e}add(...t){const e=t.join("\n").split("\n").map((t=>t.trim())).filter((t=>t.length>0));e.length>0&&(this.lines.push(...e),"none"===this.mode&&(this.mode="idle",this.fire("start"),this.read()))}advance(){"idle"===this.mode&&(this.lines.splice(0,1),this.read())}parse(t){if(t.startsWith("[")&&t.endsWith("]")){const e=new Map;for(const s of t.slice(1,-1).split("|"))if(s.includes(":")){const[t,i]=s.split(":").slice(0,2);e.set(t,i)}else e.set(s,"true");return e}return t}read(){return __awaiter(this,void 0,void 0,(function*(){if("idle"===this.mode)if(this.lines.length>0){const t=this.parse(this.lines[0]);if("string"==typeof t){this.mode="read",this.fire("read");let e=0;for(;e<t.length;){const s=t[e++];if("{"===s){const s=t.slice(e,t.indexOf("}",e));e=e+s.length+1,yield this.code(s)}else yield this.char(s)}this.mode="idle",this.fire("idle")}else{for(const e of t)this.fire("style",e);this.advance()}}else this.mode="none",this.fire("stop")}))}}export class XDialogue extends XReader{constructor({interval:t=0,sprites:e={},sounds:s={}}={}){super({char:t=>__awaiter(this,void 0,void 0,(function*(){yield this.skip(this.interval,(()=>{" "===t||this.sound&&this.sound.audio.cloneNode().play()})),this.state.text.push(t),this.fire("text",this.compute())})),code:t=>__awaiter(this,void 0,void 0,(function*(){switch(t[0]){case"!":this.fire("skip"),setTimeout((()=>this.advance()));break;case"^":const e=+t.slice(1);isFinite(e)&&(yield this.skip(e*this.interval));break;case"&":switch(t.slice(1)){case"u":case"x":this.state.text.push(String.fromCharCode(parseInt(t.slice(2),16)))}break;case"|":this.state.text.push("<br>");break;case"<":case">":this.state.text.push(`{${t}}`)}}))}),this.state={sprite:"",text:String.prototype.split(""),skip:!1,sound:""},this.interval=t,this.sprites=e,this.sounds=s,this.on("style",(([t,e])=>{switch(t){case"sound":this.state.sound=e;break;case"sprite":let t=!!this.sprite&&this.sprite.state.active;this.state.sprite=e,this.sprite&&this.sprite[t?"enable":"disable"]();break;case"interval":const s=+e;isFinite(s)&&(this.interval=s)}})),this.on("read",(()=>{this.sprite&&this.sprite.enable(),this.state.skip=!1,this.state.text=[],this.fire("text",this.compute())})),this.on("idle",(()=>{this.sprite&&this.sprite.disable()}))}get sound(){return this.sounds[this.state.sound||""]}get sprite(){return this.sprites[this.state.sprite||""]}compute(){let t="";const e=[];for(const s of this.state.text)if(s.startsWith("{")&&s.endsWith("}"))switch(s[1]){case"<":let i="";const[n,a]=s.slice(2,-1).split("?");new URLSearchParams(a).forEach(((t,e)=>i+=` ${e}="${t}"`)),t+=`<${n}${i}>`,e.push(`</${n}>`);break;case">":e.length>0&&(t+=e.pop())}else t+=s;for(;e.length>0;)t+=e.pop();return t}skip(t,e=(()=>{})){return Promise.race([X.pause(t).then((()=>this.state.skip||e())),new Promise((t=>{this.state.skip?t(0):X.once(this,"skip",(()=>{this.state.skip=!0,t(0)}))}))])}}
+"use strict";
+//
+//    #########   #########   #########   #########
+//    ##          ##     ##   ##     ##   ##
+//    ##          ##     ##   ##     ##   ##
+//    ##          ##     ##   #########   #######
+//    ##          ##     ##   ##  ###     ##
+//    ##          ##     ##   ##   ###    ##
+//    #########   #########   ##    ###   #########
+//
+///// needs more optimizating //////////////////////////////////////////////////////////////////////
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+const X = (() => {
+    const storage = new Set();
+    return {
+        storage,
+        add(promise) {
+            X.storage.add(promise);
+        },
+        bounds(entity) {
+            return {
+                x: entity.position.x + entity.bounds.x + Math.min(entity.bounds.w, 0),
+                y: entity.position.y + entity.bounds.y + Math.min(entity.bounds.h, 0),
+                w: Math.abs(entity.bounds.w),
+                h: Math.abs(entity.bounds.h)
+            };
+        },
+        center(entity) {
+            const bounds = X.bounds(entity);
+            return {
+                x: entity.position.x + bounds.w / 2,
+                y: entity.position.y + bounds.h / 2
+            };
+        },
+        intersection({ x = 0, y = 0, h = 0, w = 0 }, ...entities) {
+            const list = new Set();
+            for (const entity of entities) {
+                const bounds = X.bounds(entity);
+                if (x < bounds.x + bounds.w && x + w > bounds.x && y < bounds.y + bounds.h && y + h > bounds.y) {
+                    list.add(entity);
+                }
+            }
+            return list;
+        },
+        once(host, name, listener) {
+            const script = (...data) => {
+                host.off(name, script);
+                return (typeof listener === 'function' ? listener : listener.script)(...data);
+            };
+            host.on(name, script);
+        },
+        pause(time) {
+            return new Promise(resolve => setTimeout(() => resolve(), time));
+        },
+        ready(script) {
+            Promise.all(X.storage).then(script).catch(() => {
+                script();
+            });
+        }
+    };
+})();
+class XHost {
+    constructor() {
+        this.events = new Map();
+    }
+    on(name, listener) {
+        this.events.has(name) || this.events.set(name, new Set());
+        this.events.get(name).add(listener);
+    }
+    off(name, listener) {
+        this.events.has(name) && this.events.get(name).delete(listener);
+    }
+    fire(name, ...data) {
+        if (this.events.has(name)) {
+            return [...this.events.get(name)]
+                .sort((listener1, listener2) => {
+                return ((typeof listener1 === 'function' ? 0 : listener1.priority) -
+                    (typeof listener2 === 'function' ? 0 : listener2.priority));
+            })
+                .map(listener => {
+                return (typeof listener === 'function' ? listener : listener.script)(...data);
+            });
+        }
+        else {
+            return [];
+        }
+    }
+}
+class XEntity extends XHost {
+    constructor({ attributes: { collide = false, interact = false, trigger = false } = {
+        collide: false,
+        interact: false,
+        trigger: false
+    }, bounds: { h = 0, w = 0, x: x1 = 0, y: y1 = 0 } = {}, depth = 0, direction = 0, metadata = {}, position: { x: x2 = 0, y: y2 = 0 } = {}, renderer = '', speed = 0, sprite } = {}) {
+        super();
+        this.state = { lifetime: 0 };
+        this.attributes = { collide, interact, trigger };
+        this.bounds = { h, w, x: x1, y: y1 };
+        this.depth = depth;
+        this.direction = direction;
+        this.metadata = metadata;
+        this.position = { x: x2, y: y2 };
+        this.speed = speed;
+        this.renderer = renderer;
+        this.sprite = sprite;
+    }
+    tick(modulator) {
+        modulator && modulator(this, this.state.lifetime++);
+        const radians = (this.direction % 360) * Math.PI / 180;
+        this.position.x += this.speed * Math.cos(radians);
+        this.position.y += this.speed * Math.sin(radians);
+    }
+}
+class XRenderer {
+    constructor({ attributes: { animate = false } = {}, canvas = document.createElement('canvas') } = {}) {
+        this.attributes = { animate };
+        this.canvas = canvas;
+        this.reload();
+    }
+    draw(size, position, scale, ...entities) {
+        this.context.setTransform(scale, 0, 0, scale, (position.x * -1 + size.x / 2) * scale, (position.y + size.y / 2) * scale);
+        for (const entity of entities.sort((entity1, entity2) => entity1.depth - entity2.depth)) {
+            const sprite = entity.sprite;
+            if (sprite) {
+                const texture = sprite.compute();
+                if (texture) {
+                    const width = isFinite(texture.bounds.w) ? texture.bounds.w : texture.image.width;
+                    const height = isFinite(texture.bounds.h) ? texture.bounds.h : texture.image.height;
+                    // TODO: HANDLE SPRITE ROTATION
+                    this.context.drawImage(texture.image, texture.bounds.x, texture.bounds.y, width, height, entity.position.x, entity.position.y * -1 - height * sprite.scale, width * sprite.scale, height * sprite.scale);
+                }
+            }
+        }
+    }
+    erase() {
+        this.context.resetTransform();
+        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+    reload() {
+        this.context = this.canvas.getContext('2d');
+        this.context.imageSmoothingEnabled = false;
+    }
+}
+class XSound {
+    constructor({ source = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=' } = {}) {
+        this.audio = XSound.audio(source);
+    }
+    static audio(source) {
+        const audio = XSound.cache.get(source) || new Audio(source);
+        if (!XSound.cache.has(source)) {
+            XSound.cache.set(source, audio);
+            X.add(new Promise((resolve, reject) => {
+                audio.addEventListener('canplay', () => {
+                    resolve();
+                });
+                audio.addEventListener('error', reason => {
+                    console.error('ASSET LOAD FAILED!', audio.src, reason);
+                    reject();
+                });
+            }));
+        }
+        return audio;
+    }
+}
+XSound.cache = new Map();
+class XSprite {
+    constructor({ attributes: { persist = false, hold = false } = {
+        persist: false,
+        hold: false
+    }, default: $default = 0, rotation = 0, scale = 1, interval = 1, textures = [] } = {}) {
+        this.state = { active: false, index: 0, step: 0 };
+        this.attributes = { persist, hold };
+        this.default = $default;
+        this.rotation = rotation;
+        this.scale = scale;
+        this.interval = interval;
+        this.textures = [...textures];
+    }
+    compute() {
+        if (this.state.active || this.attributes.persist) {
+            const texture = this.textures[this.state.index];
+            if (this.state.active && ++this.state.step >= this.interval) {
+                this.state.step = 0;
+                if (++this.state.index >= this.textures.length) {
+                    this.state.index = 0;
+                }
+            }
+            return texture;
+        }
+    }
+    disable() {
+        if (this.state.active) {
+            this.state.active = false;
+            this.attributes.hold || ((this.state.step = 0), (this.state.index = this.default));
+        }
+    }
+    enable() {
+        if (!this.state.active) {
+            this.state.active = true;
+            this.attributes.hold || ((this.state.step = 0), (this.state.index = this.default));
+        }
+    }
+}
+class XRoom {
+    constructor({ bounds: { h = 0, w = 0, x = 0, y = 0 } = {}, entities = [] } = {}) {
+        this.collidables = new Set();
+        this.entities = new Set();
+        this.interactables = new Set();
+        this.layers = new Map();
+        this.triggerables = new Set();
+        this.bounds = { h, w, x, y };
+        for (const entity of entities)
+            this.add(entity);
+    }
+    add(...entities) {
+        for (const entity of entities) {
+            this.entities.add(entity);
+            entity.attributes.collide && this.collidables.add(entity);
+            entity.attributes.interact && this.interactables.add(entity);
+            entity.attributes.trigger && this.triggerables.add(entity);
+            this.layers.has(entity.renderer) || this.layers.set(entity.renderer, new Set());
+            this.layers.get(entity.renderer).add(entity);
+        }
+    }
+    remove(...entities) {
+        for (const entity of entities) {
+            this.entities.delete(entity);
+            entity.attributes.collide && this.collidables.delete(entity);
+            entity.attributes.interact && this.interactables.delete(entity);
+            entity.attributes.trigger && this.triggerables.delete(entity);
+            this.layers.has(entity.renderer) && this.layers.get(entity.renderer).delete(entity);
+        }
+    }
+}
+class XTexture {
+    constructor({ bounds: { h = Infinity, w = Infinity, x = 0, y = 0 } = {}, source = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==' } = {}) {
+        this.bounds = { h, w, x, y };
+        this.image = XTexture.image(source);
+    }
+    static image(source) {
+        const image = XTexture.cache.get(source) || Object.assign(new Image(), { src: source });
+        if (!XTexture.cache.has(source)) {
+            XTexture.cache.set(source, image);
+            X.add(new Promise((resolve, reject) => {
+                image.addEventListener('load', () => {
+                    resolve();
+                });
+                image.addEventListener('error', () => {
+                    reject();
+                });
+            }));
+        }
+        return image;
+    }
+}
+XTexture.cache = new Map();
+class XItem {
+    constructor({ children, element = document.createElement('div'), priority = 0, renderer, style = {} } = {}) {
+        this.state = {
+            element: void 0,
+            fragment: '',
+            node: void 0
+        };
+        this.children = children && [...children].sort((child1, child2) => child1.priority - child2.priority);
+        this.element = element;
+        this.priority = priority;
+        this.renderer = renderer;
+        this.style = style;
+    }
+    compute(scale = 1) {
+        let element = typeof this.element === 'function' ? this.element() : this.element;
+        if (typeof element === 'string') {
+            if (element === this.state.fragment) {
+                element = this.state.node;
+            }
+            else {
+                this.state.fragment = element;
+                element = document.createRange().createContextualFragment(element).children[0];
+                this.state.node = element;
+            }
+        }
+        if (element instanceof HTMLElement) {
+            for (const key in this.style) {
+                let property = this.style[key];
+                if (property !== void 0) {
+                    typeof property === 'function' && (property = property(element));
+                    if (scale !== 1) {
+                        property = property
+                            .split(' ')
+                            .map(term => (term.endsWith('px') ? `${+term.slice(0, -2) * scale}px` : term))
+                            .map(term => (term.endsWith('px)') ? `${+term.slice(0, -3) * scale}px)` : term))
+                            .join(' ');
+                    }
+                    element.style[key] = property;
+                }
+            }
+            if (this.children) {
+                //@ts-expect-error
+                const current = new Set(element.children);
+                const next = [];
+                for (const child of this.children) {
+                    const element = child.compute(scale);
+                    element && next.push(element);
+                }
+                for (const child of current)
+                    next.includes(child) || (current.has(child) && child.remove());
+                for (const child of next) {
+                    if (!current.has(child)) {
+                        const siblings = next.slice(next.indexOf(child) + 1).filter(child => current.has(child));
+                        if (siblings.length > 0) {
+                            element.insertBefore(child, siblings[0]);
+                        }
+                        else {
+                            element.appendChild(child);
+                        }
+                    }
+                }
+            }
+            element === this.state.element || (this.state.element = element);
+            return element;
+        }
+    }
+}
+class XKey extends XHost {
+    constructor(...keys) {
+        super();
+        this.states = new Set();
+        this.keys = new Set(keys);
+        addEventListener('keydown', event => {
+            if (this.keys.has(event.key) && !this.states.has(event.key)) {
+                this.states.add(event.key);
+                this.fire('down');
+            }
+        });
+        addEventListener('keyup', event => {
+            if (this.keys.has(event.key) && this.states.has(event.key)) {
+                this.states.delete(event.key);
+                this.fire('up');
+            }
+        });
+        addEventListener('keypress', event => {
+            this.keys.has(event.key) && this.fire('press');
+        });
+    }
+    get active() {
+        return this.states.size > 0;
+    }
+}
+class XNavigator {
+    constructor({ from = () => { }, item = new XItem(), next, prev, size = 0, to = () => { }, type = 'none' } = {}) {
+        this.from = from;
+        this.item = item;
+        this.next = next;
+        this.prev = prev;
+        this.size = size;
+        this.to = to;
+        this.type = type;
+    }
+}
+class XAtlas {
+    constructor({ menu = '', navigators = {}, size: { x = 0, y = 0 } = {} } = {}) {
+        this.state = { index: 0, navigator: null };
+        this.elements = Object.fromEntries(Object.entries(navigators).map(([key, { item }]) => {
+            return [
+                key,
+                new XItem({
+                    element: `<div class="storyteller navigator" id="st-nv-${encodeURIComponent(key)}"></div>`,
+                    children: [item],
+                    style: {
+                        gridArea: 'c',
+                        height: () => `${this.size.y}px`,
+                        margin: 'auto',
+                        position: 'relative',
+                        width: () => `${this.size.x}px`
+                    }
+                })
+            ];
+        }));
+        this.menu = menu;
+        this.navigators = navigators;
+        this.size = { x, y };
+    }
+    get navigator() {
+        return this.state.navigator === null ? void 0 : this.navigators[this.state.navigator];
+    }
+    attach(navigator, overworld) {
+        if (navigator in this.elements) {
+            const element = this.elements[navigator];
+            const children = overworld.wrapper.children;
+            if (!children.includes(element)) {
+                overworld.wrapper.children.push(this.elements[navigator]);
+            }
+        }
+    }
+    detach(navigator, overworld) {
+        if (navigator in this.elements) {
+            const element = this.elements[navigator];
+            const children = overworld.wrapper.children;
+            if (children.includes(element)) {
+                children.splice(children.indexOf(element), 1);
+            }
+        }
+    }
+    navigate(action, type = '', shift = 0) {
+        const navigator = this.navigator;
+        switch (action) {
+            case 'menu':
+                this.switch(navigator ? null : this.menu);
+                break;
+            case 'move':
+                if (navigator && navigator.type === type) {
+                    if (shift > 0) {
+                        const size = typeof navigator.size === 'function' ? navigator.size(this) : navigator.size;
+                        if (size - 1 <= this.state.index) {
+                            this.state.index = 0;
+                        }
+                        else {
+                            this.state.index++;
+                        }
+                    }
+                    else if (shift < 0) {
+                        if (this.state.index <= 0) {
+                            const size = typeof navigator.size === 'function' ? navigator.size(this) : navigator.size;
+                            this.state.index = size - 1;
+                        }
+                        else {
+                            this.state.index--;
+                        }
+                    }
+                }
+                break;
+            case 'next':
+            case 'prev':
+                if (navigator) {
+                    const provider = navigator[action];
+                    let result = typeof provider === 'function' ? provider(this) : provider;
+                    this.switch(result && typeof result === 'object' ? result[this.state.index] : result);
+                }
+                else {
+                    this.switch(null);
+                }
+                break;
+        }
+    }
+    switch(destination) {
+        const navigator = this.navigator;
+        if (typeof destination === 'string' && destination in this.navigators) {
+            navigator && navigator.to(this, destination);
+            this.state.index = 0;
+            this.navigators[destination].from(this, this.state.navigator);
+            this.state.navigator = destination;
+        }
+        else if (destination === null) {
+            navigator && navigator.to(this, null);
+            this.state.index = -1;
+            this.state.navigator = null;
+        }
+    }
+}
+class XOverworld extends XHost {
+    constructor({ layers = {}, size: { x = 0, y = 0 } = {}, wrapper } = {}) {
+        super();
+        this.player = null;
+        this.room = null;
+        this.state = {
+            bounds: { w: 0, h: 0, x: 0, y: 0 },
+            scale: 1
+        };
+        this.layers = layers;
+        this.size = { x, y };
+        this.wrapper = new XItem({
+            element: wrapper instanceof HTMLElement ? wrapper : void 0,
+            style: {
+                backgroundColor: '#000000ff',
+                display: 'grid',
+                gridTemplateAreas: "'a a a' 'b c d' 'e e e'",
+                height: '100%',
+                margin: '0',
+                position: 'relative',
+                width: '100%'
+            },
+            children: Object.values(this.layers).map(layer => {
+                return new XItem({ element: layer.canvas, style: { gridArea: 'c', margin: 'auto' } });
+            })
+        });
+    }
+    refresh() {
+        const element = this.wrapper.compute(this.state.scale);
+        if (element) {
+            let { width, height } = element.getBoundingClientRect();
+            if (width !== this.state.bounds.w || height !== this.state.bounds.h) {
+                this.state.bounds.w = width;
+                this.state.bounds.h = height;
+                const ratio = this.size.x / this.size.y;
+                if (this.state.bounds.w / this.state.bounds.h > ratio) {
+                    width = height * ratio;
+                    this.state.scale = height / this.size.y;
+                }
+                else {
+                    height = width / ratio;
+                    this.state.scale = width / this.size.x;
+                }
+                for (const renderer of Object.values(this.layers)) {
+                    renderer.canvas.width = width;
+                    renderer.canvas.height = height;
+                    renderer.reload();
+                }
+                this.render();
+            }
+        }
+    }
+    render(animate = false) {
+        const room = this.room;
+        if (room) {
+            const center = this.player ? X.center(this.player) : { x: this.size.x / 2, y: this.size.y / 2 };
+            for (const [key, renderer] of Object.entries(this.layers)) {
+                if (renderer.attributes.animate === animate) {
+                    renderer.erase();
+                    if (room.layers.has(key) || (this.player && key === this.player.renderer)) {
+                        const entities = [...(room.layers.get(key) || [])];
+                        this.player && key === this.player.renderer && entities.push(this.player);
+                        const zero = { x: room.bounds.x + this.size.x / 2, y: room.bounds.y + this.size.y / 2 };
+                        renderer.draw(this.size, {
+                            x: Math.min(Math.max(center.x, zero.x), zero.x + room.bounds.w),
+                            y: Math.min(Math.max(center.y, zero.y), zero.y + room.bounds.h)
+                        }, this.state.scale, ...entities);
+                    }
+                }
+            }
+        }
+    }
+    tick(modulator) {
+        if (this.room) {
+            for (const entity of this.room.entities)
+                entity.tick(modulator);
+        }
+    }
+}
+class XReader extends XHost {
+    constructor({ char = (char) => __awaiter(this, void 0, void 0, function* () { }), code = (code) => __awaiter(this, void 0, void 0, function* () { }) } = {}) {
+        super();
+        this.lines = [];
+        this.mode = 'none';
+        this.char = char;
+        this.code = code;
+    }
+    add(...text) {
+        const lines = text.join('\n').split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        if (lines.length > 0) {
+            this.lines.push(...lines);
+            if (this.mode === 'none') {
+                this.mode = 'idle';
+                this.fire('start');
+                this.read();
+            }
+        }
+    }
+    advance() {
+        if (this.mode === 'idle') {
+            this.lines.splice(0, 1);
+            this.read();
+        }
+    }
+    parse(text) {
+        if (text.startsWith('[') && text.endsWith(']')) {
+            const style = new Map();
+            for (const property of text.slice(1, -1).split('|')) {
+                if (property.includes(':')) {
+                    const [key, value] = property.split(':').slice(0, 2);
+                    style.set(key, value);
+                }
+                else {
+                    style.set(property, 'true');
+                }
+            }
+            return style;
+        }
+        else {
+            return text;
+        }
+    }
+    read() {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.mode === 'idle') {
+                if (this.lines.length > 0) {
+                    const line = this.parse(this.lines[0]);
+                    if (typeof line === 'string') {
+                        this.mode = 'read';
+                        this.fire('read');
+                        let index = 0;
+                        while (index < line.length) {
+                            const char = line[index++];
+                            if (char === '{') {
+                                const code = line.slice(index, line.indexOf('}', index));
+                                index = index + code.length + 1;
+                                yield this.code(code);
+                            }
+                            else {
+                                yield this.char(char);
+                            }
+                        }
+                        this.mode = 'idle';
+                        this.fire('idle');
+                    }
+                    else {
+                        for (const entry of line)
+                            this.fire('style', entry);
+                        this.advance();
+                    }
+                }
+                else {
+                    this.mode = 'none';
+                    this.fire('stop');
+                }
+            }
+        });
+    }
+}
+class XDialogue extends XReader {
+    constructor({ interval = 0, sprites = {}, sounds = {} } = {}) {
+        super({
+            char: (char) => __awaiter(this, void 0, void 0, function* () {
+                yield this.skip(this.interval, () => {
+                    //@ts-expect-error
+                    char === ' ' || (this.sound && this.sound.audio.cloneNode().play());
+                });
+                this.state.text.push(char);
+                this.fire('text', this.compute());
+            }),
+            code: (code) => __awaiter(this, void 0, void 0, function* () {
+                switch (code[0]) {
+                    case '!':
+                        this.fire('skip');
+                        setTimeout(() => this.advance());
+                        break;
+                    case '^':
+                        const number = +code.slice(1);
+                        isFinite(number) && (yield this.skip(number * this.interval));
+                        break;
+                    case '&':
+                        switch (code.slice(1)) {
+                            case 'u':
+                            case 'x':
+                                this.state.text.push(String.fromCharCode(parseInt(code.slice(2), 16)));
+                                break;
+                        }
+                        break;
+                    case '|':
+                        this.state.text.push('<br>');
+                        break;
+                    case '<':
+                    case '>':
+                        this.state.text.push(`{${code}}`);
+                }
+            })
+        });
+        this.state = { sprite: '', text: String.prototype.split(''), skip: false, sound: '' };
+        this.interval = interval;
+        this.sprites = sprites;
+        this.sounds = sounds;
+        this.on('style', ([key, value]) => {
+            switch (key) {
+                case 'sound':
+                    this.state.sound = value;
+                    break;
+                case 'sprite':
+                    let active = this.sprite ? this.sprite.state.active : false;
+                    this.state.sprite = value;
+                    this.sprite && this.sprite[active ? 'enable' : 'disable']();
+                    break;
+                case 'interval':
+                    const number = +value;
+                    isFinite(number) && (this.interval = number);
+                    break;
+            }
+        });
+        this.on('read', () => {
+            this.sprite && this.sprite.enable();
+            this.state.skip = false;
+            this.state.text = [];
+            this.fire('text', this.compute());
+        });
+        this.on('idle', () => {
+            this.sprite && this.sprite.disable();
+        });
+    }
+    get sound() {
+        return this.sounds[this.state.sound || ''];
+    }
+    get sprite() {
+        return this.sprites[this.state.sprite || ''];
+    }
+    compute() {
+        let text = '';
+        const tails = [];
+        for (const section of this.state.text) {
+            if (section.startsWith('{') && section.endsWith('}')) {
+                switch (section[1]) {
+                    case '<':
+                        let attributes = '';
+                        const [tag, properties] = section.slice(2, -1).split('?');
+                        new URLSearchParams(properties).forEach((value, key) => (attributes += ` ${key}="${value}"`));
+                        text += `<${tag}${attributes}>`;
+                        tails.push(`</${tag}>`);
+                        break;
+                    case '>':
+                        tails.length > 0 && (text += tails.pop());
+                        break;
+                }
+            }
+            else {
+                text += section;
+            }
+        }
+        while (tails.length > 0)
+            text += tails.pop();
+        return text;
+    }
+    skip(interval, callback = () => { }) {
+        return Promise.race([
+            X.pause(interval).then(() => this.state.skip || callback()),
+            new Promise(resolve => {
+                if (this.state.skip) {
+                    resolve(0);
+                }
+                else {
+                    X.once(this, 'skip', () => {
+                        this.state.skip = true;
+                        resolve(0);
+                    });
+                }
+            })
+        ]);
+    }
+}
+//
+//    ########    #########   #########   #########   ##          #########
+//    ##    ###   ##     ##      ###         ###      ##          ##
+//    ##     ##   ##     ##      ###         ###      ##          ##
+//    #########   #########      ###         ###      ##          #######
+//    ##     ##   ##     ##      ###         ###      ##          ##
+//    ##     ##   ##     ##      ###         ###      ##          ##
+//    #########   ##     ##      ###         ###      #########   #########
+//
+///// where most engines begin and end /////////////////////////////////////////////////////////////
+/*
+class XBullet extends XEntity {
+   angle: number;
+   hitbox: Set<XBounds>;
+   speed: number;
+   state: {
+      lifetime: number;
+      modulator: (bullet: XBullet, lifetime: number) => void;
+      position: XPosition;
+      session: Promise<void> | null;
+   } = {
+      lifetime: 0,
+      modulator: () => {},
+      position: { x: 0, y: 0 },
+      session: null
+   };
+   constructor (
+      {
+         angle = 0,
+         bounds: { h = 0, w = 0, x: x1 = 0, y: y1 = 0 } = {},
+         depth = 0,
+         hitbox = [],
+         position: { x: x2 = 0, y: y2 = 0 } = {},
+         renderer = '',
+         speed = 0,
+         sprite
+      }: {
+         angle?: number;
+         bounds?: XOptional<XBounds>;
+         depth?: number;
+         hitbox?: Iterable<XOptional<XBounds>>;
+         position?: XOptional<XPosition>;
+         renderer?: string;
+         speed?: number;
+         sprite?: XSprite;
+      } = {}
+   ) {
+      super({
+         attributes: { trigger: true },
+         bounds: { h, w, x: x1, y: y1 },
+         depth,
+         metadata: { key: 'bullet' },
+         position: { x: x2, y: y2 },
+         renderer,
+         sprite
+      });
+      this.angle = angle;
+      this.hitbox = new Set([ ...hitbox ].map(({ h = 0, w = 0, x = 0, y = 0 }) => ({ h, w, x, y })));
+      this.speed = speed;
+   }
+   launch (lifetime: number, modulator: (bullet: XBullet, lifetime: number) => void) {
+      if (this.state.session) {
+         return this.state.session;
+      } else {
+         this.fire('start');
+         this.state.lifetime = Math.max(0, this.state.lifetime + lifetime);
+         this.state.modulator = modulator;
+         return (this.state.session = new Promise(async resolve => {
+            X.once(this, 'stop', () => {
+               this.state.session = null;
+               resolve();
+            });
+         }));
+      }
+   }
+   tick () {
+      if (this.state.lifetime > 0) {
+         this.state.modulator(this, this.state.lifetime);
+         const radians = (this.angle % 180) * Math.PI / 180;
+         this.state.position.x += this.speed * Math.cos(radians);
+         this.state.position.y += this.speed * Math.sin(radians);
+         this.state.lifetime--;
+         if (this.state.lifetime === 0) {
+            this.fire('stop');
+         }
+      } else if (this.state.lifetime < 0) {
+         this.state.lifetime = 0;
+         this.fire('stop');
+      }
+   }
+}
+
+class XAttack extends XHost {
+   patterns: Map<XBullet, XStrategy>;
+   state: { session: Promise<void> | null } = { session: null };
+   constructor (
+      {
+         patterns = []
+      }: {
+         patterns?: Iterable<{ bullet?: XBullet; strategy?: XOptional<XStrategy> }>;
+      } = {}
+   ) {
+      super();
+      this.patterns = new Map(
+         [
+            ...patterns
+         ].map(({ bullet = new XBullet(), strategy: { delay = 0, duration = 0, modulator = () => {} } = {} }) => {
+            return [ bullet, { delay, duration, modulator } ];
+         })
+      );
+   }
+   launch () {
+      if (this.state.session) {
+         return this.state.session;
+      } else {
+         return Promise.all(
+            [ ...this.patterns.entries() ].map(async ([ bullet, { delay, duration, modulator } ]) => {
+               await X.pause(delay);
+               await bullet.launch(duration, modulator);
+            })
+         );
+      }
+   }
+   tick () {
+      for (const bullet of this.patterns.keys()) bullet.tick();
+   }
+}
+*/
+//# sourceMappingURL=index.js.map

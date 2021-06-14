@@ -9,16 +9,16 @@
 //
 ///// needs more optimizating //////////////////////////////////////////////////////////////////////
 
-export type XBounds = { h: number; w: number; x: number; y: number };
-export type XEntityAttributes = { collide: boolean; interact: boolean; trigger: boolean };
-export type XKeyed<X> = { [k: string]: X };
-export type XListener = ((...data: any[]) => any) | { priority: number; script: (...data: any[]) => any };
-export type XOptional<X> = { [k in keyof X]?: X[k] };
-export type XPosition = { x: number; y: number };
-export type XRendererAttributes = { animate: boolean };
-export type XSpriteAttributes = { persist: boolean; hold: boolean };
+type XBounds = { h: number; w: number; x: number; y: number };
+type XEntityAttributes = { collide: boolean; interact: boolean; trigger: boolean };
+type XKeyed<X> = { [k: string]: X };
+type XListener = ((...data: any[]) => any) | { priority: number; script: (...data: any[]) => any };
+type XOptional<X> = { [k in keyof X]?: X[k] };
+type XPosition = { x: number; y: number };
+type XRendererAttributes = { animate: boolean };
+type XSpriteAttributes = { persist: boolean; hold: boolean };
 
-export const X = (() => {
+const X = (() => {
    const storage: Set<Promise<void>> = new Set();
    return {
       storage,
@@ -68,7 +68,7 @@ export const X = (() => {
    };
 })();
 
-export class XHost {
+class XHost {
    events: Map<string, Set<XListener>> = new Map();
    on (name: string, listener: XListener) {
       this.events.has(name) || this.events.set(name, new Set());
@@ -95,7 +95,7 @@ export class XHost {
    }
 }
 
-export class XEntity extends XHost {
+class XEntity extends XHost {
    attributes: XEntityAttributes;
    bounds: XBounds;
    depth: number;
@@ -152,7 +152,7 @@ export class XEntity extends XHost {
    }
 }
 
-export class XRenderer {
+class XRenderer {
    attributes: XRendererAttributes;
    canvas: HTMLCanvasElement;
    //@ts-expect-error
@@ -212,7 +212,7 @@ export class XRenderer {
    }
 }
 
-export class XSound {
+class XSound {
    audio: HTMLAudioElement;
    constructor (
       {
@@ -242,7 +242,7 @@ export class XSound {
    }
 }
 
-export class XSprite {
+class XSprite {
    attributes: XSpriteAttributes;
    default: number;
    rotation: number;
@@ -303,7 +303,7 @@ export class XSprite {
    }
 }
 
-export class XRoom {
+class XRoom {
    bounds: XBounds;
    collidables: Set<XEntity> = new Set();
    entities: Set<XEntity> = new Set();
@@ -343,7 +343,7 @@ export class XRoom {
    }
 }
 
-export class XTexture {
+class XTexture {
    bounds: XBounds;
    image: HTMLImageElement;
    constructor (
@@ -386,14 +386,14 @@ export class XTexture {
 //
 ///// imagine using unitale ////////////////////////////////////////////////////////////////////////
 
-export type XItemStyle = {
+type XItemStyle = {
    [k in keyof CSSStyleDeclaration]: CSSStyleDeclaration[k] | ((element?: HTMLElement) => CSSStyleDeclaration[k])
 };
 
-export type XModulator = (entity: XEntity, lifetime: number) => void;
-export type XNavigatorType = 'horizontal' | 'none' | 'vertical';
+type XModulator = (entity: XEntity, lifetime: number) => void;
+type XNavigatorType = 'horizontal' | 'none' | 'vertical';
 
-export class XItem {
+class XItem {
    children: XItem[] | void;
    element: Element | string | void | (() => Element | string | void);
    priority: number;
@@ -477,7 +477,7 @@ export class XItem {
    }
 }
 
-export class XKey extends XHost {
+class XKey extends XHost {
    keys: Set<string>;
    states: Set<string> = new Set();
    get active () {
@@ -504,7 +504,7 @@ export class XKey extends XHost {
    }
 }
 
-export class XNavigator {
+class XNavigator {
    from: ((atlas: XAtlas, navigator: string | null) => void);
    item: XItem;
    next:
@@ -551,7 +551,7 @@ export class XNavigator {
    }
 }
 
-export class XAtlas {
+class XAtlas {
    elements: XKeyed<XItem>;
    menu: string;
    navigators: XKeyed<XNavigator>;
@@ -663,7 +663,7 @@ export class XAtlas {
    }
 }
 
-export class XOverworld extends XHost {
+class XOverworld extends XHost {
    layers: XKeyed<XRenderer>;
    player: XEntity | null = null;
    room: XRoom | null = null;
@@ -763,7 +763,7 @@ export class XOverworld extends XHost {
    }
 }
 
-export class XReader extends XHost {
+class XReader extends XHost {
    lines: string[] = [];
    mode = 'none';
    char: (char: string) => Promise<void>;
@@ -846,7 +846,7 @@ export class XReader extends XHost {
    }
 }
 
-export class XDialogue extends XReader {
+class XDialogue extends XReader {
    interval: number;
    sprites: XKeyed<XSprite>;
    state = { sprite: '', text: String.prototype.split(''), skip: false, sound: '' };
