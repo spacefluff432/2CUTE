@@ -1,4 +1,4 @@
-import { X, XEntity, XSprite, XTexture, XRoom, XAtlas, XOverworld, XKey, XSound, XDialogue, XNavigator, XItem, XRenderer } from '../../../dist/index.js';
+"use strict";
 // useful shit
 const helper = {
     wallEntity(bounds) {

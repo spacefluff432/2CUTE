@@ -1,26 +1,5 @@
 declare const SAVE: typeof GAME.default;
 
-import {
-   X,
-   XBounds,
-   XEntity,
-   XSprite,
-   XTexture,
-   XRoom,
-   XPosition,
-   XAtlas,
-   XOverworld,
-   XOptional,
-   XItemStyle,
-   XKey,
-   XSound,
-   XDialogue,
-   XNavigator,
-   XItem,
-   XKeyed,
-   XRenderer
-} from '../../../dist/index.js';
-
 // useful shit
 const helper = {
    wallEntity (bounds: XBounds) {

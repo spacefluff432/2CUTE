@@ -1,5 +1,6 @@
 {
    "compilerOptions": {
+      "declaration": true,
       "lib": [ "ESNext", "DOM" ],
       "outDir": "./../js",
       "rootDir": "./",
