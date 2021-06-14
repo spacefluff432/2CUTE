@@ -1,6 +1,11 @@
 @font-face {
-   font-family: 'Determination';
-   src: url('../font/determination.woff');
+   font-family: 'Determination Mono';
+   src: url('../font/determination-mono.woff');
+}
+
+@font-face {
+   font-family: 'Determination Sans';
+   src: url('../font/determination-sans.ttf');
 }
 
 @font-face {
