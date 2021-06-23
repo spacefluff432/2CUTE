@@ -632,7 +632,8 @@ class XSprite {
                 context.globalCompositeOperation = style.compositeOperation;
                 Object.assign(context, this.style);
             }
-            context.drawImage(texture.image, texture.bounds.x, texture.bounds.y, source.w, source.h, destination.x, destination.y, destination.w, destination.h);
+            context.drawImage(texture.image, texture.bounds.x, texture.image.height - source.h - texture.bounds.y, // cartesian alignment
+            source.w, source.h, destination.x, destination.y, destination.w, destination.h);
             context.restore();
         }
     }

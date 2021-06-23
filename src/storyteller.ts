@@ -947,7 +947,7 @@ class XSprite {
          context.drawImage(
             texture.image,
             texture.bounds.x,
-            texture.bounds.y,
+            texture.image.height - source.h - texture.bounds.y, // cartesian alignment
             source.w,
             source.h,
             destination.x,
