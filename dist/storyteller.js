@@ -18,13 +18,32 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-const X = (() => {
+// CONSTANTS
+const XAssets = (() => {
     const storage = new Set();
     return {
-        storage,
         add(promise) {
-            X.storage.add(promise);
+            storage.add(promise);
         },
+        ready(script) {
+            Promise.all(storage).then(script).catch(reason => {
+                console.error('XAssets Load Error!');
+                console.error(reason);
+                script();
+            });
+        }
+    };
+})();
+const XMath = (() => {
+    const value = (object) => {
+        if (object instanceof Array) {
+            return object[XMath.rand.range(0, object.length - 1)];
+        }
+        else {
+            return XMath.rand.value(Object.values(object));
+        }
+    };
+    return {
         bounds(entity) {
             return {
                 x: entity.position.x + entity.bounds.x + Math.min(entity.bounds.w, 0),
@@ -34,39 +53,221 @@ const X = (() => {
             };
         },
         center(entity) {
-            const bounds = X.bounds(entity);
+            const bounds = XMath.bounds(entity);
             return {
                 x: entity.position.x + bounds.w / 2,
                 y: entity.position.y + bounds.h / 2
             };
         },
+        clamp(base, min = -Infinity, max = Infinity) {
+            return Math.min(Math.max(base, min), max);
+        },
+        direction({ x = 0, y = 0 }, ...entities) {
+            return entities.map(({ position }) => 180 / Math.PI * Math.atan2(position.y - y, position.x - x));
+        },
+        distance({ x = 0, y = 0 }, ...entities) {
+            return entities.map(({ position }) => Math.sqrt(Math.pow(x - position.x, 2) + Math.pow(y - position.y, 2)));
+        },
+        endpoint({ x = 0, y = 0 }, direction, distance) {
+            const radians = (direction % 360) * Math.PI / 180;
+            return {
+                x: x + distance * Math.sin(Math.PI - radians),
+                y: y + distance * Math.cos(Math.PI - radians)
+            };
+        },
         intersection({ x = 0, y = 0, h = 0, w = 0 }, ...entities) {
             const list = new Set();
             for (const entity of entities) {
-                const bounds = X.bounds(entity);
+                const bounds = XMath.bounds(entity);
                 if (x < bounds.x + bounds.w && x + w > bounds.x && y < bounds.y + bounds.h && y + h > bounds.y) {
                     list.add(entity);
                 }
             }
             return list;
         },
-        once(host, name, listener) {
-            const script = (...data) => {
-                host.off(name, script);
-                return (typeof listener === 'function' ? listener : listener.script)(...data);
-            };
-            host.on(name, script);
-        },
-        pause(time) {
-            return new Promise(resolve => setTimeout(() => resolve(), time));
-        },
-        ready(script) {
-            Promise.all(X.storage).then(script).catch(() => {
-                script();
-            });
+        rand: {
+            value,
+            range(min, max) {
+                return Math.floor(Math.random() * (max - min + 1)) + min;
+            },
+            threshold(max) {
+                return Math.random() < max;
+            }
         }
     };
 })();
+const XTools = (() => {
+    return {
+        pause(time) {
+            return new Promise(resolve => setTimeout(() => resolve(), time));
+        }
+    };
+})();
+// PRIMARY CLASSES
+class XAtlas {
+    constructor({ menu = null, navigators = {} } = {}) {
+        this.state = { navigator: null };
+        this.menu = menu;
+        this.navigators = navigators;
+    }
+    get navigator() {
+        return this.state.navigator === null ? null : this.navigators[this.state.navigator];
+    }
+    attach(overworld, ...navigators) {
+        for (const navigator of navigators) {
+            if (navigator in this.navigators) {
+                this.navigators[navigator].attach(overworld);
+            }
+        }
+    }
+    clear(overworld) {
+        this.detach(overworld, ...Object.keys(this.navigators));
+    }
+    detach(overworld, ...navigators) {
+        for (const navigator of navigators) {
+            if (navigator in this.navigators) {
+                this.navigators[navigator].detach(overworld);
+            }
+        }
+    }
+    move({ x = 0, y = 0 } = {}) {
+        const nav = this.navigator;
+        if (nav) {
+            const origin = nav.selection;
+            const row = typeof nav.grid === 'function' ? nav.grid(nav, this) : nav.grid;
+            const horizontal = typeof nav.horizontal === 'function' ? nav.horizontal(nav, this) : nav.horizontal;
+            nav.position.x = XMath.clamp(nav.position.x, 0, row.length - 1);
+            nav.position.x += horizontal ? y : x;
+            if (row.length - 1 < nav.position.x) {
+                nav.position.x = 0;
+            }
+            else if (nav.position.x < 0) {
+                nav.position.x = row.length - 1;
+            }
+            const column = row[nav.position.x] || [];
+            nav.position.y = XMath.clamp(nav.position.y, 0, column.length - 1);
+            nav.position.y += horizontal ? x : y;
+            if (column.length - 1 < nav.position.y) {
+                nav.position.y = 0;
+            }
+            else if (nav.position.y < 0) {
+                nav.position.y = column.length - 1;
+            }
+            origin === nav.selection || nav.move(nav, this);
+        }
+    }
+    navigate(action) {
+        const navigator = this.navigator;
+        switch (action) {
+            case 'menu':
+                navigator || this.switch(this.menu);
+                break;
+            case 'next':
+            case 'prev':
+                if (navigator) {
+                    const provider = navigator[action];
+                    this.switch(typeof provider === 'function' ? provider(navigator, this) : provider);
+                }
+                else {
+                    this.switch(null);
+                }
+                break;
+        }
+    }
+    switch(destination) {
+        const navigator = this.navigator;
+        if (typeof destination === 'string' && destination in this.navigators) {
+            navigator && navigator.to(navigator, this, destination, this.navigators[destination]);
+            this.navigators[destination].from(this.navigators[destination], this, this.state.navigator, navigator);
+            this.state.navigator = destination;
+        }
+        else if (destination === null) {
+            navigator && navigator.to(navigator, this, null, null);
+            this.state.navigator = null;
+        }
+    }
+    tick() {
+        const navigator = this.navigator;
+        if (navigator) {
+            navigator.tick(navigator, this);
+        }
+    }
+}
+class XAudio {
+    constructor() {
+        this.context = new AudioContext();
+        this.state = { active: false };
+        this.gain = this.context.createGain();
+        this.gain.connect(this.context.destination);
+        this.node = this.context.createBufferSource();
+        this.node.connect(this.gain);
+    }
+    get rate() {
+        return this.node.playbackRate;
+    }
+    start() {
+        this.stop();
+        this.node.start();
+        this.state.active = true;
+    }
+    stop() {
+        if (this.state.active) {
+            const rate = this.rate;
+            this.node.stop();
+            this.node.disconnect();
+            this.node = Object.assign(this.context.createBufferSource(), { buffer: this.node.buffer });
+            this.node.playbackRate.value = rate.value;
+            this.node.connect(this.gain);
+            this.state.active = false;
+        }
+    }
+}
+class XCollection {
+    constructor({ contents = [], style = {} } = {}) {
+        this.contents = new Set(contents);
+        this.style = style;
+    }
+    draw(context, position, entity, style) {
+        for (const content of this.contents) {
+            content.draw(context, position, entity, Object.assign({}, style, this.style));
+        }
+    }
+}
+class XEntity {
+    constructor({ bounds: { h = 0, w = 0, x: x1 = 0, y: y1 = 0 } = {}, content, depth = 0, direction = 0, metadata = {}, parallax: { x: x2 = 0, y: y2 = 0 } = {}, position: { x: x3 = 0, y: y3 = 0 } = {}, renderer = '', rotation = 0, scale: { x: x4 = 1, y: y4 = 1 } = {}, speed = 0, style: { alpha = 1, compositeOperation = 'source-over', fillStyle = '#000000ff', font = '10px monospace', lineCap = 'butt', lineDashOffset = 0, lineJoin = 'miter', lineWidth = 1, miterLimit = 10, shadowBlur = 0, shadowColor = '#00000000', shadowOffsetX = 0, shadowOffsetY = 0, strokeStyle = '#ffffffff', textAlign = 'start', textBaseline = 'alphabetic' } = {}, tick = () => { } } = {}) {
+        this.state = { lifetime: 0 };
+        this.bounds = { h, w, x: x1, y: y1 };
+        this.content = content;
+        this.depth = depth;
+        this.direction = direction;
+        this.metadata = metadata;
+        this.parallax = { x: x2, y: y2 };
+        this.position = { x: x3, y: y3 };
+        this.renderer = renderer;
+        this.rotation = rotation;
+        this.scale = { x: x4, y: y4 };
+        this.speed = speed;
+        this.style = {
+            alpha,
+            compositeOperation,
+            fillStyle,
+            font,
+            lineCap,
+            lineDashOffset,
+            lineJoin,
+            lineWidth,
+            miterLimit,
+            shadowBlur,
+            shadowColor,
+            shadowOffsetX,
+            shadowOffsetY,
+            strokeStyle,
+            textAlign,
+            textBaseline
+        };
+        this.tick = tick;
+    }
+}
 class XHost {
     constructor() {
         this.events = new Map();
@@ -74,9 +275,18 @@ class XHost {
     on(name, listener) {
         this.events.has(name) || this.events.set(name, new Set());
         this.events.get(name).add(listener);
+        return this;
+    }
+    once(name, listener) {
+        const singleton = (...data) => {
+            this.off(name, singleton);
+            return (typeof listener === 'function' ? listener : listener.script)(...data);
+        };
+        return this.on(name, singleton);
     }
     off(name, listener) {
         this.events.has(name) && this.events.get(name).delete(listener);
+        return this;
     }
     fire(name, ...data) {
         if (this.events.has(name)) {
@@ -93,177 +303,12 @@ class XHost {
             return [];
         }
     }
-}
-class XEntity extends XHost {
-    constructor({ attributes: { collide = false, interact = false, trigger = false } = {
-        collide: false,
-        interact: false,
-        trigger: false
-    }, bounds: { h = 0, w = 0, x: x1 = 0, y: y1 = 0 } = {}, depth = 0, direction = 0, metadata = {}, position: { x: x2 = 0, y: y2 = 0 } = {}, renderer = '', speed = 0, sprite } = {}) {
-        super();
-        this.state = { lifetime: 0 };
-        this.attributes = { collide, interact, trigger };
-        this.bounds = { h, w, x: x1, y: y1 };
-        this.depth = depth;
-        this.direction = direction;
-        this.metadata = metadata;
-        this.position = { x: x2, y: y2 };
-        this.speed = speed;
-        this.renderer = renderer;
-        this.sprite = sprite;
-    }
-    tick(modulator) {
-        modulator && modulator(this, this.state.lifetime++);
-        const radians = (this.direction % 360) * Math.PI / 180;
-        this.position.x += this.speed * Math.cos(radians);
-        this.position.y += this.speed * Math.sin(radians);
+    when(name) {
+        return new Promise(resolve => this.once(name, () => resolve()));
     }
 }
-class XRenderer {
-    constructor({ attributes: { animate = false } = {}, canvas = document.createElement('canvas') } = {}) {
-        this.attributes = { animate };
-        this.canvas = canvas;
-        this.reload();
-    }
-    draw(size, position, scale, ...entities) {
-        this.context.setTransform(scale, 0, 0, scale, (position.x * -1 + size.x / 2) * scale, (position.y + size.y / 2) * scale);
-        for (const entity of entities.sort((entity1, entity2) => entity1.depth - entity2.depth)) {
-            const sprite = entity.sprite;
-            if (sprite) {
-                const texture = sprite.compute();
-                if (texture) {
-                    const width = isFinite(texture.bounds.w) ? texture.bounds.w : texture.image.width;
-                    const height = isFinite(texture.bounds.h) ? texture.bounds.h : texture.image.height;
-                    // TODO: HANDLE SPRITE ROTATION
-                    this.context.drawImage(texture.image, texture.bounds.x, texture.bounds.y, width, height, entity.position.x, entity.position.y * -1 - height * sprite.scale, width * sprite.scale, height * sprite.scale);
-                }
-            }
-        }
-    }
-    erase() {
-        this.context.resetTransform();
-        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    }
-    reload() {
-        this.context = this.canvas.getContext('2d');
-        this.context.imageSmoothingEnabled = false;
-    }
-}
-class XSound {
-    constructor({ source = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=' } = {}) {
-        this.audio = XSound.audio(source);
-    }
-    static audio(source) {
-        const audio = XSound.cache.get(source) || new Audio(source);
-        if (!XSound.cache.has(source)) {
-            XSound.cache.set(source, audio);
-            X.add(new Promise((resolve, reject) => {
-                audio.addEventListener('canplay', () => {
-                    resolve();
-                });
-                audio.addEventListener('error', reason => {
-                    console.error('ASSET LOAD FAILED!', audio.src, reason);
-                    reject();
-                });
-            }));
-        }
-        return audio;
-    }
-}
-XSound.cache = new Map();
-class XSprite {
-    constructor({ attributes: { persist = false, hold = false } = {
-        persist: false,
-        hold: false
-    }, default: $default = 0, rotation = 0, scale = 1, interval = 1, textures = [] } = {}) {
-        this.state = { active: false, index: 0, step: 0 };
-        this.attributes = { persist, hold };
-        this.default = $default;
-        this.rotation = rotation;
-        this.scale = scale;
-        this.interval = interval;
-        this.textures = [...textures];
-    }
-    compute() {
-        if (this.state.active || this.attributes.persist) {
-            const texture = this.textures[this.state.index];
-            if (this.state.active && ++this.state.step >= this.interval) {
-                this.state.step = 0;
-                if (++this.state.index >= this.textures.length) {
-                    this.state.index = 0;
-                }
-            }
-            return texture;
-        }
-    }
-    disable() {
-        if (this.state.active) {
-            this.state.active = false;
-            this.attributes.hold || ((this.state.step = 0), (this.state.index = this.default));
-        }
-    }
-    enable() {
-        if (!this.state.active) {
-            this.state.active = true;
-            this.attributes.hold || ((this.state.step = 0), (this.state.index = this.default));
-        }
-    }
-}
-class XRoom {
-    constructor({ bounds: { h = 0, w = 0, x = 0, y = 0 } = {}, entities = [] } = {}) {
-        this.collidables = new Set();
-        this.entities = new Set();
-        this.interactables = new Set();
-        this.layers = new Map();
-        this.triggerables = new Set();
-        this.bounds = { h, w, x, y };
-        for (const entity of entities)
-            this.add(entity);
-    }
-    add(...entities) {
-        for (const entity of entities) {
-            this.entities.add(entity);
-            entity.attributes.collide && this.collidables.add(entity);
-            entity.attributes.interact && this.interactables.add(entity);
-            entity.attributes.trigger && this.triggerables.add(entity);
-            this.layers.has(entity.renderer) || this.layers.set(entity.renderer, new Set());
-            this.layers.get(entity.renderer).add(entity);
-        }
-    }
-    remove(...entities) {
-        for (const entity of entities) {
-            this.entities.delete(entity);
-            entity.attributes.collide && this.collidables.delete(entity);
-            entity.attributes.interact && this.interactables.delete(entity);
-            entity.attributes.trigger && this.triggerables.delete(entity);
-            this.layers.has(entity.renderer) && this.layers.get(entity.renderer).delete(entity);
-        }
-    }
-}
-class XTexture {
-    constructor({ bounds: { h = Infinity, w = Infinity, x = 0, y = 0 } = {}, source = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==' } = {}) {
-        this.bounds = { h, w, x, y };
-        this.image = XTexture.image(source);
-    }
-    static image(source) {
-        const image = XTexture.cache.get(source) || Object.assign(new Image(), { src: source });
-        if (!XTexture.cache.has(source)) {
-            XTexture.cache.set(source, image);
-            X.add(new Promise((resolve, reject) => {
-                image.addEventListener('load', () => {
-                    resolve();
-                });
-                image.addEventListener('error', () => {
-                    reject();
-                });
-            }));
-        }
-        return image;
-    }
-}
-XTexture.cache = new Map();
 class XItem {
-    constructor({ children, element = document.createElement('div'), priority = 0, renderer, style = {} } = {}) {
+    constructor({ children, element = document.createElement('div'), priority = 0, style = {} } = {}) {
         this.state = {
             element: void 0,
             fragment: '',
@@ -272,7 +317,6 @@ class XItem {
         this.children = children && [...children].sort((child1, child2) => child1.priority - child2.priority);
         this.element = element;
         this.priority = priority;
-        this.renderer = renderer;
         this.style = style;
     }
     compute(scale = 1) {
@@ -329,8 +373,340 @@ class XItem {
         }
     }
 }
+class XNavigator {
+    constructor({ entities = [], items = [], from = () => { }, grid = [], horizontal = false, next = () => { }, move = () => { }, position: { x = 0, y = 0 } = {}, prev = () => { }, tick = () => { }, to = () => { } } = {}) {
+        this.entities = new Set(entities);
+        this.from = from;
+        this.grid = grid;
+        this.items = new Set(items);
+        this.move = move;
+        this.next = next;
+        this.horizontal = horizontal;
+        this.position = { x, y };
+        this.prev = prev;
+        this.tick = tick;
+        this.to = to;
+    }
+    get selection() {
+        return ((typeof this.grid === 'function' ? this.grid(this) : this.grid)[this.position.x] || [])[this.position.y];
+    }
+    attach(overworld) {
+        const children = overworld.wrapper.children;
+        for (const entity of this.entities)
+            overworld.entities.add(entity);
+        for (const item of this.items) {
+            if (!overworld.items.has(item)) {
+                const container = new XItem({
+                    children: [item],
+                    style: {
+                        gridArea: 'center',
+                        height: () => `${overworld.size.y}px`,
+                        margin: 'auto',
+                        position: 'relative',
+                        width: () => `${overworld.size.x}px`
+                    }
+                });
+                overworld.items.set(item, container);
+                children.push(container);
+            }
+        }
+    }
+    detach(overworld) {
+        const children = overworld.wrapper.children;
+        for (const entity of this.entities)
+            overworld.entities.delete(entity);
+        for (const item of this.items) {
+            if (overworld.items.has(item)) {
+                const container = overworld.items.get(item);
+                overworld.items.delete(item);
+                children.splice(children.indexOf(container), 1);
+            }
+        }
+    }
+}
+class XPattern {
+    constructor({ bounds: { h = 0, w = 0, x: x1 = 0, y: y1 = 0 } = {}, parallax: { x: x2 = 0, y: y2 = 0 } = {}, position: { x: x3 = 0, y: y3 = 0 } = {}, rotation = 0, scale: { x: x4 = 1, y: y4 = 1 } = {}, style = {}, type = 'rectangle' } = {}) {
+        this.bounds = { h, w, x: x1, y: y1 };
+        this.parallax = { x: x2, y: y2 };
+        this.position = { x: x3, y: y3 };
+        this.rotation = rotation;
+        this.scale = { x: x4, y: y4 };
+        this.style = style;
+        this.type = type;
+    }
+    draw(context, position, entity, style) {
+        const source = this.bounds;
+        const height = source.h * entity.scale.y * this.scale.y;
+        const destination = {
+            h: height,
+            w: source.w * entity.scale.x * this.scale.x,
+            x: entity.position.x + this.position.x + source.x + position.x * (entity.parallax.x + this.parallax.x),
+            y: (entity.position.y + this.position.y + source.y) * -1 -
+                height +
+                position.y * (entity.parallax.y + this.parallax.y) // cartesian alignment
+        };
+        const center = {
+            x: destination.x + destination.w / 2,
+            y: destination.y + destination.h / 2
+        };
+        context.save();
+        {
+            context.translate(center.x, center.y);
+            context.rotate(Math.PI / 180 * (entity.rotation + this.rotation));
+            context.translate(center.x * -1, center.y * -1);
+            context.globalAlpha = style.alpha;
+            context.globalCompositeOperation = style.compositeOperation;
+            Object.assign(context, this.style);
+        }
+        switch (this.type) {
+            // TODO: add support for more pattern types!
+            case 'rectangle':
+                context.fillRect(destination.x, destination.y, destination.w, destination.h);
+                context.strokeRect(destination.x, destination.y, destination.w, destination.h);
+                break;
+        }
+        context.restore();
+    }
+}
+class XRenderer {
+    constructor({ attributes: { animated = false, smooth = false, static: $static = false } = {}, canvas = document.createElement('canvas') } = {}) {
+        this.attributes = { animated, smooth, static: $static };
+        this.canvas = canvas;
+        this.reload();
+    }
+    draw(size, position, scale, ...entities) {
+        const context = this.context;
+        context.setTransform(scale, 0, 0, scale, this.attributes.static ? 0 : (position.x * -1 + size.x / 2) * scale, this.attributes.static ? size.y * scale : (position.y + size.y / 2) * scale // cartesian alignment
+        );
+        for (const entity of entities.sort((entity1, entity2) => entity1.depth - entity2.depth)) {
+            const content = entity.content;
+            if (content) {
+                content.draw(context, position, entity, Object.assign({}, entity.style, content.style));
+            }
+        }
+    }
+    erase() {
+        this.context.resetTransform();
+        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+    reload() {
+        this.context = this.canvas.getContext('2d');
+        this.context.imageSmoothingEnabled = this.attributes.smooth;
+    }
+}
+class XRoom {
+    constructor({ bounds: { h = 0, w = 0, x = 0, y = 0 } = {}, entities = [] } = {}) {
+        this.entities = new Set();
+        this.layers = new Map();
+        this.bounds = { h, w, x, y };
+        for (const entity of entities)
+            this.add(entity);
+    }
+    add(...entities) {
+        for (const entity of entities) {
+            this.entities.add(entity);
+            this.layers.has(entity.renderer) || this.layers.set(entity.renderer, new Set());
+            this.layers.get(entity.renderer).add(entity);
+        }
+    }
+    remove(...entities) {
+        for (const entity of entities) {
+            this.layers.has(entity.renderer) && this.layers.get(entity.renderer).delete(entity);
+            this.entities.delete(entity);
+        }
+    }
+}
+class XSheet {
+    constructor({ grid: { x = 0, y = 0 } = {}, texture = new XTexture() } = {}) {
+        this.grid = { x, y };
+        this.texture = texture;
+    }
+    tile(x, y) {
+        return new XTexture({
+            bounds: { h: this.grid.y, w: this.grid.x, x: x * this.grid.x, y: y * this.grid.y },
+            source: this.texture.image.src
+        });
+    }
+}
+class XSound {
+    constructor({ rate = 1, source = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=', volume = 1 } = {}) {
+        this.audio = XSound.audio(source);
+        this.rate = rate;
+        this.volume = volume;
+    }
+    get rate() {
+        return this.audio.rate.value;
+    }
+    set rate(value) {
+        this.audio.rate.setValueAtTime(value, this.audio.context.currentTime);
+    }
+    get volume() {
+        return this.audio.gain.gain.value;
+    }
+    set volume(value) {
+        this.audio.gain.gain.setValueAtTime(value, this.audio.context.currentTime);
+    }
+    play() {
+        this.audio.start();
+    }
+    static audio(source) {
+        const audio = XSound.cache.get(source) || new XAudio();
+        if (!XSound.cache.has(source)) {
+            XSound.cache.set(source, audio);
+            XAssets.add(new Promise(resolve => {
+                const request = Object.assign(new XMLHttpRequest(), { responseType: 'arraybuffer' });
+                request.addEventListener('load', () => {
+                    audio.context.decodeAudioData(request.response, buffer => {
+                        audio.node.buffer = buffer;
+                        resolve();
+                    });
+                });
+                request.open('GET', source);
+                request.send();
+            }));
+        }
+        return audio;
+    }
+}
+XSound.cache = new Map();
+class XSprite {
+    constructor({ attributes: { persist = true, hold = false } = {}, default: $default = 0, interval = 1, parallax: { x: x1 = 0, y: y1 = 0 } = {}, position: { x: x2 = 0, y: y2 = 0 } = {}, rotation = 0, scale: { x: x3 = 1, y: y3 = 1 } = {}, style = {}, textures = [] } = {}) {
+        this.state = { active: false, index: 0, step: 0 };
+        this.attributes = { persist, hold };
+        this.interval = interval;
+        this.default = $default;
+        this.parallax = { x: x1, y: y1 };
+        this.position = { x: x2, y: y2 };
+        this.rotation = rotation;
+        this.scale = { x: x3, y: y3 };
+        this.style = style;
+        this.textures = [...textures];
+        this.state.index = this.default;
+    }
+    compute() {
+        if (this.state.active || this.attributes.persist) {
+            const texture = this.textures[this.state.index];
+            if (this.state.active && ++this.state.step >= this.interval) {
+                this.state.step = 0;
+                if (++this.state.index >= this.textures.length) {
+                    this.state.index = 0;
+                }
+            }
+            return texture;
+        }
+    }
+    disable() {
+        if (this.state.active) {
+            this.state.active = false;
+            this.attributes.hold || ((this.state.step = 0), (this.state.index = this.default));
+        }
+    }
+    draw(context, position, entity, style) {
+        const texture = this.compute();
+        if (texture) {
+            const source = {
+                h: texture.bounds.h === Infinity
+                    ? texture.image.height - texture.bounds.y
+                    : texture.bounds.h === -Infinity ? -texture.bounds.y : texture.bounds.h,
+                w: texture.bounds.w === Infinity
+                    ? texture.image.width - texture.bounds.x
+                    : texture.bounds.w === -Infinity ? -texture.bounds.x : texture.bounds.w
+            };
+            const height = source.h * entity.scale.y * this.scale.y;
+            const destination = {
+                h: height,
+                w: source.w * entity.scale.x * this.scale.x,
+                x: entity.position.x + this.position.x + position.x * (entity.parallax.x + this.parallax.x),
+                y: (entity.position.y + this.position.y) * -1 - height + position.y * (entity.parallax.y + this.parallax.y) // cartesian alignment
+            };
+            const center = {
+                x: destination.x + destination.w / 2,
+                y: destination.y + destination.h / 2
+            };
+            context.save();
+            {
+                context.translate(center.x, center.y);
+                context.rotate(Math.PI / 180 * (entity.rotation + this.rotation));
+                context.translate(center.x * -1, center.y * -1);
+                context.globalAlpha = style.alpha;
+                context.globalCompositeOperation = style.compositeOperation;
+                Object.assign(context, this.style);
+            }
+            context.drawImage(texture.image, texture.bounds.x, texture.bounds.y, source.w, source.h, destination.x, destination.y, destination.w, destination.h);
+            context.restore();
+        }
+    }
+    enable() {
+        if (!this.state.active) {
+            this.state.active = true;
+            this.attributes.hold || ((this.state.step = 0), (this.state.index = this.default));
+        }
+    }
+}
+class XText {
+    constructor({ position: { x = 0, y = 0 } = {}, rotation = 0, spacing = 0, style = {}, text = '' } = {}) {
+        this.position = { x, y };
+        this.rotation = rotation;
+        this.spacing = spacing;
+        this.style = style;
+        this.text = text;
+    }
+    draw(context, position, entity, style) {
+        const text = this.text;
+        if (text.length > 0) {
+            const destination = {
+                x: entity.position.x + this.position.x,
+                y: (entity.position.y + this.position.y) * -1 // cartesian alignment
+            };
+            context.save();
+            {
+                context.translate(destination.x, destination.y);
+                context.rotate(Math.PI / 180 * (entity.rotation + this.rotation));
+                context.translate(destination.x * -1, destination.y * -1);
+                context.globalAlpha = style.alpha;
+                context.globalCompositeOperation = style.compositeOperation;
+                Object.assign(context, this.style);
+            }
+            let left = 0;
+            for (const character of text.split('')) {
+                context.fillText(character, destination.x + left, destination.y);
+                context.strokeText(character, destination.x + left, destination.y);
+                left += this.spacing + context.measureText(character).width;
+            }
+            context.restore();
+        }
+    }
+}
+class XTexture {
+    constructor({ bounds: { h = Infinity, w = Infinity, x = 0, y = 0 } = {}, source = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==' } = {}) {
+        this.bounds = { h, w, x, y };
+        this.image = XTexture.image(source);
+    }
+    static image(source) {
+        const image = XTexture.cache.get(source) || Object.assign(new Image(), { src: source });
+        if (!XTexture.cache.has(source)) {
+            XTexture.cache.set(source, image);
+            XAssets.add(new Promise(resolve => {
+                image.addEventListener('load', () => {
+                    resolve();
+                });
+            }));
+        }
+        return image;
+    }
+}
+XTexture.cache = new Map();
+class XVoice {
+    constructor({ sounds = [] } = {}) {
+        this.sounds = [...sounds];
+    }
+    play() {
+        XMath.rand.value(this.sounds).play();
+    }
+}
+// SECONDARY CLASSES
 class XKey extends XHost {
-    constructor(...keys) {
+    constructor({ keys = [] } = {}) {
         super();
         this.states = new Set();
         this.keys = new Set(keys);
@@ -354,126 +730,17 @@ class XKey extends XHost {
         return this.states.size > 0;
     }
 }
-class XNavigator {
-    constructor({ from = () => { }, item = new XItem(), next, prev, size = 0, to = () => { }, type = 'none' } = {}) {
-        this.from = from;
-        this.item = item;
-        this.next = next;
-        this.prev = prev;
-        this.size = size;
-        this.to = to;
-        this.type = type;
-    }
-}
-class XAtlas {
-    constructor({ menu = '', navigators = {}, size: { x = 0, y = 0 } = {} } = {}) {
-        this.state = { index: 0, navigator: null };
-        this.elements = Object.fromEntries(Object.entries(navigators).map(([key, { item }]) => {
-            return [
-                key,
-                new XItem({
-                    element: `<div class="storyteller navigator" id="st-nv-${encodeURIComponent(key)}"></div>`,
-                    children: [item],
-                    style: {
-                        gridArea: 'c',
-                        height: () => `${this.size.y}px`,
-                        margin: 'auto',
-                        position: 'relative',
-                        width: () => `${this.size.x}px`
-                    }
-                })
-            ];
-        }));
-        this.menu = menu;
-        this.navigators = navigators;
-        this.size = { x, y };
-    }
-    get navigator() {
-        return this.state.navigator === null ? void 0 : this.navigators[this.state.navigator];
-    }
-    attach(navigator, overworld) {
-        if (navigator in this.elements) {
-            const element = this.elements[navigator];
-            const children = overworld.wrapper.children;
-            if (!children.includes(element)) {
-                overworld.wrapper.children.push(this.elements[navigator]);
-            }
-        }
-    }
-    detach(navigator, overworld) {
-        if (navigator in this.elements) {
-            const element = this.elements[navigator];
-            const children = overworld.wrapper.children;
-            if (children.includes(element)) {
-                children.splice(children.indexOf(element), 1);
-            }
-        }
-    }
-    navigate(action, type = '', shift = 0) {
-        const navigator = this.navigator;
-        switch (action) {
-            case 'menu':
-                this.switch(navigator ? null : this.menu);
-                break;
-            case 'move':
-                if (navigator && navigator.type === type) {
-                    if (shift > 0) {
-                        const size = typeof navigator.size === 'function' ? navigator.size(this) : navigator.size;
-                        if (size - 1 <= this.state.index) {
-                            this.state.index = 0;
-                        }
-                        else {
-                            this.state.index++;
-                        }
-                    }
-                    else if (shift < 0) {
-                        if (this.state.index <= 0) {
-                            const size = typeof navigator.size === 'function' ? navigator.size(this) : navigator.size;
-                            this.state.index = size - 1;
-                        }
-                        else {
-                            this.state.index--;
-                        }
-                    }
-                }
-                break;
-            case 'next':
-            case 'prev':
-                if (navigator) {
-                    const provider = navigator[action];
-                    let result = typeof provider === 'function' ? provider(this) : provider;
-                    this.switch(result && typeof result === 'object' ? result[this.state.index] : result);
-                }
-                else {
-                    this.switch(null);
-                }
-                break;
-        }
-    }
-    switch(destination) {
-        const navigator = this.navigator;
-        if (typeof destination === 'string' && destination in this.navigators) {
-            navigator && navigator.to(this, destination);
-            this.state.index = 0;
-            this.navigators[destination].from(this, this.state.navigator);
-            this.state.navigator = destination;
-        }
-        else if (destination === null) {
-            navigator && navigator.to(this, null);
-            this.state.index = -1;
-            this.state.navigator = null;
-        }
-    }
-}
 class XOverworld extends XHost {
-    constructor({ layers = {}, size: { x = 0, y = 0 } = {}, wrapper } = {}) {
+    constructor({ entities = [], layers = {}, size: { x = 0, y = 0 } = {}, wrapper } = {}) {
         super();
+        this.items = new Map();
         this.player = null;
         this.room = null;
         this.state = {
             bounds: { w: 0, h: 0, x: 0, y: 0 },
             scale: 1
         };
+        this.entities = new Set(entities);
         this.layers = layers;
         this.size = { x, y };
         this.wrapper = new XItem({
@@ -481,14 +748,15 @@ class XOverworld extends XHost {
             style: {
                 backgroundColor: '#000000ff',
                 display: 'grid',
-                gridTemplateAreas: "'a a a' 'b c d' 'e e e'",
+                gridTemplateAreas: "'top top top' 'left center right' 'bottom bottom bottom'",
                 height: '100%',
-                margin: '0',
-                position: 'relative',
+                left: '0',
+                position: 'absolute',
+                top: '0',
                 width: '100%'
             },
             children: Object.values(this.layers).map(layer => {
-                return new XItem({ element: layer.canvas, style: { gridArea: 'c', margin: 'auto' } });
+                return new XItem({ element: layer.canvas, style: { gridArea: 'center', margin: 'auto' } });
             })
         });
     }
@@ -517,30 +785,32 @@ class XOverworld extends XHost {
             }
         }
     }
-    render(animate = false) {
+    render(animated = false) {
         const room = this.room;
         if (room) {
-            const center = this.player ? X.center(this.player) : { x: this.size.x / 2, y: this.size.y / 2 };
+            const center = this.player ? XMath.center(this.player) : { x: this.size.x / 2, y: this.size.y / 2 };
             for (const [key, renderer] of Object.entries(this.layers)) {
-                if (renderer.attributes.animate === animate) {
+                if (renderer.attributes.animated === animated) {
                     renderer.erase();
-                    if (room.layers.has(key) || (this.player && key === this.player.renderer)) {
-                        const entities = [...(room.layers.get(key) || [])];
-                        this.player && key === this.player.renderer && entities.push(this.player);
-                        const zero = { x: room.bounds.x + this.size.x / 2, y: room.bounds.y + this.size.y / 2 };
-                        renderer.draw(this.size, {
-                            x: Math.min(Math.max(center.x, zero.x), zero.x + room.bounds.w),
-                            y: Math.min(Math.max(center.y, zero.y), zero.y + room.bounds.h)
-                        }, this.state.scale, ...entities);
-                    }
+                    const zero = { x: room.bounds.x + this.size.x / 2, y: room.bounds.y + this.size.y / 2 };
+                    renderer.draw(this.size, {
+                        x: Math.min(Math.max(center.x, zero.x), zero.x + room.bounds.w),
+                        y: Math.min(Math.max(center.y, zero.y), zero.y + room.bounds.h)
+                    }, this.state.scale, ...(room.layers.get(key) || []), ...[this.player, ...this.entities].filter(entity => entity && key === entity.renderer));
                 }
             }
         }
     }
     tick(modulator) {
-        if (this.room) {
-            for (const entity of this.room.entities)
-                entity.tick(modulator);
+        const room = this.room;
+        if (room) {
+            for (const entity of [this.player, ...room.entities, ...this.entities]) {
+                if (entity) {
+                    entity.tick(entity, this);
+                    modulator(entity, entity.state.lifetime++);
+                    entity.position = XMath.endpoint(entity.position, entity.direction, entity.speed);
+                }
+            }
         }
     }
 }
@@ -624,13 +894,13 @@ class XReader extends XHost {
         });
     }
 }
+// TERTIARY CLASSES
 class XDialogue extends XReader {
-    constructor({ interval = 0, sprites = {}, sounds = {} } = {}) {
+    constructor({ interval = 0, sprites = {}, voices = {} } = {}) {
         super({
             char: (char) => __awaiter(this, void 0, void 0, function* () {
-                yield this.skip(this.interval, () => {
-                    //@ts-expect-error
-                    char === ' ' || (this.sound && this.sound.audio.cloneNode().play());
+                yield this.skipper(this.interval, () => {
+                    char === ' ' || (this.voice && this.voice.play());
                 });
                 this.state.text.push(char);
                 this.fire('text', this.compute());
@@ -643,7 +913,7 @@ class XDialogue extends XReader {
                         break;
                     case '^':
                         const number = +code.slice(1);
-                        isFinite(number) && (yield this.skip(number * this.interval));
+                        isFinite(number) && (yield this.skipper(number * this.interval));
                         break;
                     case '&':
                         switch (code.slice(1)) {
@@ -662,14 +932,14 @@ class XDialogue extends XReader {
                 }
             })
         });
-        this.state = { sprite: '', text: String.prototype.split(''), skip: false, sound: '' };
+        this.state = { sprite: '', text: String.prototype.split(''), skip: false, voice: '' };
         this.interval = interval;
         this.sprites = sprites;
-        this.sounds = sounds;
+        this.voices = voices;
         this.on('style', ([key, value]) => {
             switch (key) {
                 case 'sound':
-                    this.state.sound = value;
+                    this.state.voice = value;
                     break;
                 case 'sprite':
                     let active = this.sprite ? this.sprite.state.active : false;
@@ -692,8 +962,8 @@ class XDialogue extends XReader {
             this.sprite && this.sprite.disable();
         });
     }
-    get sound() {
-        return this.sounds[this.state.sound || ''];
+    get voice() {
+        return this.voices[this.state.voice || ''];
     }
     get sprite() {
         return this.sprites[this.state.sprite || ''];
@@ -724,21 +994,23 @@ class XDialogue extends XReader {
             text += tails.pop();
         return text;
     }
-    skip(interval, callback = () => { }) {
-        return Promise.race([
-            X.pause(interval).then(() => this.state.skip || callback()),
-            new Promise(resolve => {
-                if (this.state.skip) {
-                    resolve(0);
-                }
-                else {
-                    X.once(this, 'skip', () => {
+    skip() {
+        this.fire('skip');
+    }
+    skipper(interval, callback = () => { }) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.state.skip) {
+                return true;
+            }
+            else {
+                return yield Promise.race([
+                    XTools.pause(interval).then(() => this.state.skip || callback()),
+                    this.when('skip').then(() => {
                         this.state.skip = true;
-                        resolve(0);
-                    });
-                }
-            })
-        ]);
+                    })
+                ]);
+            }
+        });
     }
 }
 //# sourceMappingURL=storyteller.js.map
