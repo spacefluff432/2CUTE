@@ -176,7 +176,7 @@ class XHost extends XClass {
         }
     }
     when(name) {
-        return new Promise(resolve => this.on(name, (...data) => resolve(...data), true));
+        return new Promise(resolve => this.on(name, (...data) => resolve(data), true));
     }
     with(name, listener, once) {
         return this.on(name, (...data) => listener(this, ...data), once);
@@ -523,6 +523,17 @@ class XOverworld extends XHost {
         for (const [key, renderer] of Object.entries(properties.renderers || {}))
             this.renderers.set(key, renderer);
     }
+    absolute(room, center, position = { x: 0, y: 0 }) {
+        const zero = { x: (room ? room.bounds.x : 0) + this.size.x / 2, y: (room ? room.bounds.y : 0) + this.size.y / 2 };
+        const endpoint = {
+            x: Math.min(Math.max(center.x, zero.x), zero.x + (room ? room.bounds.w : 0)),
+            y: Math.min(Math.max(center.y, zero.y), zero.y + (room ? room.bounds.h : 0))
+        };
+        return {
+            x: endpoint.x + position.x / this.state.scale - this.size.x / 2,
+            y: endpoint.y + position.y / this.state.scale - this.size.y / 2
+        };
+    }
     refresh() {
         const element = this.wrapper.compute(this.state.scale);
         if (element) {
@@ -550,19 +561,17 @@ class XOverworld extends XHost {
         return false;
     }
     render(room, center, animated) {
+        const zero = { x: (room ? room.bounds.x : 0) + this.size.x / 2, y: (room ? room.bounds.y : 0) + this.size.y / 2 };
+        const endpoint = {
+            x: Math.min(Math.max(center.x, zero.x), zero.x + (room ? room.bounds.w : 0)),
+            y: Math.min(Math.max(center.y, zero.y), zero.y + (room ? room.bounds.h : 0))
+        };
         for (const entity of [...room.entities, ...this.entities])
             entity.tick();
         for (const [key, renderer] of this.renderers.entries()) {
             if (renderer.attributes.animated === animated) {
                 renderer.erase();
-                const zero = {
-                    x: (room ? room.bounds.x : 0) + this.size.x / 2,
-                    y: (room ? room.bounds.y : 0) + this.size.y / 2
-                };
-                renderer.draw(this.size, {
-                    x: Math.min(Math.max(center.x, zero.x), zero.x + (room ? room.bounds.w : 0)),
-                    y: Math.min(Math.max(center.y, zero.y), zero.y + (room ? room.bounds.h : 0))
-                }, this.state.scale, ...(room.layers.get(key) || []), ...[...this.entities].filter(entity => entity && key === entity.renderer));
+                renderer.draw(this.size, endpoint, this.state.scale, ...(room.layers.get(key) || []), ...[...this.entities].filter(entity => key === entity.renderer));
             }
         }
     }
@@ -697,13 +706,15 @@ class XRenderer extends XHost {
                         context.globalAlpha = entity.alpha * sprite.alpha;
                         context.globalCompositeOperation = sprite.composite;
                         if (object instanceof XRectangle) {
-                            context.fillStyle = object.style.fill;
-                            context.lineWidth = object.style.border;
-                            context.strokeStyle = object.style.stroke;
+                            context.fillStyle = object.attributes.fill;
+                            context.lineWidth = object.attributes.border;
+                            context.strokeStyle = object.attributes.stroke;
+                            entity.fire('draw', context);
                             context.fillRect(destination.x, destination.y, destination.w, destination.h);
                             context.strokeRect(destination.x, destination.y, destination.w, destination.h);
                         }
                         else if (object instanceof XTexture) {
+                            entity.fire('draw', context);
                             context.drawImage(object.image, object.bounds.x, object.image.height - source.h - object.bounds.y, source.w, source.h, destination.x, destination.y, destination.w, destination.h);
                         }
                         context.restore();
@@ -731,7 +742,6 @@ class XRoom extends XHost {
             },
             deleter: entity => {
                 this.layers.has(entity.renderer) && this.layers.get(entity.renderer).delete(entity);
-                this.entities.delete(entity);
             }
         });
         this.layers = new Map();
@@ -746,7 +756,7 @@ class XSheet extends XHost {
         super(properties);
         const { grid: { x = 0, y = 0 } = {} } = properties;
         this.grid = { x, y };
-        this.texture = properties.texture = new XTexture();
+        this.texture = properties.texture || new XTexture();
     }
     tile(x, y) {
         return new XTexture({
@@ -773,7 +783,8 @@ class XSound extends XHost {
                 }));
             }
             return audio;
-        })(properties.source || 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
+        })(properties.source ||
+            `data:audio/wav;base64,UklGRkYQAABXQVZFZm10IBAAAAABAAIARKwAABCxAgAEABAATElTVBoAAABJTkZPSVNGVA4AAABMYXZmNTcuODMuMTAwAGRhdGEAE${Array(5466).join('A')}==`);
         this.rate = typeof properties.rate === 'number' ? properties.rate : 1;
         this.volume = typeof properties.volume === 'number' ? properties.volume : 1;
     }
@@ -816,6 +827,7 @@ class XEntity extends XRendered {
         this.bounds = { h, w, x: x1, y: y1 };
         this.depth = properties.depth || 0;
         this.direction = properties.direction || 0;
+        // @ts-expect-error
         this.metadata = properties.metadata || {};
         this.modulators = new Set(properties.modulators || []);
         this.renderer = properties.renderer || '';
@@ -942,8 +954,8 @@ class XDialoguer extends XReader {
 class XRectangle extends XDrawn {
     constructor(properties = {}) {
         super(properties.bounds);
-        const { style: { border = 0, fill = '#000000ff', stroke = '#ffffffff' } = {} } = properties;
-        this.style = { border, fill, stroke };
+        const { attributes: { border = 0, fill = '#000000ff', stroke = '#ffffffff' } = {} } = properties;
+        this.attributes = { border, fill, stroke };
     }
 }
 class XSprite extends XRendered {
@@ -1437,22 +1449,22 @@ class UndertaleGame extends XHost {
         });
         this.default = properties.default;
         this.dialoguer = new XDialoguer({ sprites: properties.sprites || {}, voices: properties.voices || {} });
-        this.items = new Map(Object.entries(properties.items || {}));
+        this.items = properties.items || {};
         this.key = properties.key || '';
         this.data = Undertale.data.load(this.key) || properties.default;
         this.overworld = new XOverworld({
             renderers: {
                 background: new XRenderer(),
                 foreground: new XRenderer({ attributes: { animated: true } }),
-                overlay: new XRenderer(),
-                menu: new XRenderer({ attributes: { animated: true, static: true } })
+                overlay: new XRenderer()
             },
             size: { x, y },
             wrapper: properties.wrapper
         });
-        this.player = (properties.player || new XWalker())
-            .on('trigger', ({ metadata: { undertale, key, destination } }) => {
-            undertale === 'door-to' && destination in this.rooms && this.teleport(destination, key);
+        this.player = (properties.player || new XWalker()).on('trigger', ({ metadata }) => {
+            metadata.undertale === 'door-to' &&
+                metadata.destination in this.rooms &&
+                this.teleport(metadata.destination, metadata.key);
         });
         this.rooms = Object.fromEntries(Object.entries(properties.rooms || {}).map(([key, { backgrounds = [], bounds: { h = 0, w = 0, x = 0, y = 0 } = {}, doors = {}, entities = [], interacts = [], overlays = [], triggers = [], walls = [] }]) => [
             key,
@@ -1576,14 +1588,17 @@ class UndertaleGame extends XHost {
     }
     get stat() {
         return Object.assign(Undertale.data.stat(this.data), {
-            atx: this.items.get(this.data.weapon).value,
-            dfx: this.items.get(this.data.armor).value
+            atx: this.items[this.data.weapon].value,
+            dfx: this.items[this.data.armor].value
         });
+    }
+    absolute(position) {
+        return this.overworld.absolute(this.room, this.player ? X.center(this.player) : { x: 0, y: 0 }, position);
     }
     activate(index, action) {
         const name = this.data.items[index];
         if (name in this.items) {
-            const item = this.items.get(name);
+            const item = this.items[name];
             switch (action) {
                 case 'drop':
                     this.data.items.splice(index, 1);
@@ -1618,15 +1633,19 @@ class UndertaleGame extends XHost {
     dialogue(...lines) {
         return __awaiter(this, void 0, void 0, function* () {
             if (this.dialoguer.mode === 'read') {
-                this.dialoguer.skip();
-                yield this.dialoguer.when('idle');
-                this.dialogue(...lines);
+                yield new Promise(resolve => {
+                    this.dialoguer.on('idle', () => resolve(), true);
+                    this.dialoguer.skip();
+                });
+                yield this.dialogue(...lines);
             }
             else {
                 this.dialoguer.mode = 'none';
                 this.dialoguer.lines = [];
-                this.dialoguer.add(...lines);
-                yield this.dialoguer.when('stop');
+                yield new Promise(resolve => {
+                    this.dialoguer.on('stop', () => resolve(), true);
+                    this.dialoguer.add(...lines);
+                });
             }
         });
     }
@@ -1657,27 +1676,83 @@ class UndertaleGame extends XHost {
                     this.overworld.wrapper.style.opacity = `${X.clamp(opacity, 0, 1)}`;
                 }
                 yield X.pause(150);
-                this.data.room = this.data.room = room;
+                this.data.room = room;
+                this.fire('teleport', room);
                 if (this.player) {
-                    for (const { metadata: { default: $default, direction, key, undertale }, position: { x, y } } of this.room
-                        .entities) {
-                        if (undertale === 'door-from' && (door ? key === door : $default)) {
+                    for (const { metadata, position: { x, y } } of this.room.entities) {
+                        if (metadata.undertale === 'door-from' && (door ? metadata.key === door : metadata.default)) {
                             this.player.position = { x: x - this.player.bounds.w / 2, y: y - this.player.bounds.h / 2 };
-                            this.player.sprite = this.player.sprites[direction] || this.player.sprite;
+                            this.player.sprite = this.player.sprites[metadata.direction] || this.player.sprite;
                             this.player.sprite && this.player.sprite.disable();
                             break;
                         }
                     }
                 }
-                this.render();
-                while (opacity < 1) {
-                    opacity += 0.01 * (1 / 0.3);
-                    yield X.pause(10);
-                    this.overworld.wrapper.style.opacity = `${X.clamp(opacity, 0, 1)}`;
-                }
+                (() => __awaiter(this, void 0, void 0, function* () {
+                    this.render();
+                    while (opacity < 1) {
+                        opacity += 0.01 * (1 / 0.3);
+                        yield X.pause(10);
+                        this.overworld.wrapper.style.opacity = `${X.clamp(opacity, 0, 1)}`;
+                    }
+                }))();
                 interact || (this.state.interact = false);
             }
         });
+    }
+}
+class UndertaleBattler extends XHost {
+    constructor(properties) {
+        super(properties);
+        this.state = { history: [] };
+        this.attack = properties.attack || (() => __awaiter(this, void 0, void 0, function* () { return false; }));
+        this.choices = properties.choices;
+        this.menu = [...(properties.menu || [])];
+    }
+    get choice() {
+        if (this.state.history.length > 0) {
+            return this.choices[this.state.history[this.state.history.length - 1]];
+        }
+        else {
+            return this.menu;
+        }
+    }
+    get list() {
+        const choice = this.choice;
+        if (choice && typeof choice === 'object') {
+            return choice;
+        }
+        else {
+            return [];
+        }
+    }
+    loop() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const choice = (yield this.when('choice'))[0];
+            if (yield this.attack(choice)) {
+                this.state.history.splice(0, this.state.history.length);
+                yield this.loop();
+            }
+        });
+    }
+    next(index) {
+        const choice = this.choice;
+        if (choice && typeof choice === 'object') {
+            typeof index === 'string' && (index = choice.indexOf(index));
+            if (index > -1 && index < choice.length) {
+                const key = choice[index];
+                if (key in this.choices) {
+                    this.state.history.push(key);
+                    const choice = this.choices[key];
+                    if (typeof choice === 'function') {
+                        choice(this).then(() => this.fire('choice', key));
+                    }
+                }
+            }
+        }
+    }
+    prev() {
+        return typeof this.choice === 'function' || (this.state.history.pop(), this.state.history.length === 0);
     }
 }
 //# sourceMappingURL=storyteller.js.map

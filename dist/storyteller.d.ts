@@ -40,7 +40,7 @@ declare class XHost<X extends XKeyed<any[]> = {}, Y extends XKeyed<any[]> = X> e
     fire<Z extends keyof Y>(name: Z, ...data: Y[Z]): any[];
     off<Z extends keyof Y>(name: Z, listener: XListener<Y[Z]>): this;
     on<Z extends keyof Y>(name: Z, listener: XListener<Y[Z]>, once?: boolean): this;
-    when<Z extends keyof Y>(name: Z): Promise<void>;
+    when<Z extends keyof Y>(name: Z): Promise<Y[Z]>;
     with<Z extends keyof Y>(name: Z, listener: (self: this, ...data: Y[Z]) => any, once?: boolean): this;
 }
 declare class XMap<X, Y> extends Map<X, Y> {
@@ -127,7 +127,7 @@ declare class XNavigator extends XHost<XKeyed<[XAtlas, string | null, XNavigator
     detach(overworld: XOverworld): void;
 }
 declare class XOverworld extends XHost {
-    associations: Map<XItem<any> | XRenderer<any>, XItem<any>>;
+    private associations;
     entities: Set<XEntity<any>>;
     items: XSet<XItem<any>>;
     renderers: XMap<string, XRenderer<any>>;
@@ -140,6 +140,10 @@ declare class XOverworld extends XHost {
     constructor(properties?: XProperties<XOverworld, 'size' | 'items' | 'renderers'> & {
         wrapper?: Element | void;
     });
+    absolute(room: XRoom, center: XPosition, position?: XPosition): {
+        x: number;
+        y: number;
+    };
     refresh(): boolean;
     render(room: XRoom, center: XPosition, animated: boolean): void;
 }
@@ -203,13 +207,14 @@ declare class XVoice<X extends XKeyed<any> = any> extends XHost<X> {
     play(): void;
 }
 declare class XEntity<X extends {
+    draw: [CanvasRenderingContext2D];
     tick: [];
 } = any> extends XRendered<X> {
     attributes: XKeyed<boolean, 'collide' | 'interact' | 'trigger'>;
     bounds: XBounds;
     depth: number;
     direction: number;
-    metadata: XKeyed<XBasic>;
+    metadata: XMetadata;
     modulators: Set<XModulator>;
     renderer: string;
     speed: number;
@@ -217,7 +222,9 @@ declare class XEntity<X extends {
     state: {
         lifetime: number;
     };
-    constructor(properties?: ConstructorParameters<typeof XRendered>[0] & XProperties<XEntity, Exclude<keyof XEntity, 'state' | 'tick'>>);
+    constructor(properties?: ConstructorParameters<typeof XRendered>[0] & XProperties<XEntity, Exclude<keyof XEntity, 'state' | 'tick' | 'metadata'>> & {
+        metadata?: XKeyed<any> | void;
+    });
     tick(): void;
 }
 declare class XDialoguer<X extends XKeyed<[], 'start' | 'idle' | 'stop' | 'read' | 'skip'> & {
@@ -241,10 +248,10 @@ declare class XDialoguer<X extends XKeyed<[], 'start' | 'idle' | 'stop' | 'read'
     skipper(interval: number, callback?: () => void): Promise<boolean | void>;
 }
 declare class XRectangle<X extends XKeyed<any> = any> extends XDrawn<X> {
-    style: XKeyed<string | CanvasGradient | CanvasPattern, 'fill' | 'stroke'> & {
+    attributes: XKeyed<string | CanvasGradient | CanvasPattern, 'fill' | 'stroke'> & {
         border: number;
     };
-    constructor(properties?: XProperties<XRectangle, 'bounds' | 'style'>);
+    constructor(properties?: XProperties<XRectangle, 'bounds' | 'attributes'>);
 }
 declare class XSprite<X extends XKeyed<any> = any> extends XRendered<X> {
     attributes: XKeyed<boolean, 'hide' | 'hold'>;
@@ -268,17 +275,16 @@ declare class XTexture<X extends XKeyed<any> = any> extends XDrawn<X> {
     });
     static cache: Map<string, HTMLImageElement>;
 }
-declare class XPerishable<X extends {
-    death: [];
-    tick: [];
+declare class XPerishable<X extends XKeyed<[], 'death' | 'tick'> & {
+    draw: [CanvasRenderingContext2D];
 } = any> extends XEntity<X> {
     lifespan: number;
     constructor(properties?: ConstructorParameters<typeof XEntity>[0] & XProperties<XPerishable, 'lifespan'>);
     tick(): void;
 }
-declare class XWalker<X extends {
+declare class XWalker<X extends XKeyed<[XEntity], 'trigger' | 'interact' | 'collide'> & {
+    draw: [CanvasRenderingContext2D];
     tick: [];
-    trigger: [XEntity];
 } = any> extends XEntity<X> {
     sprites: Partial<XKeyed<XSprite, XDirection>>;
     stride: number;
@@ -340,13 +346,14 @@ declare const Undertale: {
     };
 };
 declare class UndertaleGame<X extends {
+    teleport: [string];
     tick: [];
 } = any> extends XHost<X> {
     atlas: XAtlas;
     data: UndertaleSave;
     default: UndertaleSave;
     dialoguer: XDialoguer;
-    items: Map<string, UndertaleItem>;
+    items: XKeyed<UndertaleItem>;
     key: string;
     overworld: XOverworld;
     player: XWalker | null;
@@ -389,7 +396,7 @@ declare class UndertaleGame<X extends {
         })[], 'backgrounds' | 'overlays'> & XKeyed<XProperties<{
             bounds: XBounds;
             listener: XListener;
-            metadata: XKeyed<XBasic>;
+            metadata?: XKeyed<any> | void;
         }>[], 'interacts' | 'triggers'>> & {
             doors: XKeyed<XProperties<{
                 bounds: XBounds;
@@ -401,6 +408,10 @@ declare class UndertaleGame<X extends {
     }> & {
         default: UndertaleSave;
     });
+    absolute(position?: XPosition): {
+        x: number;
+        y: number;
+    };
     activate(index: number, action: 'use' | 'info' | 'drop'): string[] | undefined;
     damage(amount: number): void;
     dialogue(...lines: string[]): Promise<void>;
@@ -409,4 +420,22 @@ declare class UndertaleGame<X extends {
     reset(): void;
     save(): void;
     teleport(room: string, door?: string | void): Promise<void>;
+}
+declare class UndertaleBattler<X extends string, Y extends {
+    choice: [X];
+} = any> extends XHost<Y> {
+    attack: ((choice: X) => Promise<boolean | void>);
+    choices: XKeyed<X[] | ((self: UndertaleBattler<X, Y>) => Promise<void>), X>;
+    menu: X[];
+    state: {
+        history: X[];
+    };
+    get choice(): XKeyed<X[] | ((self: UndertaleBattler<X, Y>) => Promise<void>), X>[X];
+    get list(): X[];
+    constructor(properties: XProperties<UndertaleBattler<X, Y>, 'attack' | 'menu'> & {
+        choices: XKeyed<X[] | ((self: UndertaleBattler<X, Y>) => Promise<void>), X>;
+    });
+    loop(): Promise<void>;
+    next(index: number | string): void;
+    prev(): boolean;
 }

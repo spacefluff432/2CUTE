@@ -37,8 +37,8 @@ const X = {
    clamp (base: number, min = -Infinity, max = Infinity) {
       return Math.min(Math.max(base, min), max);
    },
-   pause (time: number): Promise<void> {
-      return new Promise(resolve => setTimeout(() => resolve(), time));
+   pause (time: number) {
+      return new Promise<void>(resolve => setTimeout(() => resolve(), time));
    },
    direction ({ x = 0, y = 0 }: XPosition, ...entities: XEntity[]) {
       return entities.map(({ position }) => 180 / Math.PI * Math.atan2(position.y - y, position.x - x));
@@ -165,11 +165,11 @@ class XHost<X extends XKeyed<any[]> = {}, Y extends XKeyed<any[]> = X> extends X
          return this;
       }
    }
-   when<Z extends keyof Y> (name: Z): Promise<void> {
-      return new Promise(resolve => this.on(name, (...data) => resolve(...data), true));
+   when<Z extends keyof Y> (name: Z) {
+      return new Promise<Y[Z]>(resolve => this.on(name, (...data) => resolve(data), true));
    }
    with<Z extends keyof Y> (name: Z, listener: (self: this, ...data: Y[Z]) => any, once?: boolean) {
-      return this.on(name, (...data: Y[Z]) => listener(this, ...data), once);
+      return this.on(name, (...data) => listener(this, ...data), once);
    }
 }
 
@@ -498,7 +498,7 @@ class XNavigator extends XHost<
 }
 
 class XOverworld extends XHost {
-   associations = new Map<XRenderer | XItem, XItem>();
+   private associations = new Map<XRenderer | XItem, XItem>();
    entities = new Set<XEntity>();
    items = new XSet<XItem>({
       adder: value => {
@@ -564,6 +564,17 @@ class XOverworld extends XHost {
       for (const item of properties.items || []) this.items.add(item);
       for (const [ key, renderer ] of Object.entries(properties.renderers || {})) this.renderers.set(key, renderer);
    }
+   absolute (room: XRoom, center: XPosition, position: XPosition = { x: 0, y: 0 }) {
+      const zero = { x: (room ? room.bounds.x : 0) + this.size.x / 2, y: (room ? room.bounds.y : 0) + this.size.y / 2 };
+      const endpoint = {
+         x: Math.min(Math.max(center.x, zero.x), zero.x + (room ? room.bounds.w : 0)),
+         y: Math.min(Math.max(center.y, zero.y), zero.y + (room ? room.bounds.h : 0))
+      };
+      return {
+         x: endpoint.x + position.x / this.state.scale - this.size.x / 2,
+         y: endpoint.y + position.y / this.state.scale - this.size.y / 2
+      };
+   }
    refresh () {
       const element = this.wrapper.compute(this.state.scale);
       if (element) {
@@ -590,23 +601,21 @@ class XOverworld extends XHost {
       return false;
    }
    render (room: XRoom, center: XPosition, animated: boolean) {
+      const zero = { x: (room ? room.bounds.x : 0) + this.size.x / 2, y: (room ? room.bounds.y : 0) + this.size.y / 2 };
+      const endpoint = {
+         x: Math.min(Math.max(center.x, zero.x), zero.x + (room ? room.bounds.w : 0)),
+         y: Math.min(Math.max(center.y, zero.y), zero.y + (room ? room.bounds.h : 0))
+      };
       for (const entity of [ ...room.entities, ...this.entities ]) entity.tick();
       for (const [ key, renderer ] of this.renderers.entries()) {
          if (renderer.attributes.animated === animated) {
             renderer.erase();
-            const zero = {
-               x: (room ? room.bounds.x : 0) + this.size.x / 2,
-               y: (room ? room.bounds.y : 0) + this.size.y / 2
-            };
             renderer.draw(
                this.size,
-               {
-                  x: Math.min(Math.max(center.x, zero.x), zero.x + (room ? room.bounds.w : 0)),
-                  y: Math.min(Math.max(center.y, zero.y), zero.y + (room ? room.bounds.h : 0))
-               },
+               endpoint,
                this.state.scale,
                ...(room.layers.get(key) || []),
-               ...[ ...this.entities ].filter(entity => entity && key === entity.renderer)
+               ...[ ...this.entities ].filter(entity => key === entity.renderer)
             );
          }
       }
@@ -761,12 +770,14 @@ class XRenderer<X extends XKeyed<any> = any> extends XHost<X> {
                   context.globalAlpha = entity.alpha * sprite.alpha;
                   context.globalCompositeOperation = sprite.composite;
                   if (object instanceof XRectangle) {
-                     context.fillStyle = object.style.fill;
-                     context.lineWidth = object.style.border;
-                     context.strokeStyle = object.style.stroke;
+                     context.fillStyle = object.attributes.fill;
+                     context.lineWidth = object.attributes.border;
+                     context.strokeStyle = object.attributes.stroke;
+                     entity.fire('draw', context);
                      context.fillRect(destination.x, destination.y, destination.w, destination.h);
                      context.strokeRect(destination.x, destination.y, destination.w, destination.h);
                   } else if (object instanceof XTexture) {
+                     entity.fire('draw', context);
                      context.drawImage(
                         object.image,
                         object.bounds.x,
@@ -804,7 +815,6 @@ class XRoom<X extends XKeyed<any> = any> extends XHost<X> {
       },
       deleter: entity => {
          this.layers.has(entity.renderer) && this.layers.get(entity.renderer)!.delete(entity);
-         this.entities.delete(entity);
       }
    });
    layers = new Map<string, Set<XEntity>>();
@@ -823,7 +833,7 @@ class XSheet<X extends XKeyed<any> = any> extends XHost<X> {
       super(properties);
       const { grid: { x = 0, y = 0 } = {} } = properties;
       this.grid = { x, y };
-      this.texture = properties.texture = new XTexture();
+      this.texture = properties.texture || new XTexture();
    }
    tile (x: number, y: number) {
       return new XTexture({
@@ -868,7 +878,12 @@ class XSound<X extends XKeyed<any> = any> extends XHost<X> {
             );
          }
          return audio;
-      })(properties.source || 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
+      })(
+         properties.source ||
+            `data:audio/wav;base64,UklGRkYQAABXQVZFZm10IBAAAAABAAIARKwAABCxAgAEABAATElTVBoAAABJTkZPSVNGVA4AAABMYXZmNTcuODMuMTAwAGRhdGEAE${Array(
+               5466
+            ).join('A')}==`
+      );
       this.rate = typeof properties.rate === 'number' ? properties.rate : 1;
       this.volume = typeof properties.volume === 'number' ? properties.volume : 1;
    }
@@ -894,12 +909,12 @@ class XVoice<X extends XKeyed<any> = any> extends XHost<X> {
 //  SECONDARY CLASSES                              //
 /////////////////////////////////////////////////////
 
-class XEntity<X extends { tick: [] } = any> extends XRendered<X> {
+class XEntity<X extends { draw: [CanvasRenderingContext2D]; tick: [] } = any> extends XRendered<X> {
    attributes: XKeyed<boolean, 'collide' | 'interact' | 'trigger'>;
    bounds: XBounds;
    depth: number;
    direction: number;
-   metadata: XKeyed<XBasic>;
+   metadata: XMetadata;
    modulators: Set<XModulator>;
    renderer: string;
    speed: number;
@@ -907,7 +922,9 @@ class XEntity<X extends { tick: [] } = any> extends XRendered<X> {
    state = { lifetime: 0 };
    constructor (
       properties: ConstructorParameters<typeof XRendered>[0] &
-         XProperties<XEntity, Exclude<keyof XEntity, 'state' | 'tick'>> = {}
+         XProperties<XEntity, Exclude<keyof XEntity, 'state' | 'tick' | 'metadata'>> & {
+            metadata?: XKeyed<any> | void;
+         } = {}
    ) {
       super(properties);
       const {
@@ -918,6 +935,7 @@ class XEntity<X extends { tick: [] } = any> extends XRendered<X> {
       this.bounds = { h, w, x: x1, y: y1 };
       this.depth = properties.depth || 0;
       this.direction = properties.direction || 0;
+      // @ts-expect-error
       this.metadata = properties.metadata || {};
       this.modulators = new Set(properties.modulators || []);
       this.renderer = properties.renderer || '';
@@ -1043,11 +1061,11 @@ class XDialoguer<
 }
 
 class XRectangle<X extends XKeyed<any> = any> extends XDrawn<X> {
-   style: XKeyed<string | CanvasGradient | CanvasPattern, 'fill' | 'stroke'> & { border: number };
-   constructor (properties: XProperties<XRectangle, 'bounds' | 'style'> = {}) {
+   attributes: XKeyed<string | CanvasGradient | CanvasPattern, 'fill' | 'stroke'> & { border: number };
+   constructor (properties: XProperties<XRectangle, 'bounds' | 'attributes'> = {}) {
       super(properties.bounds);
-      const { style: { border = 0, fill = '#000000ff', stroke = '#ffffffff' } = {} } = properties;
-      this.style = { border, fill, stroke };
+      const { attributes: { border = 0, fill = '#000000ff', stroke = '#ffffffff' } = {} } = properties;
+      this.attributes = { border, fill, stroke };
    }
 }
 
@@ -1137,7 +1155,11 @@ class XTexture<X extends XKeyed<any> = any> extends XDrawn<X> {
 //  TERTIARY CLASSES                               //
 /////////////////////////////////////////////////////
 
-class XPerishable<X extends { death: []; tick: [] } = any> extends XEntity<X> {
+class XPerishable<
+   X extends XKeyed<[], 'death' | 'tick'> & {
+      draw: [CanvasRenderingContext2D];
+   } = any
+> extends XEntity<X> {
    lifespan: number;
    constructor (properties: ConstructorParameters<typeof XEntity>[0] & XProperties<XPerishable, 'lifespan'> = {}) {
       super(properties);
@@ -1152,7 +1174,12 @@ class XPerishable<X extends { death: []; tick: [] } = any> extends XEntity<X> {
    }
 }
 
-class XWalker<X extends { tick: []; trigger: [XEntity] } = any> extends XEntity<X> {
+class XWalker<
+   X extends XKeyed<[XEntity], 'trigger' | 'interact' | 'collide'> & {
+      draw: [CanvasRenderingContext2D];
+      tick: [];
+   } = any
+> extends XEntity<X> {
    sprites: Partial<XKeyed<XSprite, XDirection>>;
    stride: number;
    constructor (
@@ -1645,12 +1672,12 @@ const Undertale = {
 //  BASE CLASSES                                   //
 /////////////////////////////////////////////////////
 
-class UndertaleGame<X extends { tick: [] } = any> extends XHost<X> {
+class UndertaleGame<X extends { teleport: [string]; tick: [] } = any> extends XHost<X> {
    atlas: XAtlas;
    data: UndertaleSave;
    default: UndertaleSave;
    dialoguer: XDialoguer;
-   items: Map<string, UndertaleItem>;
+   items: XKeyed<UndertaleItem>;
    key: string;
    overworld: XOverworld;
    player: XWalker | null;
@@ -1661,8 +1688,8 @@ class UndertaleGame<X extends { tick: [] } = any> extends XHost<X> {
    }
    get stat () {
       return Object.assign(Undertale.data.stat(this.data), {
-         atx: this.items.get(this.data.weapon)!.value,
-         dfx: this.items.get(this.data.armor)!.value
+         atx: this.items[this.data.weapon].value,
+         dfx: this.items[this.data.armor].value
       });
    }
    constructor (
@@ -1688,7 +1715,7 @@ class UndertaleGame<X extends { tick: [] } = any> extends XHost<X> {
                      'backgrounds' | 'overlays'
                   > &
                      XKeyed<
-                        XProperties<{ bounds: XBounds; listener: XListener; metadata: XKeyed<XBasic> }>[],
+                        XProperties<{ bounds: XBounds; listener: XListener; metadata?: XKeyed<any> | void }>[],
                         'interacts' | 'triggers'
                      >
                > & {
@@ -1719,23 +1746,23 @@ class UndertaleGame<X extends { tick: [] } = any> extends XHost<X> {
       });
       this.default = properties.default;
       this.dialoguer = new XDialoguer({ sprites: properties.sprites || {}, voices: properties.voices || {} });
-      this.items = new Map(Object.entries(properties.items || {}));
+      this.items = properties.items || {};
       this.key = properties.key || '';
       this.data = Undertale.data.load(this.key) || properties.default;
       this.overworld = new XOverworld({
          renderers: {
             background: new XRenderer(),
             foreground: new XRenderer({ attributes: { animated: true } }),
-            overlay: new XRenderer(),
-            menu: new XRenderer({ attributes: { animated: true, static: true } })
+            overlay: new XRenderer()
          },
          size: { x, y },
          wrapper: properties.wrapper
       });
-      this.player = (properties.player || new XWalker())
-         .on('trigger', ({ metadata: { undertale, key, destination } }) => {
-            undertale === 'door-to' && destination in this.rooms && this.teleport(destination, key);
-         });
+      this.player = (properties.player || new XWalker()).on('trigger', ({ metadata }) => {
+         metadata.undertale === 'door-to' &&
+            metadata.destination in this.rooms &&
+            this.teleport(metadata.destination, metadata.key);
+      });
       this.rooms = Object.fromEntries(
          Object.entries(
             properties.rooms || {}
@@ -1910,10 +1937,13 @@ class UndertaleGame<X extends { tick: [] } = any> extends XHost<X> {
          this.teleport(this.data.room);
       });
    }
+   absolute (position?: XPosition) {
+      return this.overworld.absolute(this.room, this.player ? X.center(this.player) : { x: 0, y: 0 }, position);
+   }
    activate (index: number, action: 'use' | 'info' | 'drop') {
       const name = this.data.items[index];
       if (name in this.items) {
-         const item = this.items.get(name)!;
+         const item = this.items[name];
          switch (action) {
             case 'drop':
                this.data.items.splice(index, 1);
@@ -1948,14 +1978,18 @@ class UndertaleGame<X extends { tick: [] } = any> extends XHost<X> {
    }
    async dialogue (...lines: string[]) {
       if (this.dialoguer.mode === 'read') {
-         this.dialoguer.skip();
-         await this.dialoguer.when('idle');
-         this.dialogue(...lines);
+         await new Promise<void>(resolve => {
+            this.dialoguer.on('idle', () => resolve(), true);
+            this.dialoguer.skip();
+         });
+         await this.dialogue(...lines);
       } else {
          this.dialoguer.mode = 'none';
          this.dialoguer.lines = [];
-         this.dialoguer.add(...lines);
-         await this.dialoguer.when('stop');
+         await new Promise<void>(resolve => {
+            this.dialoguer.on('stop', () => resolve(), true);
+            this.dialoguer.add(...lines);
+         });
       }
    }
    load () {
@@ -1984,25 +2018,85 @@ class UndertaleGame<X extends { tick: [] } = any> extends XHost<X> {
             this.overworld.wrapper.style.opacity = `${X.clamp(opacity, 0, 1)}`;
          }
          await X.pause(150);
-         this.data.room = this.data.room = room;
+         this.data.room = room;
+         this.fire('teleport', room);
          if (this.player) {
-            for (const { metadata: { default: $default, direction, key, undertale }, position: { x, y } } of this.room
-               .entities) {
-               if (undertale === 'door-from' && (door ? key === door : $default)) {
+            for (const { metadata, position: { x, y } } of this.room.entities) {
+               if (metadata.undertale === 'door-from' && (door ? metadata.key === door : metadata.default)) {
                   this.player.position = { x: x - this.player.bounds.w / 2, y: y - this.player.bounds.h / 2 };
-                  this.player.sprite = this.player.sprites[direction as XDirection] || this.player.sprite;
+                  this.player.sprite = this.player.sprites[metadata.direction] || this.player.sprite;
                   this.player.sprite && this.player.sprite.disable();
                   break;
                }
             }
          }
-         this.render();
-         while (opacity < 1) {
-            opacity += 0.01 * (1 / 0.3);
-            await X.pause(10);
-            this.overworld.wrapper.style.opacity = `${X.clamp(opacity, 0, 1)}`;
-         }
+         (async () => {
+            this.render();
+            while (opacity < 1) {
+               opacity += 0.01 * (1 / 0.3);
+               await X.pause(10);
+               this.overworld.wrapper.style.opacity = `${X.clamp(opacity, 0, 1)}`;
+            }
+         })();
          interact || (this.state.interact = false);
       }
+   }
+}
+
+class UndertaleBattler<X extends string, Y extends { choice: [X] } = any> extends XHost<Y> {
+   attack: ((choice: X) => Promise<boolean | void>);
+   choices: XKeyed<X[] | ((self: UndertaleBattler<X, Y>) => Promise<void>), X>;
+   menu: X[];
+   state = { history: [] as X[] };
+   get choice () {
+      if (this.state.history.length > 0) {
+         return this.choices[this.state.history[this.state.history.length - 1]];
+      } else {
+         return this.menu;
+      }
+   }
+   get list () {
+      const choice = this.choice;
+      if (choice && typeof choice === 'object') {
+         return choice as X[];
+      } else {
+         return [];
+      }
+   }
+   constructor (
+      properties: XProperties<UndertaleBattler<X, Y>, 'attack' | 'menu'> & {
+         choices: XKeyed<X[] | ((self: UndertaleBattler<X, Y>) => Promise<void>), X>;
+      }
+   ) {
+      super(properties);
+      this.attack = properties.attack || (async () => false);
+      this.choices = properties.choices;
+      this.menu = [ ...(properties.menu || []) ];
+   }
+   async loop () {
+      const choice = (await this.when('choice'))[0];
+      if (await this.attack(choice)) {
+         this.state.history.splice(0, this.state.history.length);
+         await this.loop();
+      }
+   }
+   next (index: number | string) {
+      const choice = this.choice;
+      if (choice && typeof choice === 'object') {
+         typeof index === 'string' && (index = choice.indexOf(index as any));
+         if (index > -1 && index < choice.length) {
+            const key = choice[index];
+            if (key in this.choices) {
+               this.state.history.push(key);
+               const choice = this.choices[key];
+               if (typeof choice === 'function') {
+                  choice(this).then(() => this.fire('choice', key));
+               }
+            }
+         }
+      }
+   }
+   prev () {
+      return typeof this.choice === 'function' || (this.state.history.pop(), this.state.history.length === 0);
    }
 }

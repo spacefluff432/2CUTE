@@ -1,5 +1,6 @@
 type XBasic = { [k: string]: XBasic } | XBasic[] | string | number | boolean | null | void;
 type XKeyed<X, Y = string> = { [k in string & Y]: X };
+type XLoose<X, Y = any> = X & XKeyed<Y, Exclude<string, keyof X>>;
 type XOptional<X> = Partial<X> | void;
 
 type XProperties<X, Y extends keyof X = keyof X> = {
@@ -26,6 +27,12 @@ type XProvider<X, Y extends any[] = []> = X | ((...args: Y) => X);
 type XBounds = XKeyed<number, 'h' | 'w' | 'x' | 'y'>;
 type XDirection = 'down' | 'left' | 'right' | 'up';
 type XListener<X extends any[] = []> = ((...data: X) => any) | { priority: number; script: (...data: X) => any };
+
+type XMetadata =
+   | ({ undertale: 'door-from' } & XLoose<{ key: string; default: boolean, door: string; direction: XDirection }>)
+   | ({ undertale: 'door-to' } & XLoose<{ key: string, door: string }>)
+   | ({ undertale: void | never } & XLoose<{}>)
+
 type XPosition = XKeyed<number, 'x' | 'y'>;
 
 type UndertaleItem = {
@@ -48,11 +55,4 @@ type UndertaleSave = {
    room: string;
    xp: number;
    weapon: string;
-};
-
-type UndertaleTree = {
-   text: string;
-   selection: string;
-   branches?: UndertaleTree[] | (() => UndertaleTree[]);
-   script?: () => Promise<void> | void;
 };
