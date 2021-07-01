@@ -46,7 +46,7 @@ type UndertaleItem = {
 type UndertaleSave = {
    armor: string;
    boxes: [string[], string[]];
-   flags: XKeyed<string>;
+   flags: XKeyed<XBasic>;
    fun: number;
    g: number;
    hp: number;

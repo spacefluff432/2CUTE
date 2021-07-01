@@ -85,7 +85,9 @@ declare class XAudio<X extends XKeyed<any> = any> extends XHost<X> {
     start(): void;
     stop(): void;
 }
-declare class XDrawn<X extends XKeyed<any> = any> extends XHost<X> {
+declare class XDrawn<X extends {
+    draw: [CanvasRenderingContext2D];
+} = any> extends XHost<X> {
     bounds: XBounds;
     constructor({ h, w, x, y }?: XProperties<XDrawn>['bounds']);
 }
@@ -247,13 +249,18 @@ declare class XDialoguer<X extends XKeyed<[], 'start' | 'idle' | 'stop' | 'read'
     skip(): void;
     skipper(interval: number, callback?: () => void): Promise<boolean | void>;
 }
-declare class XRectangle<X extends XKeyed<any> = any> extends XDrawn<X> {
+declare class XRectangle<X extends {
+    draw: [CanvasRenderingContext2D];
+} = any> extends XDrawn<X> {
     attributes: XKeyed<string | CanvasGradient | CanvasPattern, 'fill' | 'stroke'> & {
         border: number;
     };
     constructor(properties?: XProperties<XRectangle, 'bounds' | 'attributes'>);
 }
-declare class XSprite<X extends XKeyed<any> = any> extends XRendered<X> {
+declare class XSprite<X extends {
+    compute: [number];
+    draw: [CanvasRenderingContext2D];
+} = any> extends XRendered<X> {
     attributes: XKeyed<boolean, 'hide' | 'hold'>;
     composite: 'color' | 'color-burn' | 'color-dodge' | 'copy' | 'darken' | 'destination-atop' | 'destination-in' | 'destination-out' | 'destination-over' | 'difference' | 'exclusion' | 'hard-light' | 'hue' | 'lighten' | 'lighter' | 'luminosity' | 'multiply' | 'overlay' | 'saturation' | 'screen' | 'soft-light' | 'source-atop' | 'source-in' | 'source-out' | 'source-over' | 'xor';
     interval: number;
@@ -265,10 +272,12 @@ declare class XSprite<X extends XKeyed<any> = any> extends XRendered<X> {
     objects: XDrawn[];
     constructor(properties?: ConstructorParameters<typeof XRendered>[0] & XProperties<XSprite, 'attributes' | 'composite' | 'interval' | 'objects'>);
     compute(): XDrawn<any> | undefined;
-    disable(): void;
-    enable(): void;
+    disable(): this;
+    enable(): this;
 }
-declare class XTexture<X extends XKeyed<any> = any> extends XDrawn<X> {
+declare class XTexture<X extends {
+    draw: [CanvasRenderingContext2D];
+} = any> extends XDrawn<X> {
     image: HTMLImageElement;
     constructor(properties?: XProperties<XTexture, 'bounds'> & {
         source?: string;
@@ -311,6 +320,7 @@ declare const Undertale: {
         sprites: {
             battle: XSprite<any>;
             menu: XSprite<any>;
+            save: XSprite<any>;
         };
         voices: {
             alphys: XSound<any>;
@@ -325,10 +335,10 @@ declare const Undertale: {
             narrator: XSound<any>;
             papyrus: XSound<any>;
             sans: XSound<any>;
+            storyteller: XSound<any>;
             temmie: XVoice<any>;
             toriel: XSound<any>;
             undyne: XSound<any>;
-            writer: XSound<any>;
         };
     };
     data: {
@@ -362,6 +372,7 @@ declare class UndertaleGame<X extends {
         debug: boolean;
         frisk: boolean;
         interact: boolean;
+        room: string;
     };
     get room(): XRoom<any>;
     get stat(): {
@@ -407,6 +418,7 @@ declare class UndertaleGame<X extends {
         }> | void;
     }> & {
         default: UndertaleSave;
+        room: string;
     });
     absolute(position?: XPosition): {
         x: number;
