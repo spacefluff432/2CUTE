@@ -20,18 +20,7 @@
 
 body {
    background-color: black;
-}
-
-body,
-#splash {
    height: 100%;
    margin: 0;
    width: 100%;
-}
-
-#splash {
-   background-image: url('./assets/image/extras/splash.png');
-   background-position: 50% 50%;
-   background-repeat: no-repeat;
-   background-size: contain;
 }

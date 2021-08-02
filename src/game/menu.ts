@@ -426,7 +426,7 @@ export const atlas: XAtlas = new XAtlas({
                      y: 218 / 2
                   },
                   {},
-                  '{@fill:#ff0}Continue'
+                  '\xa7fill:#ff0\xa7Continue'
                ),
                menuText(
                   {
