@@ -1,6 +1,5 @@
 import * as assets from './assets.js';
 import { manager } from './data.js';
-import { dialoguer } from './dialoguer.js';
 import { global } from './garbo.js';
 import { roomNames } from './rooms.js';
 
@@ -389,7 +388,7 @@ export const atlas: XAtlas = new XAtlas({
                   assets.sounds.save.start();
                   self.position = { x: 0, y: 0 };
                   global.room === void 0 || (SAVE.room = global.room);
-                  manager.save('FracturedQueenDev', SAVE);
+                  manager.save('storyteller', SAVE);
                } else {
                   return null;
                }
@@ -413,30 +412,6 @@ export const atlas: XAtlas = new XAtlas({
                assets.sounds.menu.start();
             });
       })(),
-      //////////////////////////////////////////////////////////////////////////////////////////////
-      //                                                                                          //
-      //    DIALOGUERS                                                                            //
-      //                                                                                          //
-      //////////////////////////////////////////////////////////////////////////////////////////////
-      storyDialoguer: new XNavigator({
-         objects: [
-            menuText(
-               { x: 25, y: 150 },
-               { font: '16px Dialogue', spacing: { x: 0.2, y: 7.5 } },
-               (() => {
-                  let text = '';
-                  dialoguer.on('text', content => (text = content));
-                  return () => text;
-               })()
-            )
-         ]
-      })
-         .on('from', () => {
-            atlas.attach(renderer, 'menu', 'storyDialoguer');
-         })
-         .on('to', () => {
-            atlas.detach(renderer, 'menu', 'storyDialoguer');
-         }),
       //////////////////////////////////////////////////////////////////////////////////////////////
       //                                                                                          //
       //    FRONT-END                                                                             //

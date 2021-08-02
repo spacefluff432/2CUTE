@@ -2,7 +2,6 @@ import './env.js';
 import { atlas } from './menu.js';
 import { global } from './garbo.js';
 import { manager } from './data.js';
-import { dialoguer } from './dialoguer.js';
 import { player, swapSprites } from './player.js';
 import { destinations, detector, rooms, spawns } from './rooms.js';
 
@@ -32,7 +31,6 @@ Object.assign(globalThis, {
    atlas,
    player,
    renderer,
-   dialoguer,
    SAVE: manager.load('storyteller') || manager.default
 });
 

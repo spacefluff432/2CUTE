@@ -156,9 +156,6 @@ export const sounds = {
         buffer: await X.buffer('assets/audio/sfx/box.wav'),
         volume: 0.25,
         router: (context, source) => reverb(context, source, context.destination, 0.1, 0.25, 1, 0, 0)
-    }),
-    dialoguer: {
-        storyteller: new XPlayer({ buffer: await X.buffer('assets/audio/voices/storyteller.wav'), volume: 0.6 })
-    }
+    })
 };
 //# sourceMappingURL=assets.js.map
