@@ -508,20 +508,31 @@ class XAtlas {
 class XDialoguer extends XHost {
     constructor({ interval = 1 } = {}) {
         super();
-        this.state = { mode: 'empty', text: [] };
+        this.state = { mode: 'empty', skip: true, text: [] };
         this.interval = new XNumber(interval);
     }
-    read() {
-        this.state.mode === 'idle' && (this.fire('read'), (this.state.mode = 'read'));
+    read(force) {
+        if (force) {
+            switch (this.state.mode) {
+                case 'read':
+                    this.skip();
+                case 'skip':
+                    this.on('idle').then(() => X.pause()).then(() => this.read());
+            }
+        }
+        else if (this.state.mode === 'idle') {
+            this.fire('read');
+            this.state.mode = 'read';
+        }
     }
-    skip() {
-        this.state.mode === 'read' && (this.fire('skip'), (this.state.mode = 'skip'));
+    skip(force) {
+        (this.state.skip || force) && this.state.mode === 'read' && (this.fire('skip'), (this.state.mode = 'skip'));
     }
     async text(...lines) {
         if (this.state.mode === 'empty') {
             this.fire('read');
             this.state.mode = 'read';
-            for (const line of lines.join('\n').split('\n').map(line => line.trim()).filter(line => line.length > 0)) {
+            for (const line of lines.map(line => line.trim()).filter(line => line.length > 0)) {
                 let index = 0;
                 let advance = false;
                 while (advance === false && index < line.length) {
@@ -536,7 +547,7 @@ class XDialoguer extends XHost {
                         switch (code[0]) {
                             // ! - auto-skip to the end of the text
                             case '!':
-                                skip || this.skip();
+                                skip || this.skip(code[1] === '!');
                                 break;
                             // @ - XText control code
                             case '@':
@@ -561,6 +572,10 @@ class XDialoguer extends XHost {
                             // & - add a character from a hex code
                             case '&':
                                 this.state.text.push(String.fromCharCode(parseInt(data, 16)));
+                                break;
+                            // * - prevent skipping
+                            case '*':
+                                this.state.skip = false;
                                 break;
                         }
                     }
@@ -863,7 +878,11 @@ class XRenderer extends XHost {
         this.framerate = new XNumber(framerate);
         this.layers = Object.fromEntries(Object.entries(layers).map(([key, value]) => {
             const canvas = document.createElement('canvas');
-            canvas.style.gridArea = 'center';
+            Object.assign(canvas.style, {
+                gridArea: 'center',
+                imageRendering: 'pixelated',
+                webkitFontSmoothing: 'none'
+            });
             this.container.appendChild(canvas);
             return [
                 key,
@@ -955,9 +974,7 @@ class XRenderer extends XHost {
         }
     }
     static context(canvas, width = 1, height = 1) {
-        const context = Object.assign(canvas, { width, height }).getContext('2d');
-        context.imageSmoothingEnabled = false;
-        return context;
+        return Object.assign(Object.assign(canvas, { width, height }).getContext('2d'), { imageSmoothingEnabled: false });
     }
 }
 XRenderer.canvas = document.createElement('canvas');
@@ -974,14 +991,20 @@ class XSprite extends XObject {
     }
     compute() {
         const texture = this.textures[this.state.index];
-        return new XVector(texture.width, texture.height);
+        if (texture) {
+            return new XVector(texture.width, texture.height);
+        }
+        else {
+            return new XVector(0, 0);
+        }
     }
     disable() {
         this.state.active = false;
         return this;
     }
     draw(context, base) {
-        context.drawImage(this.textures[this.state.index], base.x, base.y);
+        const texture = this.textures[this.state.index];
+        texture && context.drawImage(texture, base.x, base.y);
         if (this.steps <= ++this.state.step) {
             this.state.step = 0;
             if (this.state.active && this.textures.length <= ++this.state.index) {
@@ -998,7 +1021,13 @@ class XSprite extends XObject {
         return this;
     }
     serialize() {
-        return Object.assign(super.serialize(), { step: this.step, steps: this.steps, textures: this.textures });
+        return Object.assign(super.serialize(), {
+            step: this.step,
+            steps: this.steps,
+            textures: this.textures.map(texture => {
+                return texture instanceof HTMLImageElement ? texture.cloneNode() : texture;
+            })
+        });
     }
 }
 class XText extends XObject {
@@ -1010,11 +1039,11 @@ class XText extends XObject {
         })(properties);
     }
     compute(context) {
-        const lines = this.content.split('\xa7break\xa7').map(section => {
+        const lines = this.content.split('\n').map(section => {
             let total = 0;
             for (const char of section.split('')) {
                 const width = context.measureText(char).width;
-                total += width + width * this.spacing.x;
+                total += width + this.spacing.x;
             }
             return total;
         });
@@ -1023,7 +1052,7 @@ class XText extends XObject {
     }
     draw(context, base) {
         let index = 0;
-        const lines = this.content.split('\xa7break\xa7');
+        const lines = this.content.split('\n');
         const state = {
             fillStyle: context.fillStyle,
             globalAlpha: context.globalAlpha,
@@ -1045,7 +1074,11 @@ class XText extends XObject {
         const height = ascent + (ascent + this.spacing.y) * (lines.length - 1);
         while (index < this.content.length) {
             const char = this.content[index++];
-            if (char === '\xa7') {
+            if (char === '\n') {
+                offset.x = 0;
+                offset.y += ascent + this.spacing.y;
+            }
+            else if (char === '\xa7') {
                 const code = this.content.slice(index, this.content.indexOf('\xa7', index));
                 const [key, value] = code.split(':');
                 index += code.length + 1;
@@ -1055,10 +1088,6 @@ class XText extends XObject {
                         break;
                     case 'blend':
                         context.globalCompositeOperation = value;
-                        break;
-                    case 'break':
-                        offset.x = 0;
-                        offset.y += ascent + this.spacing.y;
                         break;
                     case 'fill':
                         context.fillStyle = value;
@@ -1117,7 +1146,7 @@ class XText extends XObject {
                 context.fillText(char, x, y);
                 context.strokeText(char, x, y);
                 const width = context.measureText(char).width;
-                offset.x += width + width * this.spacing.x;
+                offset.x += width + this.spacing.x;
             }
         }
         Object.assign(context, state);
@@ -1130,7 +1159,7 @@ class XWalker extends XHitbox {
     constructor(properties = {}) {
         super(properties);
         this.objects = [];
-        (({ sprites: { down = {}, left = {}, right = {}, up = {} } = {} } = {}) => {
+        (({ sprites: { down = void 0, left = void 0, right = void 0, up = void 0 } = {} } = {}) => {
             this.sprites = {
                 down: down instanceof XSprite ? down : new XSprite(down),
                 left: left instanceof XSprite ? left : new XSprite(left),
@@ -1158,9 +1187,9 @@ class XWalker extends XHitbox {
             }
         });
     }
-    walk(offset, renderer, filter = (hitbox) => true) {
+    walk(offset, renderer, filter = false) {
         const source = this.position.serialize();
-        const hitboxes = renderer.calculate(filter);
+        const hitboxes = filter ? renderer.calculate(typeof filter === 'function' ? filter : () => true) : [];
         for (const axis of XWalker.axes) {
             const distance = offset[axis];
             if (distance !== 0) {
@@ -1320,11 +1349,12 @@ const X = {
             return await new Promise(resolve => {
                 const request = Object.assign(new XMLHttpRequest(), { responseType: 'arraybuffer' });
                 request.addEventListener('load', () => {
-                    const image = Object.assign(document.createElement('img'), {
-                        src: URL.createObjectURL(new Blob([new Uint8Array(request.response)], { type: 'image/jpeg' }))
+                    const image = document.createElement('img');
+                    image.addEventListener('load', () => {
+                        X.cache.images[source] = image;
+                        resolve(image);
                     });
-                    X.cache.images[source] = image;
-                    resolve(image);
+                    image.src = URL.createObjectURL(new Blob([new Uint8Array(request.response)], { type: 'image/jpeg' }));
                 });
                 request.open('GET', source, true);
                 request.send();
