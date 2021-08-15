@@ -2,7 +2,7 @@
    "compilerOptions": {
       "lib": [ "ESNext", "DOM" ],
       "module": "ESNext",
-      "outDir": "./demo/assets/script",
+      "outDir": "./dist",
       "rootDir": "./src",
       "skipLibCheck": true,
       "sourceMap": true,
