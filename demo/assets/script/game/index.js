@@ -9,7 +9,8 @@ import { destinations, detector, rooms, spawns } from './rooms.js';
 //    GAME INIT                                                                               //
 //                                                                                            //
 ////////////////////////////////////////////////////////////////////////////////////////////////
-const game = X.game({
+const game = XGame.build({
+    auto: true,
     layers: {
         background: 'ambient',
         foreground: 'primary',

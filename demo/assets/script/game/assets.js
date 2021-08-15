@@ -115,8 +115,8 @@ function reverb(context, input, output, mix, seconds, ...points) {
     const channels = new Array(impulse.numberOfChannels).fill(0).map((x, index) => impulse.getChannelData(index));
     while (++index < size) {
         for (const channel of channels) {
-            channel[index] = (Math.random() * 2 - 1) * XNumber.bezier(index / size, ...points);
-            channel[index] = (Math.random() * 2 - 1) * XNumber.bezier(index / size, ...points);
+            channel[index] = (Math.random() * 2 - 1) * X.math.bezier(index / size, ...points);
+            channel[index] = (Math.random() * 2 - 1) * X.math.bezier(index / size, ...points);
         }
     }
     // nodes
