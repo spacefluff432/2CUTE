@@ -169,47 +169,6 @@ class XDialoguer extends XHost {
         }
     }
 }
-class XGame extends XHost {
-    constructor(player, renderer, rooms) {
-        super();
-        this.state = { room: void 0 };
-        this.player = player;
-        this.renderer = renderer;
-        this.rooms = rooms;
-    }
-    async room(value, fade = 0, unfade = fade) {
-        if (typeof this.state.room === 'string' && this.state.room in this.rooms) {
-            const room = this.rooms[this.state.room];
-            await this.renderer.alpha.modulate(fade, 0);
-            for (const key in room.layers) {
-                this.renderer.detach(key, ...room.layers[key]);
-            }
-        }
-        if (typeof value === 'string' && value in this.rooms) {
-            const room = this.rooms[value];
-            this.renderer.alpha.modulate(unfade, 1);
-            for (const key in room.layers) {
-                this.renderer.attach(key, ...this.rooms[value].layers[key]);
-            }
-            Object.assign(this.renderer.region[0], room.region[0]);
-            Object.assign(this.renderer.region[1], room.region[1]);
-        }
-        this.state.room = value;
-        this.fire('teleport', value);
-    }
-    static build({ alpha, auto, container, debug, framerate, layers, player, rooms, size } = {}) {
-        const instance = new XGame(player instanceof XWalker ? player : new XWalker(player), new XRenderer({ alpha, auto, container, debug, framerate, layers, size }).on('tick', {
-            priority: Infinity,
-            listener() {
-                Object.assign(instance.renderer.camera, instance.player.position.serialize());
-            }
-        }), Object.fromEntries(Object.entries(rooms || {}).map(([key, properties = {}]) => [
-            key,
-            properties instanceof XRoom ? properties : new XRoom(properties)
-        ])));
-        return instance;
-    }
-}
 class XItem {
     constructor({ drop = [], info = [], type = 'consumable', use = [], value = 0 } = {}) {
         this.drop = drop;
@@ -327,6 +286,89 @@ class XSave extends XHost {
         return new XSave(at, $default, df, hp, Object.fromEntries(Object.entries(items).map(([key, value]) => {
             return [key, value instanceof XItem ? value : new XItem(value)];
         })), key, lv);
+    }
+}
+class XWalker extends XHitbox {
+    constructor(properties = {}) {
+        super(properties);
+        this.objects = [];
+        (({ sprites: { down = void 0, left = void 0, right = void 0, up = void 0 } = {}, step = 1 } = {}) => {
+            this.sprites = {
+                down: down instanceof XSprite ? down : new XSprite(down),
+                left: left instanceof XSprite ? left : new XSprite(left),
+                right: right instanceof XSprite ? right : new XSprite(right),
+                up: up instanceof XSprite ? up : new XSprite(up)
+            };
+            this.step = step;
+        })(properties);
+    }
+    face(cardinal) {
+        const sprite = this.sprites[cardinal];
+        if (sprite) {
+            this.objects[0] = sprite;
+        }
+        else {
+            this.objects.shift();
+        }
+    }
+    serialize() {
+        return Object.assign(super.serialize(), {
+            sprites: {
+                down: this.sprites.down.serialize(),
+                left: this.sprites.left.serialize(),
+                right: this.sprites.right.serialize(),
+                up: this.sprites.up.serialize()
+            }
+        });
+    }
+    walk(offset, renderer, filter = false) {
+        const source = this.position.serialize();
+        const hitboxes = filter ? renderer.calculate(typeof filter === 'function' ? filter : () => true) : [];
+        for (const axis of ['x', 'y']) {
+            const distance = offset[axis];
+            if (distance !== 0) {
+                this.position[axis] += distance;
+                const hits = this.detect(renderer, ...hitboxes);
+                if (hits.length > 0) {
+                    const single = distance / Math.abs(distance) * this.step;
+                    while (this.position[axis] !== source[axis] && this.detect(renderer, ...hits).length > 0) {
+                        this.position[axis] -= single;
+                    }
+                }
+            }
+        }
+        if (this.position.x === source.x && this.position.y === source.y) {
+            if (offset.y > 0) {
+                this.face('down');
+            }
+            else if (offset.y < 0) {
+                this.face('up');
+            }
+            else if (offset.x < 0) {
+                this.face('left');
+            }
+            else if (offset.x > 0) {
+                this.face('right');
+            }
+            this.objects.length === 0 || this.objects[0].disable().reset();
+            return false;
+        }
+        else {
+            if (this.position.y > source.y) {
+                this.face('down');
+            }
+            else if (this.position.y < source.y) {
+                this.face('up');
+            }
+            else if (this.position.x < source.x) {
+                this.face('left');
+            }
+            else if (this.position.x > source.x) {
+                this.face('right');
+            }
+            this.objects.length === 0 || this.objects[0].enable();
+            return true;
+        }
     }
 }
 //# sourceMappingURL=undertale.js.map

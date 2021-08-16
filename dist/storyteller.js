@@ -15,10 +15,13 @@ Object.assign(AudioParam.prototype, {
         return XNumber.prototype.modulate.call(this, duration, ...points);
     }
 });
+/** An event host. The type parameter `A` defines which events this host should fire and listen for. */
 class XHost {
     constructor() {
+        /** This host's internal listener storage map. */
         this.events = {};
     }
+    /** Fires an event. */
     fire(name, ...data) {
         const list = this.events[name];
         if (list) {
@@ -28,6 +31,7 @@ class XHost {
             return [];
         }
     }
+    /** Removes an event listener from this host. */
     off(name, handler) {
         const list = this.events[name];
         if (list) {
@@ -63,15 +67,18 @@ class XHost {
             return this;
         }
     }
+    /** Accepts a provider function whose return value is then registered as a listener for a given event. */
     wrapOn(name, provider) {
         return this.on(name, provider(this));
     }
+    /** Accepts a provider function whose return value is then unregistered as a listener for a given event. */
     wrapOff(name, provider) {
         return this.off(name, provider(this));
     }
 }
+/** A rendered object. */
 class XObject extends XHost {
-    constructor({ alpha = 1, anchor: { x: anchor_x = -1, y: anchor_y = -1 } = {}, blend, fill = 'black', line: { cap = void 0, dash = void 0, join = void 0, miter = void 0, width = void 0 } = {}, metadata = {}, objects = [], parallax: { x: parallax_x = 0, y: parallax_y = 0 } = {}, position: { x: position_x = 0, y: position_y = 0 } = {}, priority = 0, rotation = 0, scale: { x: scale_x = 1, y: scale_y = 1 } = {}, shadow: { blur = void 0, color = void 0, offset: { x: shadow$offset_x = 0, y: shadow$offset_y = 0 } = {} } = {}, skew: { x: skew_x = 0, y: skew_y = 0 } = {}, stroke = 'white', text: { align = void 0, baseline = void 0, direction = void 0, font = void 0 } = {} } = {}) {
+    constructor({ alpha = 1, anchor: { x: anchor_x = -1, y: anchor_y = -1 } = {}, blend, fill = void 0, line: { cap = void 0, dash = void 0, join = void 0, miter = void 0, width = void 0 } = {}, metadata = {}, objects = [], parallax: { x: parallax_x = 0, y: parallax_y = 0 } = {}, position: { x: position_x = 0, y: position_y = 0 } = {}, priority = 0, rotation = 0, scale: { x: scale_x = 1, y: scale_y = 1 } = {}, shadow: { blur = void 0, color = void 0, offset: { x: shadow$offset_x = 0, y: shadow$offset_y = 0 } = {} } = {}, stroke = void 0, text: { align = void 0, baseline = void 0, direction = void 0, font = void 0 } = {} } = {}) {
         super();
         this.alpha = new XNumber(alpha);
         this.anchor = new XVector(anchor_x, anchor_y);
@@ -99,10 +106,14 @@ class XObject extends XHost {
                 y: shadow$offset_y === void 0 ? void 0 : new XNumber(shadow$offset_y)
             }
         };
-        this.skew = new XVector(skew_x, skew_y);
         this.stroke = stroke;
         this.text = { align, baseline, direction, font };
     }
+    /**
+     * If this object is a hitbox and matches the given filter, its vertices are calculated and it is added to the input
+     * list. The `calculate` method is then called on this object's children, and the process repeats until the entire
+     * object tree has been iterated over and filtered into the list. The list is then returned.
+     */
     calculate(filter, list, camera, transform) {
         const position = transform[0].add(this.position).add(this.parallax.multiply(camera));
         const rotation = transform[1].add(this.rotation);
@@ -140,6 +151,7 @@ class XObject extends XHost {
         return new XVector();
     }
     draw() { }
+    /** Renders this object to a context with the given camera position and transform values. */
     render(camera, context, transform, debug) {
         this.fire('tick');
         const state = {
@@ -192,7 +204,8 @@ class XObject extends XHost {
         this.draw(context, base);
         if (debug) {
             if (this instanceof XHitbox) {
-                context.strokeStyle = `hsla(${(Date.now() % 1000) * 0.36}, 100%, 50%, 0.5)`;
+                // rainbow hitboxes! :D
+                context.strokeStyle = `hsla(${(Date.now() % 1000) * 0.25}, 100%, 50%, 0.5)`;
                 try {
                     const vertices = this.vertices();
                     for (const [b1, b2] of [
@@ -227,6 +240,7 @@ class XObject extends XHost {
         context.translate(-position.x, -position.y);
         Object.assign(context, state);
     }
+    /** Serializes this object. */
     serialize() {
         return {
             alpha: this.alpha.value,
@@ -255,7 +269,6 @@ class XObject extends XHost {
                     y: this.shadow.offset.y === void 0 ? void 0 : this.shadow.offset.y.value
                 }
             },
-            skew: this.skew.serialize(),
             stroke: this.stroke,
             text: this.text && {
                 align: this.text.align,
@@ -266,25 +279,34 @@ class XObject extends XHost {
         };
     }
 }
+/**
+ * The XAtlas class defines a system in which several XNavigator objects are associated with each other. When two
+ * navigators share an atlas, those navigators can be traversed between.
+ */
 class XAtlas {
     constructor({ menu, navigators = {} } = {}) {
+        /** This navigator's state. Contains the currently open navigator. */
         this.state = { navigator: null };
         this.menu = menu;
         this.navigators = navigators;
     }
+    /** Attaches navigators to a specific layer on a renderer. */
     attach(renderer, layer, ...navigators) {
         for (const navigator of navigators) {
             navigator in this.navigators && this.navigators[navigator].attach(renderer, layer);
         }
     }
+    /** Detaches navigators from a specific layer on a renderer. */
     detach(renderer, layer, ...navigators) {
         for (const navigator of navigators) {
             navigator in this.navigators && this.navigators[navigator].detach(renderer, layer);
         }
     }
+    /** Returns the current navigator. */
     navigator() {
         return this.state.navigator ? this.navigators[this.state.navigator] : void 0;
     }
+    /** Alters the position of this atlas's current navigator, if any. */
     seek({ x = 0, y = 0 } = {}) {
         const navigator = this.navigator();
         if (navigator) {
@@ -311,6 +333,13 @@ class XAtlas {
             origin === navigator.selection() || navigator.fire('move', this);
         }
     }
+    /**
+     * This function accepts one of three values, those being `'menu'`, `'next'`, and `'prev'`. If `'menu'` is
+     * specified and this atlas's `menu` property is non-void, the atlas will switch to the navigator associated with the
+     * aforementioned `menu` property as long as no navigator is currently open. If `'next'` or `'prev'` is specified
+     * and this atlas has a navigator open, the respective `next` or `prev` property on said open navigator is resolved
+     * and the navigator associated with the resolved value is switched to, given it's associated with this atlas.
+    */
     navigate(action) {
         switch (action) {
             case 'menu':
@@ -328,6 +357,10 @@ class XAtlas {
                 }
         }
     }
+    /**
+     * Directly switch to a navigator associated with this atlas. If `null` is specified, the current navigator, if any,
+     * will be closed. If `void` is specified, then nothing will happen.
+     */
     switch(name) {
         if (name !== void 0) {
             let next = null;
@@ -346,14 +379,64 @@ class XAtlas {
         }
     }
 }
+/** A general-purpose game manager. */
+class XGame extends XHost {
+    constructor(player, renderer, rooms) {
+        super();
+        this.state = { room: void 0 };
+        this.player = player;
+        this.renderer = renderer;
+        this.rooms = rooms;
+    }
+    /**
+     * Switches to a room. Can optionally specify fade and unfade durations. If `fade` is specified while `unfade` is
+     * not, `unfade` will default to the value of `fade`. If both values are unspecified, they default to `0`.
+     */
+    async room(value, fade = 0, unfade = fade) {
+        if (typeof this.state.room === 'string' && this.state.room in this.rooms) {
+            const room = this.rooms[this.state.room];
+            await this.renderer.alpha.modulate(fade, 0);
+            for (const key in room.layers) {
+                this.renderer.detach(key, ...room.layers[key]);
+            }
+        }
+        if (typeof value === 'string' && value in this.rooms) {
+            const room = this.rooms[value];
+            this.renderer.alpha.modulate(unfade, 1);
+            for (const key in room.layers) {
+                this.renderer.attach(key, ...this.rooms[value].layers[key]);
+            }
+            Object.assign(this.renderer.region[0], room.region[0]);
+            Object.assign(this.renderer.region[1], room.region[1]);
+        }
+        this.state.room = value;
+        this.fire('teleport', value);
+    }
+    /** Initializes a new `XGame` object with the given properties. */
+    static build({ alpha, auto, container, debug, framerate, layers, player, rooms, size } = {}) {
+        const instance = new XGame(player instanceof XObject ? player : new XObject(player), new XRenderer({ alpha, auto, container, debug, framerate, layers, size }).on('tick', {
+            priority: Infinity,
+            listener() {
+                Object.assign(instance.renderer.camera, instance.player.position.serialize());
+            }
+        }), Object.fromEntries(Object.entries(rooms || {}).map(([key, properties = {}]) => [
+            key,
+            properties instanceof XRoom ? properties : new XRoom(properties)
+        ])));
+        return instance;
+    }
+}
+/** A hitbox object. Hitboxes have a defined size and a set of calculated vertices used for hit detection. */
 class XHitbox extends XObject {
     constructor(properties = {}) {
         super(properties);
+        /** This hitbox's state. Contains the current dimensions and computed vertices, if any. */
         this.state = { dimensions: void 0, vertices: [] };
         (({ size: { x: size_x = 0, y: size_y = 0 } = {} } = {}) => {
             this.size = new XVector(size_x, size_y);
         })(properties);
     }
+    /** Calculates the center of this hitbox's vertices. */
     center() {
         const vertices = this.vertices();
         return new XVector(vertices[0]).subtract(vertices[2]).divide(2).add(vertices[2]);
@@ -361,7 +444,10 @@ class XHitbox extends XObject {
     compute() {
         return this.size;
     }
-    // OBB collison algorithm - by harrix432 & bokke1010
+    /**
+     * Detects collision between this hitbox and others.
+     * @author bokke1010, harrix432
+     */
     detect(renderer, ...hitboxes) {
         renderer.calculate(hitbox => hitbox === this);
         const hits = [];
@@ -418,14 +504,20 @@ class XHitbox extends XObject {
         }
         return hits;
     }
+    /** Returns the total height of this hitbox's region. */
     height() {
         const bounds = this.region();
         return bounds[1].y - bounds[0].y;
     }
+    /** Calculates the distance from this hitbox's center to any given corner. */
     radius() {
         const vertices = this.vertices();
         return new XVector(vertices[0]).distance(vertices[2]) / 2;
     }
+    /**
+     * Calculates the minimum and maximum X and Y coordinates that this hitbox intersects with, effectively creating an
+     * axis-aligned superstructure around the entirety of this hitbox.
+     */
     region() {
         const vertices = this.vertices();
         const { x: x1, y: y1 } = vertices[0];
@@ -440,6 +532,7 @@ class XHitbox extends XObject {
     serialize() {
         return Object.assign(super.serialize(), { size: this.size.serialize() });
     }
+    /** Returns the vertices of this hitbox. */
     vertices() {
         if (this.state.dimensions === void 0) {
             throw 'This object\'s vertices have not yet been calculated!';
@@ -448,14 +541,20 @@ class XHitbox extends XObject {
             return this.state.vertices;
         }
     }
+    /** Returns the total width of this hitbox's region. */
     width() {
         const bounds = this.region();
         return bounds[1].x - bounds[0].x;
     }
 }
+/**
+ * Handles mouse and keyboard inputs. Mouse inputs are represented as numeric values, while keyboard inputs are
+ * represented by their key name in string form.
+ */
 class XInput extends XHost {
     constructor({ target = window, codes = [] } = {}) {
         super();
+        /** This input's state. Contains the currently active inputs. */
         this.state = { codes: new Set() };
         target.addEventListener('keyup', ({ key }) => {
             if (codes.includes(key) && this.state.codes.has(key)) {
@@ -482,10 +581,15 @@ class XInput extends XHost {
             }
         });
     }
+    /** Whether or not any of this input's valid codes are in an active state. */
     active() {
         return this.state.codes.size > 0;
     }
 }
+/**
+ * The XNavigator class defines a system in which a grid can specify available options to navigate through. This class
+ * doesn't do much without an associated atlas to control it.
+ */
 class XNavigator extends XHost {
     constructor({ flip = false, grid = [], next = '', objects = [], position: { x = 0, y = 0 } = {}, prev = '' } = {}) {
         super();
@@ -496,20 +600,25 @@ class XNavigator extends XHost {
         this.position = { x, y };
         this.prev = prev;
     }
+    /** Attaches this navigator's objects to a specific layer on the given renderer. */
     attach(renderer, layer) {
         renderer.attach(layer, ...this.objects);
     }
+    /** Detaches this navigator's objects from a specific layer on the given renderer. */
     detach(renderer, layer) {
         renderer.detach(layer, ...this.objects);
     }
+    /** Returns the value in this navigator's grid at its current position. */
     selection() {
         return ((typeof this.grid === 'function' ? this.grid(this) : this.grid)[this.position.x] || [])[this.position.y];
     }
 }
+/** An object representing a numeric value. */
 class XNumber {
     constructor(value = 0) {
         this.value = value;
     }
+    /** Adds another value to this object's value and returns a new `XNumber` object with said value. */
     add(value = 0) {
         if (typeof value === 'number') {
             return new XNumber(this.value + value);
@@ -518,15 +627,19 @@ class XNumber {
             return this.add(value.value);
         }
     }
+    /** Returns an `XNumber` object with the ceilinged value of this object's value. */
     ceil() {
         return new XNumber(Math.ceil(this.value));
     }
+    /** Clamps this object's value between two numbers and returns a new `XNumber` object with the result as its value. */
     clamp(min, max) {
         return new XNumber(Math.min(Math.max(this.value, min), max));
     }
+    /** Returns a new `XNumber` object with the same value as this object. */
     clone() {
         return new XNumber(this.value);
     }
+    /** Divides this object's value by another value and returns a new `XNumber` object with said value. */
     divide(value = 1) {
         if (typeof value === 'number') {
             return new XNumber(this.value / value);
@@ -535,9 +648,11 @@ class XNumber {
             return this.divide(value.value);
         }
     }
+    /** Returns an `XNumber` object with the floored value of this object's value. */
     floor() {
         return new XNumber(Math.floor(this.value));
     }
+    /** Alter the internal value of this numeric over a specified duration. */
     modulate(duration, ...points) {
         return new Promise(resolve => {
             let index = 0;
@@ -556,6 +671,7 @@ class XNumber {
             }, 20));
         });
     }
+    /** Multiplies this object's value by another value and returns a new `XNumber` object with said value. */
     multiply(value = 1) {
         if (typeof value === 'number') {
             return new XNumber(this.value * value);
@@ -564,9 +680,11 @@ class XNumber {
             return this.multiply(value.value);
         }
     }
+    /** Returns an `XNumber` object with the rounded value of this object's value. */
     round() {
         return Math.round(this.value);
     }
+    /** Subtracts another value from this object's value and returns a new `XNumber` object with said value. */
     subtract(value = 0) {
         if (typeof value === 'number') {
             return new XNumber(this.value - value);
@@ -576,6 +694,7 @@ class XNumber {
         }
     }
 }
+/** A rendered object specifically designed to trace a path on a canvas. */
 class XPath extends XObject {
     constructor(properties = {}) {
         super(properties);
@@ -598,9 +717,14 @@ class XPath extends XObject {
         return Object.assign(super.serialize(), { size: this.size.serialize(), tracer: this.tracer });
     }
 }
+/** An audio player based on the AudioContext API. */
 class XPlayer extends XHost {
     constructor({ buffer, rate = 1, router = (context, source) => source.connect(context.destination), volume = 1 } = {}) {
         super();
+        /**
+         * This player's state. Contains the base context, base gain node, placeholder rate node, and all currently active
+         * `AudioBufferSourceNode` instances that are currently active and/or awaiting closure.
+         */
         this.state = (() => {
             const context = new AudioContext();
             return {
@@ -618,9 +742,14 @@ class XPlayer extends XHost {
         this.state.gain.gain.value = volume;
         this.router(this.state.context, this.state.gain);
     }
+    /** Returns the audio source most recently initialized by this player. */
     source() {
         return this.state.sources[this.state.sources.length - 1];
     }
+    /**
+     * Initializes a new audio source and starts the audio from the beginning. If `stop` is specified as true, the
+     * `player.stop` method will be called before the new audio source is initialized.
+     */
     start(stop) {
         stop && this.stop();
         const source = Object.assign(this.state.context.createBufferSource(), { buffer: this.buffer });
@@ -632,6 +761,7 @@ class XPlayer extends XHost {
         this.fire('start');
         return source;
     }
+    /** Stops, de-activates, and flushes any currently active audio sources. */
     stop() {
         for (const source of this.state.sources.splice(0, this.state.sources.length)) {
             source.stop();
@@ -639,10 +769,12 @@ class XPlayer extends XHost {
         }
         this.fire('stop');
     }
+    /** Returns the current time of this player's associated audio context. */
     time() {
         return this.state.context.currentTime;
     }
 }
+/** A rendered object specifically designed to draw a rectangle on a canvas. */
 class XRectangle extends XObject {
     constructor(properties = {}) {
         super(properties);
@@ -661,9 +793,17 @@ class XRectangle extends XObject {
         return Object.assign(super.serialize(), { size: this.size.serialize() });
     }
 }
+/**
+ * The business end of the Storyteller engine, where objects are rendered to canvases and all is made right with the
+ * world. Jokes aside, this class is responsible for canvas and context management.
+ */
 class XRenderer extends XHost {
     constructor({ alpha = 1, auto = false, camera: { x: camera_x = -1, y: camera_y = -1 } = {}, container = document.body, debug = false, framerate = 30, layers = {}, region: [{ x: min_x = -Infinity, y: min_y = -Infinity } = {}, { x: max_x = Infinity, y: max_y = Infinity } = {}] = [], size: { x: size_x = 320, y: size_y = 240 } = {} } = {}) {
         super();
+        /**
+         * This renderer's state. Contains the last computed camera position, rendering interval timer handle, last known
+         * container height, last computed scale, and last known container width.
+         */
         this.state = { camera: { x: NaN, y: NaN }, handle: void 0, height: 0, scale: 1, width: 0 };
         Object.assign(container.style, {
             display: 'grid',
@@ -698,6 +838,7 @@ class XRenderer extends XHost {
         this.size = new XVector(size_x, size_y);
         auto && this.start();
     }
+    /** Attaches objects to a specific layer on this renderer. */
     attach(key, ...objects) {
         if (key in this.layers) {
             const layer = this.layers[key];
@@ -709,6 +850,10 @@ class XRenderer extends XHost {
             });
         }
     }
+    /**
+     * Calls the `calculate` method on all objects in this renderer with the given filter, and returns a list of all
+     * computed hitboxes.
+     */
     calculate(filter) {
         const list = [];
         for (const key in this.layers) {
@@ -718,6 +863,7 @@ class XRenderer extends XHost {
         }
         return list;
     }
+    /** Completely clears the given layer, detaching all of its objects. */
     clear(key) {
         if (key in this.layers) {
             const layer = this.layers[key];
@@ -725,6 +871,7 @@ class XRenderer extends XHost {
             layer.objects.splice(0, layer.objects.length);
         }
     }
+    /** Detaches objects from a specific layer on this renderer. */
     detach(key, ...objects) {
         if (key in this.layers) {
             const layer = this.layers[key];
@@ -740,16 +887,20 @@ class XRenderer extends XHost {
             });
         }
     }
+    /** Starts the rendering loop and stops any previously active loop if applicable. */
     start() {
         this.stop();
         this.state.handle = setInterval(() => this.render(), 1e3 / this.framerate);
     }
+    /** Stops the rendering loop if one is active. */
     stop() {
         typeof this.state.handle === 'number' && (this.state.handle = clearInterval(this.state.handle));
     }
+    /** Forces an update to all ambient rendering layers. */
     refresh() {
         this.state.camera = { x: NaN, y: NaN };
     }
+    /** Renders a single frame. */
     render() {
         this.fire('tick');
         let update = false;
@@ -795,6 +946,7 @@ class XRenderer extends XHost {
         }
     }
 }
+/** Used in the `XGame` class to assign a region to a renderer and delegate objects to its rendering layers. */
 class XRoom {
     constructor({ layers = {}, region: [{ x: min_x = -Infinity, y: min_y = -Infinity } = {}, { x: max_x = Infinity, y: max_y = Infinity } = {}] = [] } = {}) {
         this.layers = Object.fromEntries(Object.entries(layers).map(([key, objects = []]) => {
@@ -806,9 +958,14 @@ class XRoom {
         this.region = [{ x: min_x, y: min_y }, { x: max_x, y: max_y }];
     }
 }
+/** A rendered object specifically designed to draw an image or images on a canvas. */
 class XSprite extends XObject {
     constructor(properties = {}) {
         super(properties);
+        /**
+         * This sprite's state. Contains the index of the currently displayed frame, whether or not the sprite is active, and
+         * the current step value.
+         */
         this.state = { index: 0, active: false, step: 0 };
         (({ step = 0, steps = 1, textures = [] } = {}) => {
             this.step = step;
@@ -816,6 +973,7 @@ class XSprite extends XObject {
             this.textures = textures;
         })(properties);
     }
+    /** Computes the sprite's current texture. */
     compute() {
         const texture = this.textures[this.state.index];
         if (texture) {
@@ -825,6 +983,7 @@ class XSprite extends XObject {
             return new XVector(0, 0);
         }
     }
+    /** Disables the sprite's animation. */
     disable() {
         this.state.active = false;
         return this;
@@ -839,10 +998,12 @@ class XSprite extends XObject {
             }
         }
     }
+    /** Enables the sprite's animation. */
     enable() {
         this.state.active = true;
         return this;
     }
+    /** Resets the sprite's animation to its default state. */
     reset() {
         Object.assign(this.state, { active: false, index: 0, step: this.step });
         return this;
@@ -857,6 +1018,7 @@ class XSprite extends XObject {
         });
     }
 }
+/** A rendered object specifically designed to draw text on a canvas. */
 class XText extends XObject {
     constructor(properties = {}) {
         super(properties);
@@ -980,9 +1142,9 @@ class XText extends XObject {
         return Object.assign(super.serialize(), { content: this.content });
     }
 }
+/** An object representing a two-dimensional positional value. */
 class XVector {
     constructor(a1 = 0, y = a1) {
-        this.state = { modulator: void 0 };
         if (typeof a1 === 'number') {
             this.x = a1;
             this.y = y;
@@ -999,15 +1161,19 @@ class XVector {
             return this.add(a1.x, a1.y);
         }
     }
+    /** Clamps this object's position within a region and returns a new `XVector` object with the result as its position. */
     clamp(min, max) {
         return new XVector(new XNumber(this.x).clamp(min.x, max.x).value, new XNumber(this.y).clamp(min.y, max.y).value);
     }
+    /** Returns a new `XVector` object with the same position as this object. */
     clone() {
         return new XVector(this);
     }
+    /** Calculates the relative direction from this object's position and another position. */
     direction(vector) {
         return 180 / Math.PI * Math.atan2(this.y - vector.y, this.x - vector.x);
     }
+    /** Calculates the distance between this object's position and another position. */
     distance(vector) {
         return Math.sqrt(Math.pow(vector.x - this.x, 2) + Math.pow(vector.y - this.y, 2));
     }
@@ -1019,10 +1185,15 @@ class XVector {
             return this.divide(a1.x, a1.y);
         }
     }
+    /**
+     * Calculates the position in a specific direction and at a specific distance from this object's position and returns
+     * a new `XVector` object with the result as its position.
+     */
     endpoint(direction, distance) {
         const radians = ((direction + 90) % 360) * Math.PI / 180;
         return new XVector(this.x + distance * Math.sin(Math.PI - radians), this.y + distance * Math.cos(Math.PI - radians));
     }
+    /** Alter the internal value of this positional over a specified duration. */
     modulate(duration, ...points) {
         return new Promise(resolve => {
             let index = 0;
@@ -1052,6 +1223,7 @@ class XVector {
             return this.multiply(a1.x, a1.y);
         }
     }
+    /** Returns an `XVector` object with the rounded position of this object's position. */
     round(base) {
         return base ? this.multiply(base).round().divide(base) : new XVector(Math.round(this.x), Math.round(this.y));
     }
@@ -1067,91 +1239,19 @@ class XVector {
         }
     }
 }
-class XWalker extends XHitbox {
-    constructor(properties = {}) {
-        super(properties);
-        this.objects = [];
-        (({ sprites: { down = void 0, left = void 0, right = void 0, up = void 0 } = {}, step = 1 } = {}) => {
-            this.sprites = {
-                down: down instanceof XSprite ? down : new XSprite(down),
-                left: left instanceof XSprite ? left : new XSprite(left),
-                right: right instanceof XSprite ? right : new XSprite(right),
-                up: up instanceof XSprite ? up : new XSprite(up)
-            };
-            this.step = step;
-        })(properties);
-    }
-    face(cardinal) {
-        const sprite = this.sprites[cardinal];
-        if (sprite) {
-            this.objects[0] = sprite;
-        }
-        else {
-            this.objects.shift();
-        }
-    }
-    serialize() {
-        return Object.assign(super.serialize(), {
-            sprites: {
-                down: this.sprites.down.serialize(),
-                left: this.sprites.left.serialize(),
-                right: this.sprites.right.serialize(),
-                up: this.sprites.up.serialize()
-            }
-        });
-    }
-    walk(offset, renderer, filter = false) {
-        const source = this.position.serialize();
-        const hitboxes = filter ? renderer.calculate(typeof filter === 'function' ? filter : () => true) : [];
-        for (const axis of ['x', 'y']) {
-            const distance = offset[axis];
-            if (distance !== 0) {
-                this.position[axis] += distance;
-                const hits = this.detect(renderer, ...hitboxes);
-                if (hits.length > 0) {
-                    const single = distance / Math.abs(distance) * this.step;
-                    while (this.position[axis] !== source[axis] && this.detect(renderer, ...hits).length > 0) {
-                        this.position[axis] -= single;
-                    }
-                }
-            }
-        }
-        if (this.position.x === source.x && this.position.y === source.y) {
-            if (offset.y > 0) {
-                this.face('down');
-            }
-            else if (offset.y < 0) {
-                this.face('up');
-            }
-            else if (offset.x < 0) {
-                this.face('left');
-            }
-            else if (offset.x > 0) {
-                this.face('right');
-            }
-            this.objects.length === 0 || this.objects[0].disable().reset();
-            return false;
-        }
-        else {
-            if (this.position.y > source.y) {
-                this.face('down');
-            }
-            else if (this.position.y < source.y) {
-                this.face('up');
-            }
-            else if (this.position.x < source.x) {
-                this.face('left');
-            }
-            else if (this.position.x > source.x) {
-                this.face('right');
-            }
-            this.objects.length === 0 || this.objects[0].enable();
-            return true;
-        }
-    }
-}
 const X = {
-    async bitmap(source, transformer, { bottom = 0, left = 0, right = 0, top = 0 } = {}) {
+    /** Creates an `ImageBitmap` from a given source URL. */
+    async bitmap(
+    /** The source URL of the image. */
+    source, 
+    /** The image's color transformation function. */
+    transformer, 
+    /**
+     * The crop to apply to the image. If a value is positive, it will subtract from its associated edge. If a value
+     * is negative, it will cut all but its own size from the opposite edge that it's associated with. All values
+     * default to `0` if not specified.
+     */
+    { bottom = 0, left = 0, right = 0, top = 0 } = {}) {
         const image = await X.image(source);
         if (image.width === 0 || image.height === 0) {
             return await createImageBitmap(new ImageData(1, 1));
@@ -1183,6 +1283,7 @@ const X = {
             return await createImageBitmap(new ImageData(data, sw));
         }
     },
+    /** Gets an `AudioBuffer` from the given source URL. */
     buffer(source) {
         if (source in X.cache.buffers) {
             return X.cache.buffers[source];
@@ -1196,15 +1297,20 @@ const X = {
             }));
         }
     },
+    /** A cache for various types of resources. */
     cache: {
+        /** Stores promises for all `X.buffer()` requests. */
         buffers: {},
-        dimensions: {},
+        /** Stores promises for all `X.image()` requests. */
         images: {},
+        /** Stores all active modulation tasks for any `AudioParam`, `XNumber`, or `XVector` objects. */
         modulators: new Map()
     },
+    /** Sets the given canvas to the specified size and generates a new `CanvasRenderingContext2D` from it. */
     context(canvas, width = 1, height = 1) {
         return Object.assign(Object.assign(canvas, { width, height }).getContext('2d'), { imageSmoothingEnabled: false });
     },
+    /** Gets an `HTMLImageElement` from the given source URL. */
     image(source) {
         if (source in X.cache.images) {
             return X.cache.images[source];
@@ -1222,16 +1328,20 @@ const X = {
             }));
         }
     },
+    /** Various math-related methods used throughout the engine. */
     math: {
+        /** Calculates the value of a position on an polynomial bezier curve. */
         bezier(value, ...points) {
             return points.length > 1
                 ? X.math.bezier(value, ...points.slice(0, -1).map((point, index) => point * (1 - value) + points[index + 1] * value))
                 : points[0] || 0;
         },
+        /** Checks if two line segments intersect. */
         intersection(a1, a2, b1, b2) {
             return (X.math.rotation(a1, b1, b2) !== X.math.rotation(a2, b1, b2) &&
                 X.math.rotation(a1, a2, b1) !== X.math.rotation(a1, a2, b2));
         },
+        /** Rotates a line segment for optimized intersection checking. */
         rotation(a1, a2, a3) {
             return (a3.y - a1.y) * (a2.x - a1.x) > (a2.y - a1.y) * (a3.x - a1.x);
         }
@@ -1261,6 +1371,7 @@ const X = {
             }
         });
     },
+    /** Returns a promise that will resolve after the specified duration in milliseconds. */
     pause(duration = 0) {
         return new Promise(resolve => setTimeout(() => resolve(), duration));
     },
@@ -1277,6 +1388,7 @@ const X = {
             }
         });
     },
+    /** The inital transform used in rendering and vertex calculations. */
     transform: [new XVector(), new XNumber(), new XVector(1)]
 };
 //# sourceMappingURL=storyteller.js.map
