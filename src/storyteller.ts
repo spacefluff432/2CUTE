@@ -431,10 +431,10 @@ class XObject extends XHost<{ tick: [] }> {
    calculate (filter: (object: XHitbox) => boolean, list: XHitbox[], camera: X2, transform: XTransform) {
       const position = transform[0].add(this.position).add(this.parallax.multiply(camera));
       const rotation = transform[1].add(this.rotation);
-      const scale = transform[2]; // .multiply(this.scale);
+      const scale = transform[2].multiply(this.scale);
       if (this instanceof XHitbox && filter(this)) {
          list.push(this);
-         const size = this.size;
+         const size = this.size.multiply(scale);
          const half = size.divide(2);
          const base = position.subtract(half.add(half.multiply(this.anchor)));
          const dimensions = `${base.x}:${base.y}:${position.x}:${position.y}:${rotation.value}:${size.x}:${size.y}`;
@@ -521,46 +521,55 @@ class XObject extends XHost<{ tick: [] }> {
 
       context.translate(position.x, position.y);
       context.rotate(rads);
-      context.scale(scale.x, scale.y);
+      context.scale(this.scale.x, this.scale.y);
       context.translate(-position.x, -position.y);
 
       this.draw(context, base);
-
-      if (debug) {
-         if (this instanceof XHitbox) {
-            // rainbow hitboxes! :D
-            context.strokeStyle = `hsla(${(Date.now() % 1000) * 0.25}, 100%, 50%, 0.5)`;
-            try {
-               const vertices = this.vertices();
-               for (const [ b1, b2 ] of [
-                  [ vertices[0], vertices[1] ],
-                  [ vertices[1], vertices[2] ],
-                  [ vertices[2], vertices[3] ],
-                  [ vertices[3], vertices[0] ]
-               ]) {
-                  context.beginPath();
-                  context.moveTo(b1.x, b1.y);
-                  context.lineTo(b2.x, b2.y);
-                  context.stroke();
-                  context.closePath();
-               }
-            } catch (error) {
-               //
-            }
-         } else {
-            context.strokeStyle = `rgba(255, 255, 255, 0.25)`;
-            context.strokeRect(base.x, base.y, size.x, size.y);
-         }
-      }
 
       if (this.objects.length > 0) {
          for (const object of this.objects) object.render(camera, context, [ position, rotation, scale ], debug);
       }
 
+      if (debug) {
+         const previous = context.strokeStyle;
+         context.strokeStyle = '#fff8';
+         context.strokeRect(base.x, base.y, size.x, size.y);
+         context.strokeStyle = previous;
+      }
+
       context.translate(position.x, position.y);
+      context.scale(1 / this.scale.x, 1 / this.scale.y);
       context.rotate(-rads);
-      context.scale(1 / scale.x, 1 / scale.y);
       context.translate(-position.x, -position.y);
+
+      if (debug && this instanceof XHitbox) {
+         // rainbow hitboxes! :D
+         context.strokeStyle = `hsla(${(Date.now() % 1000) * 0.25}, 100%, 50%, 0.5)`;
+
+         context.save();
+         context.scale(1 / scale.x, 1 / scale.y);
+         context.rotate(-rotation.value);
+
+         try {
+            const vertices = this.vertices();
+            for (const [ b1, b2 ] of [
+               [ vertices[0], vertices[1] ],
+               [ vertices[1], vertices[2] ],
+               [ vertices[2], vertices[3] ],
+               [ vertices[3], vertices[0] ]
+            ]) {
+               context.beginPath();
+               context.moveTo(b1.x, b1.y);
+               context.lineTo(b2.x, b2.y);
+               context.stroke();
+               context.closePath();
+            }
+         } catch (error) {
+            //
+         }
+
+         context.restore();
+      }
 
       Object.assign(context, state);
    }
@@ -1115,7 +1124,7 @@ class XPath extends XObject {
 }
 
 /** An audio player based on the AudioContext API. */
-class XPlayer extends XHost<XKeyed<[], 'start' | 'stop'>> {
+class XPlayer {
    /** The buffer this player should use as a source. */
    buffer: AudioBuffer;
    /**
@@ -1131,7 +1140,7 @@ class XPlayer extends XHost<XKeyed<[], 'start' | 'stop'>> {
     * This player's state. Contains the base context, base gain node, placeholder rate node, and all currently active
     * `AudioBufferSourceNode` instances that are currently active and/or awaiting closure.
     */
-   protected state = (() => {
+   state = (() => {
       const context = new AudioContext();
       return {
          context,
@@ -1148,7 +1157,6 @@ class XPlayer extends XHost<XKeyed<[], 'start' | 'stop'>> {
          volume = 1
       }: XPlayerProperties = {}
    ) {
-      super();
       this.buffer = buffer || this.state.context.createBuffer(1, 1, 8000);
       this.rate = this.state.rate;
       this.router = router;
@@ -1173,7 +1181,6 @@ class XPlayer extends XHost<XKeyed<[], 'start' | 'stop'>> {
       this.rate = source.playbackRate;
       source.start();
       this.state.sources.push(source);
-      this.fire('start');
       return source;
    }
    /** Stops, de-activates, and flushes any currently active audio sources. */
@@ -1182,7 +1189,6 @@ class XPlayer extends XHost<XKeyed<[], 'start' | 'stop'>> {
          source.stop();
          source.disconnect(this.state.gain);
       }
-      this.fire('stop');
    }
    /** Returns the current time of this player's associated audio context. */
    time () {
