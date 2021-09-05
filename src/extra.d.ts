@@ -3,14 +3,14 @@ type XPrimitive<A> =
    A extends string | number | boolean | null | undefined
    ? A | void :
    // hard-coded conversions
-   A extends AudioBuffer
-   ? AudioBuffer | void:
+   A extends XAudio
+   ? XAudio | void:
    A extends AudioParam | XNumber
    ? number | void :
    A extends HTMLElement
    ? HTMLElement :
-   A extends (HTMLImageElement | ImageBitmap)[]
-   ? (HTMLImageElement | ImageBitmap)[] | void :
+   A extends XImage[]
+   ? XImage[] | void :
    A extends XObject[]
    ? (XObject | XObjectProperties)[] | void :
    A extends XSprite

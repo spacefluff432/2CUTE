@@ -1,31 +1,6 @@
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
-//                                                                                                      //
-//   ##    ##   ########   #######    ########   ########   ########   ########   ##         ########   //
-//   ##    ##   ##    ##   ##    ##   ##         ##     ##     ##      ##    ##   ##         ##         //
-//   ##    ##   ##    ##   ##    ##   ##         ##     ##     ##      ##    ##   ##         ##         //
-//   ##    ##   ##    ##   ##    ##   ######     ########      ##      ########   ##         ######     //
-//   ##    ##   ##    ##   ##    ##   ##         ##  ###       ##      ##    ##   ##         ##         //
-//   ##    ##   ##    ##   ##    ##   ##         ##   ###      ##      ##    ##   ##         ##         //
-//   ########   ##    ##   #######    ########   ##    ###     ##      ##    ##   ########   ########   //
-//                                                                                                      //
-///// imagine using unitale //////////////////////////////////////////////////////////////////////////////
+type UndertaleDialoguerProperties = XProperties<UndertaleDialoguer, 'interval'>;
 
-type XDialoguerProperties = XProperties<XDialoguer, 'interval'>;
-
-type XBattlerProperties<X extends string = any> = {
-   attack?: ((choice: X) => Promise<boolean | void>) | void;
-   choices: XKeyed<X[] | ((self: XBattler<X>) => Promise<void>), X>;
-   menu?: X[];
-};
-
-type XItemProperties = XProperties<XItem, 'type'> & {
-   drop?: XProvider<string[]>;
-   info?: XProvider<string[]>;
-   use?: XProvider<string[]>;
-   value?: XProvider<number>;
-};
-
-type XSaveData<A extends string = any> = {
+type UndertaleData<A extends string = any> = {
    armor: A;
    boxes: A[][];
    flags: XKeyed<string | number | boolean>;
@@ -39,71 +14,29 @@ type XSaveData<A extends string = any> = {
    weapon: A;
 };
 
-type XWalkerProperties = {
+type UndertaleEntityProperties = {
    [x in Exclude<keyof XDefined<XHitboxProperties>, 'objects'>]?: XDefined<XHitboxProperties>[x]
 } &
-   XProperties<XWalker, 'sprites' | 'step'>;
+   XProperties<UndertaleEntity, 'sprites' | 'step'>;
 
-class XBattler<X extends string> extends XHost<{ choice: [X] }> {
-   attack: ((choice: X) => Promise<boolean | void>);
-   choices: XKeyed<X[] | ((self: XBattler<X>) => Promise<void>), X>;
-   menu: X[];
-   state = { history: [] as X[] };
-   constructor ({ attack = async () => {}, choices, menu = [] }: XBattlerProperties<X>) {
-      super();
-      this.attack = attack;
-      this.choices = choices;
-      this.menu = menu;
-   }
-   choice () {
-      if (this.state.history.length > 0) {
-         return this.choices[this.state.history[this.state.history.length - 1]];
-      } else {
-         return this.menu;
-      }
-   }
-   list () {
-      const choice = this.choice();
-      if (choice && typeof choice === 'object') {
-         return choice as X[];
-      } else {
-         return [];
-      }
-   }
-   async loop () {
-      const choice = (await this.on('choice'))[0];
-      if (await this.attack(choice)) {
-         this.state.history.splice(0, this.state.history.length);
-         await this.loop();
-      }
-   }
-   next (index: number | string) {
-      const choice = this.choice();
-      if (choice && typeof choice === 'object') {
-         typeof index === 'string' && (index = choice.indexOf(index as any));
-         if (index > -1 && index < choice.length) {
-            const key = choice[index];
-            if (key in this.choices) {
-               this.state.history.push(key);
-               const choice = this.choices[key];
-               if (typeof choice === 'function') {
-                  choice(this).then(() => this.fire('choice', key));
-               }
-            }
-         }
-      }
-   }
-   prev () {
-      return typeof this.choice() === 'function' || (this.state.history.pop(), this.state.history.length === 0);
-   }
-}
+type UndertaleInteractiveEntityProperties = UndertaleEntityProperties &
+   XProperties<UndertaleInteractiveEntity, 'extent'>;
 
-class XDialoguer extends XHost<
+type UndertaleItem = {
+   drop?: XProvider<string[]> | void;
+   info?: XProvider<string[]> | void;
+   name?: XProvider<string> | void;
+   type?: 'armor' | 'consumable' | 'weapon' | void;
+   use?: XProvider<string[]> | void;
+   value?: XProvider<number> | void;
+};
+
+class UndertaleDialoguer extends XHost<
    XKeyed<[string], 'char' | 'code' | 'header' | 'text'> & XKeyed<[], 'empty' | 'idle' | 'read' | 'skip'>
 > {
    interval: XNumber;
    state = { mode: 'empty' as 'empty' | 'idle' | 'read' | 'skip', skip: true, text: [] as string[] };
-   constructor ({ interval = 1 }: XDialoguerProperties = {}) {
+   constructor ({ interval = 1 }: UndertaleDialoguerProperties = {}) {
       super();
       this.interval = new XNumber(interval);
    }
@@ -206,185 +139,16 @@ class XDialoguer extends XHost<
    }
 }
 
-class XItem {
-   drop: XProvider<string[]>;
-   info: XProvider<string[]>;
-   type: 'armor' | 'consumable' | 'weapon';
-   use: XProvider<string[]>;
-   value: XProvider<number>;
-   constructor ({ drop = [], info = [], type = 'consumable', use = [], value = 0 }: XItemProperties = {}) {
-      this.drop = drop;
-      this.info = info;
-      this.type = type;
-      this.use = use;
-      this.value = value;
-   }
-}
-
-class XSave<A extends string = any> extends XHost<{
-   activate: [XItem, 'use' | 'info' | 'drop', number];
-   damage: [number];
-}> {
-   at: (this: XSave<A>) => number;
-   data: XSaveData<A>;
-   default: (this: XSave<A>) => XSaveData<A>;
-   df: (this: XSave<A>) => number;
-   hp: (this: XSave<A>) => number;
-   items: XKeyed<XItem, A>;
-   key: string;
-   lv: (this: XSave<A>) => number;
-   constructor (
-      at: (this: XSave<A>) => number,
-      $default: (this: XSave<A>) => XSaveData<A>,
-      df: (this: XSave<A>) => number,
-      hp: (this: XSave<A>) => number,
-      items: XKeyed<XItem, A>,
-      key: string,
-      lv: (this: XSave<A>) => number
-   ) {
-      super();
-      this.at = at;
-      this.default = $default;
-      this.df = df;
-      this.hp = hp;
-      this.items = items;
-      this.key = key;
-      this.lv = lv;
-      this.data = this.load();
-   }
-   activate (index: number, action: 'use' | 'info' | 'drop') {
-      const name = this.data.items[index];
-      const item = this.items[name];
-      switch (action) {
-         case 'use':
-            switch (item.type) {
-               case 'armor':
-               case 'weapon':
-                  this.data.items[index] = this.data[item.type];
-                  this.data[item.type] = name;
-                  break;
-               case 'consumable':
-                  this.data.items.splice(index, 1);
-                  this.data.hp = Math.min(
-                     this.hp(),
-                     this.data.hp + (typeof item.value === 'function' ? item.value() : item.value)
-                  );
-                  break;
-            }
-            break;
-         case 'drop':
-            this.data.items.splice(index, 1);
-            break;
-      }
-      this.fire('activate', item, action, index);
-   }
-   atx () {
-      const item = this.items[this.data.weapon];
-      if (item) {
-         return typeof item.value === 'function' ? item.value() : item.value;
-      } else {
-         return 0;
-      }
-   }
-   // Undertale damage calculation formula - by Toby Fox
-   damage (amount: number) {
-      this.data.hp = Math.round(Math.max(0, this.data.hp - amount * (1 - (this.df() + this.dfx()) / 100)));
-   }
-   dfx () {
-      const item = this.items[this.data.armor];
-      if (item) {
-         return typeof item.value === 'function' ? item.value() : item.value;
-      } else {
-         return 0;
-      }
-   }
-   load () {
-      const data = localStorage.getItem(this.key);
-      if (data) {
-         return JSON.parse(data, (x, value) => {
-            if (typeof value === 'string') {
-               switch (value[0]) {
-                  case '~':
-                     return value.slice(1);
-                  case '-Infinity':
-                  case 'Infinity':
-                  case 'NaN':
-                     return eval(value);
-                  default:
-                     return void 0;
-               }
-            } else {
-               return value;
-            }
-         });
-      } else {
-         return this.default();
-      }
-   }
-   reset () {
-      localStorage.removeItem(this.key);
-   }
-   save () {
-      localStorage.setItem(
-         this.key,
-         JSON.stringify(this.data, (x, value) => {
-            if (typeof value === 'string') {
-               return `~${value}`;
-            } else {
-               switch (value) {
-                  case -Infinity:
-                     return '-Infinity';
-                  case Infinity:
-                     return 'Infinity';
-                  case NaN:
-                     return 'NaN';
-                  default:
-                     return value === void 0 ? '' : value;
-               }
-            }
-         })
-      );
-   }
-   static build<A extends string> ({
-      at = () => 0,
-      default: $default,
-      df = () => 0,
-      hp = () => 0,
-      key,
-      items = {} as XKeyed<XItem | XItemProperties, A>,
-      lv = () => 0
-   }: {
-      default: (this: XSave<A>) => XSaveData<A>;
-      items?: XKeyed<XItem | XItemProperties, A> | void;
-      key: string;
-   } & Partial<XKeyed<(this: XSave<A>) => number, 'at' | 'df' | 'hp' | 'lv'>>) {
-      return new XSave<A>(
-         at,
-         $default,
-         df,
-         hp,
-         Object.fromEntries(
-            Object.entries(items).map(([ key, value ]) => {
-               return [ key, value instanceof XItem ? value : new XItem(value as XItemProperties) ];
-            })
-         ) as XKeyed<XItem, A>,
-         key,
-         lv
-      );
-   }
-}
-
-class XWalker extends XHitbox {
-   objects: [] | [XSprite] = [];
+class UndertaleEntity extends XHitbox {
    sprites: XKeyed<XSprite, XCardinal>;
    step: number;
-   constructor (properties: XWalkerProperties = {}) {
+   constructor (properties: UndertaleEntityProperties = {}) {
       super(properties);
       ((
          {
             sprites: { down = void 0, left = void 0, right = void 0, up = void 0 } = {},
             step = 1
-         }: XWalkerProperties = {}
+         }: UndertaleEntityProperties = {}
       ) => {
          this.sprites = {
             down: down instanceof XSprite ? down : new XSprite(down),
@@ -403,18 +167,11 @@ class XWalker extends XHitbox {
          this.objects.shift();
       }
    }
-   serialize (): Exclude<XWalkerProperties, void> {
-      return Object.assign(super.serialize(), {
-         sprites: {
-            down: this.sprites.down.serialize(),
-            left: this.sprites.left.serialize(),
-            right: this.sprites.right.serialize(),
-            up: this.sprites.up.serialize()
-         }
-      });
+   facing (cardinal: XCardinal) {
+      return this.objects[0] === this.sprites[cardinal];
    }
    walk (offset: X2, renderer: XRenderer, filter: boolean | ((hitbox: XHitbox) => boolean) = false) {
-      const source = this.position.serialize();
+      const source = this.position.value();
       const hitboxes = filter ? renderer.calculate(typeof filter === 'function' ? filter : () => true) : [];
       for (const axis of [ 'x', 'y' ] as ['x', 'y']) {
          const distance = offset[axis];
@@ -430,29 +187,335 @@ class XWalker extends XHitbox {
          }
       }
       if (this.position.x === source.x && this.position.y === source.y) {
-         if (offset.y > 0) {
-            this.face('down');
-         } else if (offset.y < 0) {
+         if (offset.y < 0) {
             this.face('up');
+         } else if (offset.y > 0) {
+            this.face('down');
          } else if (offset.x < 0) {
             this.face('left');
          } else if (offset.x > 0) {
             this.face('right');
          }
-         this.objects.length === 0 || this.objects[0].disable().reset();
+         this.objects.length === 0 || (this.objects[0] as XSprite).disable().reset();
          return false;
       } else {
-         if (this.position.y > source.y) {
-            this.face('down');
-         } else if (this.position.y < source.y) {
+         if (this.position.y < source.y) {
             this.face('up');
+         } else if (this.position.y > source.y) {
+            this.face('down');
          } else if (this.position.x < source.x) {
             this.face('left');
          } else if (this.position.x > source.x) {
             this.face('right');
          }
-         this.objects.length === 0 || this.objects[0].enable();
+         this.objects.length === 0 || (this.objects[0] as XSprite).enable();
          return true;
       }
    }
 }
+
+class UndertaleInteractiveEntity extends UndertaleEntity {
+   extent: XVector;
+   constructor (properties: UndertaleInteractiveEntityProperties = {}) {
+      super(properties);
+      (({ extent: { x: extent_x = 0, y: extent_y = 0 } = {} }: UndertaleInteractiveEntityProperties = {}) => {
+         this.extent = new XVector(extent_x, extent_y);
+      })(properties);
+   }
+   face (cardinal: XCardinal) {
+      super.face(cardinal);
+      this.objects[1] = new XHitbox({
+         anchor: {
+            x: cardinal === 'left' ? 1 : cardinal === 'right' ? -1 : 0,
+            y: cardinal === 'up' ? 1 : cardinal === 'down' ? -1 : 0
+         },
+         size: {
+            x: cardinal === 'left' || cardinal === 'right' ? this.extent.y : this.extent.x,
+            y: cardinal === 'down' || cardinal === 'up' ? this.extent.y : this.extent.x
+         }
+      });
+   }
+}
+
+const Undertale = {
+   async game<A extends string, B extends A, C extends string, D extends C> ({
+      container,
+      debug,
+      framerate,
+      layers,
+      player,
+      region,
+      rooms,
+      shake,
+      size
+   }: {
+      [x in Exclude<keyof XDefined<XRendererProperties>, 'alpha' | 'auto' | 'camera' | 'layers'>]?: XDefined<
+         XRendererProperties
+      >[x]
+   } & {
+      layers: XKeyed<XRendererLayerMode, A>;
+      player?: XObject | void;
+      rooms: XKeyed<
+         {
+            assets?: XAsset[] | void;
+            layers?: Partial<XKeyed<XObject[], B>> | void;
+            neighbors?: D[] | void;
+            region?: XRegion | void;
+         },
+         C
+      >;
+   }) {
+      const renderer = new XRenderer({
+         alpha: 1,
+         auto: true,
+         container,
+         debug,
+         framerate,
+         layers,
+         region,
+         shake,
+         size
+      }).on('tick', {
+         priority: Infinity,
+         listener () {
+            state.player && Object.assign(renderer.camera, state.player.position.value());
+         }
+      });
+      const state = { player, room: null as D | null };
+      async function teleport (target: D | null, fade?: boolean) {
+         const prev = [] as XAsset[];
+         const zero = renderer.size.divide(2).value();
+         const source = state.room;
+         if (typeof source === 'string') {
+            const room = rooms[source];
+            await renderer.alpha.modulate(fade ? 300 : 0, 0);
+            for (const key in (room.layers || {}) as XKeyed<XObject[], B>) renderer.detach(key, ...room.layers![key]!);
+            for (const name of [ source, ...(room.neighbors || []) ]) {
+               for (const asset of rooms[name].assets || []) prev.includes(asset) || prev.push(asset);
+            }
+         }
+         if (typeof target === 'string') {
+            const room = rooms[target];
+            const queue = [] as Promise<void>[];
+            const region = room.region || [ zero, zero ];
+            Object.assign(renderer.region[0], region[0]);
+            Object.assign(renderer.region[1], region[1]);
+            for (const name of [ target, ...(room.neighbors || []) ]) {
+               for (const asset of rooms[name].assets || []) {
+                  if (prev.includes(asset)) {
+                     prev.splice(prev.indexOf(asset), 1);
+                  } else if (name === target) {
+                     queue.push(asset.load());
+                  } else {
+                     asset.load();
+                  }
+               }
+            }
+            await Promise.all(queue);
+            for (const key in (room.layers || {}) as XKeyed<XObject[], B>) renderer.attach(key, ...room.layers![key]!);
+            renderer.alpha.modulate(fade ? 300 : 0, 1);
+         } else {
+            Object.assign(renderer.region[0], zero);
+            Object.assign(renderer.region[1], zero);
+         }
+         for (const asset of prev) asset.unload();
+         state.room = target;
+      }
+      return { renderer, state, teleport };
+   },
+   levels: [
+      10,
+      30,
+      70,
+      120,
+      200,
+      300,
+      500,
+      800,
+      1200,
+      1700,
+      2500,
+      3500,
+      5000,
+      7000,
+      10000,
+      15000,
+      25000,
+      50000,
+      99999,
+      Infinity
+   ],
+   async manager<A extends string, B extends A> ({
+      default: $default,
+      items,
+      key
+   }: {
+      items: XKeyed<UndertaleItem, A>;
+      default: UndertaleData<string>;
+      key: string;
+   }) {
+      let data: UndertaleData<B>;
+      const template = Undertale.stringify($default);
+      function hp () {
+         const value = lv() * 4 + 16;
+         if (value > 92) {
+            return 99;
+         } else {
+            return value;
+         }
+      }
+      function load () {
+         data = Undertale.parse(localStorage.getItem(key) || template);
+      }
+      function lv () {
+         let lv = 1;
+         while (Undertale.levels[lv - 1] < data.xp) lv++;
+         return lv;
+      }
+      function save () {
+         localStorage.setItem(key, Undertale.stringify(data));
+      }
+      load();
+      return {
+         activate (index: number, action: 'use' | 'info' | 'drop') {
+            const name = data.items[index];
+            const item = items[name];
+            switch (action) {
+               case 'use':
+                  switch (item.type) {
+                     case 'armor':
+                     case 'weapon':
+                        data.items[index] = data[item.type];
+                        data[item.type] = name;
+                        break;
+                     case 'consumable':
+                        data.items.splice(index, 1);
+                        data.hp = Math.min(
+                           hp(),
+                           data.hp + (typeof item.value === 'function' ? item.value() : item.value || 0)
+                        );
+                        break;
+                  }
+                  break;
+               case 'drop':
+                  this.data.items.splice(index, 1);
+                  break;
+            }
+         },
+         get at () {
+            return lv() * 2 + 8;
+         },
+         get atx () {
+            const item = this.items[this.data.weapon];
+            if (item) {
+               return typeof item.value === 'function' ? item.value() : item.value || 0;
+            } else {
+               return 0;
+            }
+         },
+         get data () {
+            return data;
+         },
+         get df () {
+            return Math.ceil(lv() / 4) + 9;
+         },
+         get dfx () {
+            const item = this.items[this.data.armor];
+            if (item) {
+               return typeof item.value === 'function' ? item.value() : item.value || 0;
+            } else {
+               return 0;
+            }
+         },
+         get hp () {
+            return hp();
+         },
+         getFlag (name: string) {
+            return JSON.parse(localStorage.getItem(`${key}:flag:${name}`) || 'false') as XBasic;
+         },
+         items,
+         load,
+         get lv () {
+            return lv();
+         },
+         reset (trueReset = false) {
+            const next: UndertaleData<B> = Undertale.parse(template);
+            trueReset || (next.name = data.name);
+            data = next;
+            save();
+            if (trueReset) {
+               for (const name of new Array(localStorage.length).fill(0).map((x, index) => localStorage.key(index))) {
+                  if (name && !name.startsWith(`${key}:flag:$`)) {
+                     localStorage.removeItem(name);
+                  }
+               }
+            }
+         },
+         save,
+         setFlag (name: string, value: XBasic) {
+            localStorage.setItem(`${key}:flag:${name}`, JSON.stringify(value));
+         }
+      };
+   },
+   module<A, B extends any[]> (name: string, script: (...args: B) => Promise<A>) {
+      let promise: void | Promise<A>;
+      return (...args: B) => {
+         Undertale.status(`IMPORT MODULE: ${name}`, '#07f');
+         if (promise === void 0) {
+            promise = script(...args);
+            promise.then(() => {
+               Undertale.status(`MODULE INITIALIZED: ${name}`, '#0f0');
+            });
+            promise.catch(reason => {
+               Undertale.status(`MODULE ERROR: ${name}`, '#f00');
+               console.error(reason);
+            });
+         }
+         return promise;
+      };
+   },
+   parse (text: string) {
+      return JSON.parse(text, (x, value) => {
+         if (typeof value === 'string') {
+            switch (value[0]) {
+               case '~':
+                  return value.slice(1);
+               case '-Infinity':
+               case 'Infinity':
+               case 'NaN':
+                  return eval(value);
+               default:
+                  return void 0;
+            }
+         } else {
+            return value;
+         }
+      });
+   },
+   status (text: string, color = '#fff', size = '16px') {
+      console.log(
+         `%c${text}`,
+         `background:black;color:${color};font-family:Courier New;font-size:${size};padding:1em;`
+      );
+   },
+   stringify (data: UndertaleData) {
+      return JSON.stringify(data, (x, value) => {
+         if (typeof value === 'string') {
+            return `~${value}`;
+         } else {
+            switch (value) {
+               case -Infinity:
+                  return '-Infinity';
+               case Infinity:
+                  return 'Infinity';
+               case NaN:
+                  return 'NaN';
+               case void 0:
+                  return '';
+               default:
+                  return value;
+            }
+         }
+      });
+   }
+};
