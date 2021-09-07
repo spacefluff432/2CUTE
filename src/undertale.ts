@@ -238,7 +238,65 @@ class UndertaleInteractiveEntity extends UndertaleEntity {
 }
 
 const Undertale = {
-   async game<A extends string, B extends A, C extends string, D extends C> ({
+   battler<A extends string, B extends A> ({
+      attack,
+      choices,
+      root
+   }: {
+      attack: ((choice: B) => Promise<boolean>);
+      choices: XKeyed<B[] | (() => Promise<void>), A>;
+      root: B[];
+   }) {
+      const state = { history: [] as B[] };
+      const events = new XHost<{ player: [B]; opponent: [boolean] }>();
+      function selection () {
+         if (state.history.length > 0) {
+            return choices[state.history[state.history.length - 1]];
+         } else {
+            return root;
+         }
+      }
+      return {
+         list (): B[] {
+            const choice = selection();
+            if (choice && typeof choice === 'object') {
+               return choice;
+            } else {
+               return [];
+            }
+         },
+         next (index: number | string) {
+            const choice = selection();
+            if (choice && typeof choice === 'object') {
+               typeof index === 'string' && (index = choice.indexOf(index as any));
+               if (index > -1 && index < choice.length) {
+                  const key = choice[index];
+                  if (key in choices) {
+                     state.history.push(key);
+                     const choice = choices[key];
+                     if (typeof choice === 'function') {
+                        state.history.splice(0, state.history.length);
+                        choice().then(async () => {
+                           events.fire('player', key);
+                           events.fire('opponent', await attack(key));
+                        });
+                     }
+                  }
+               }
+            }
+         },
+         prev () {
+            if (typeof selection() === 'function') {
+               return false;
+            } else {
+               state.history.pop();
+               return state.history.length > 0;
+            }
+         },
+         state
+      };
+   },
+   game<A extends string, B extends A, C extends string, D extends C> ({
       container,
       debug,
       framerate,
@@ -282,46 +340,51 @@ const Undertale = {
          }
       });
       const state = { player, room: null as D | null };
-      async function teleport (target: D | null, fade?: boolean) {
-         const prev = [] as XAsset[];
-         const zero = renderer.size.divide(2).value();
-         const source = state.room;
-         if (typeof source === 'string') {
-            const room = rooms[source];
-            await renderer.alpha.modulate(fade ? 300 : 0, 0);
-            for (const key in (room.layers || {}) as XKeyed<XObject[], B>) renderer.detach(key, ...room.layers![key]!);
-            for (const name of [ source, ...(room.neighbors || []) ]) {
-               for (const asset of rooms[name].assets || []) prev.includes(asset) || prev.push(asset);
-            }
-         }
-         if (typeof target === 'string') {
-            const room = rooms[target];
-            const queue = [] as Promise<void>[];
-            const region = room.region || [ zero, zero ];
-            Object.assign(renderer.region[0], region[0]);
-            Object.assign(renderer.region[1], region[1]);
-            for (const name of [ target, ...(room.neighbors || []) ]) {
-               for (const asset of rooms[name].assets || []) {
-                  if (prev.includes(asset)) {
-                     prev.splice(prev.indexOf(asset), 1);
-                  } else if (name === target) {
-                     queue.push(asset.load());
-                  } else {
-                     asset.load();
-                  }
+      return {
+         renderer,
+         state,
+         async teleport (target: D | null, fade?: boolean) {
+            const prev = [] as XAsset[];
+            const zero = renderer.size.divide(2).value();
+            const source = state.room;
+            if (typeof source === 'string') {
+               const room = rooms[source];
+               await renderer.alpha.modulate(fade ? 300 : 0, 0);
+               for (const key in (room.layers || {}) as XKeyed<XObject[], B>)
+                  renderer.detach(key, ...room.layers![key]!);
+               for (const name of [ source, ...(room.neighbors || []) ]) {
+                  for (const asset of rooms[name].assets || []) prev.includes(asset) || prev.push(asset);
                }
             }
-            await Promise.all(queue);
-            for (const key in (room.layers || {}) as XKeyed<XObject[], B>) renderer.attach(key, ...room.layers![key]!);
-            renderer.alpha.modulate(fade ? 300 : 0, 1);
-         } else {
-            Object.assign(renderer.region[0], zero);
-            Object.assign(renderer.region[1], zero);
+            if (typeof target === 'string') {
+               const room = rooms[target];
+               const queue = [] as Promise<void>[];
+               const region = room.region || [ zero, zero ];
+               Object.assign(renderer.region[0], region[0]);
+               Object.assign(renderer.region[1], region[1]);
+               for (const name of [ target, ...(room.neighbors || []) ]) {
+                  for (const asset of rooms[name].assets || []) {
+                     if (prev.includes(asset)) {
+                        prev.splice(prev.indexOf(asset), 1);
+                     } else if (name === target) {
+                        queue.push(asset.load());
+                     } else {
+                        asset.load();
+                     }
+                  }
+               }
+               await Promise.all(queue);
+               for (const key in (room.layers || {}) as XKeyed<XObject[], B>)
+                  renderer.attach(key, ...room.layers![key]!);
+               renderer.alpha.modulate(fade ? 300 : 0, 1);
+            } else {
+               Object.assign(renderer.region[0], zero);
+               Object.assign(renderer.region[1], zero);
+            }
+            for (const asset of prev) asset.unload();
+            state.room = target;
          }
-         for (const asset of prev) asset.unload();
-         state.room = target;
-      }
-      return { renderer, state, teleport };
+      };
    },
    levels: [
       10,

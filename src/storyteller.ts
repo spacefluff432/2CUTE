@@ -585,7 +585,9 @@ class XObject extends XHost<{ tick: [] }> {
 
          context.save();
          context.scale(1 / scale.x, 1 / scale.y);
-         context.rotate(-rotation.value);
+         const { a, e, f } = context.getTransform();
+         context.resetTransform();
+         context.setTransform(a, 0, 0, a, e, f);
 
          try {
             const vertices = this.vertices();
@@ -1223,6 +1225,10 @@ class XRenderer extends XHost<{ tick: [] }> {
             }
          }
       }
+   }
+   /** Gets the actual on-screen position of a position in the scene. */
+   resolve (position: X2) {
+      return this.size.divide(2).subtract(this.camera.clamp(...this.region)).add(position);
    }
    /** Starts the rendering loop and stops any previously active loop if applicable. */
    start () {
