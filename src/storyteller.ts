@@ -15,12 +15,6 @@ interface AudioParam {
    modulate(duration: number, ...points: number[]): Promise<void>;
 }
 
-Object.assign(AudioParam.prototype, {
-   modulate (duration: number, ...points: number[]) {
-      return XNumber.prototype.modulate.call(this, duration, ...points);
-   }
-});
-
 /** A two-dimensional position. */
 type X2 = {
    /** The X value of the position. */
@@ -41,70 +35,6 @@ type XCardinal = 'down' | 'left' | 'right' | 'up';
 /** An array of four values, specifying the RED, GREEN, BLUE, and ALPHA values of a color in that order. */
 type XColor = [number, number, number, number];
 
-/** Excludes nullish values from the given type. */
-type XDefined<A> = Exclude<A, null | undefined | void>;
-
-/** The raw properties of an XHitbox object. */
-type XHitboxProperties = XObjectProperties & XProperties<XHitbox, 'size'>;
-
-/** An image asset. */
-type XImage = XAsset<HTMLImageElement | ImageBitmap>;
-
-/** The raw properties of an XInput object. */
-type XInputProperties = { target?: HTMLElement; codes?: (string | number)[] };
-
-/** Specifies an object whose values are of the given type. Can also specify the type of the object's keys. */
-type XKeyed<A = any, B extends string = any> = { [x in B]: A };
-
-/** An event handler. Can either be a listener (uses `0` as its priority) or a listener and a custom priority value. */
-type XHandler<A extends any[] = any> = ((...data: A) => any) | { listener: ((...data: A) => any); priority: number };
-
-/** A valid XNavigator key. A string type refers to a navigator, a null type refers to no navigator, and a void type refers to the current navigator. */
-type XNavigatorKey = string | null | undefined | void;
-
-/** Transforms a subset of class properties into a raw and flexible input format. */
-type XProperties<A extends XKeyed, B extends keyof A> = XPrimitive<{ [x in B]: A[x] }>;
-
-/** Expands a type to include both itself and a "provider function" which returns itself. Can also specify which arguments this "provider function" accepts. */
-type XProvider<X, Y extends any[] = []> = X | ((...args: Y) => X);
-
-/** A two-dimensional region, constrained by a minimum and maximum position. */
-type XRegion = [X2, X2];
-
-/** The raw properties of an XRectangle object. */
-type XRectangleProperties = XObjectProperties & XProperties<XRectangle, 'size'>;
-
-/** The type of an XRenderer's layer. */
-type XRendererLayerMode = 'ambient' | 'primary' | 'static';
-
-/** A function ideally used to route audio from the given source node to the given context's destination. */
-type XRouter = (context: AudioContext, input: GainNode) => void;
-
-/** The raw properties of an XSprite object. */
-type XSpriteProperties = XObjectProperties & XProperties<XSprite, 'step' | 'steps' | 'frames'>;
-
-/** The raw properties of an XText object. */
-type XTextProperties = XObjectProperties & XProperties<XText, 'content' | 'spacing'>;
-
-/** The raw properties of an XTile object. */
-type XTileProperties = XSpriteProperties & XProperties<XTile, 'offset' | 'size'>;
-
-/** A function ideally used to trace a path on a canvas. */
-type XTracer = (context: CanvasRenderingContext2D, x: number, y: number) => void;
-
-/** An array of three values, specifying the POSITION, ROTATION, and SCALE of a canvas transform in that order. */
-type XTransform = [XVector, XNumber, XVector];
-
-/** The raw properties of an XNavigator object. */
-type XNavigatorProperties = XProperties<XNavigator, 'objects' | 'position'> &
-   { [x in 'flip' | 'grid' | 'next' | 'prev']?: XNavigator[x] | void };
-
-/** The raw properties of an XAtlas object. */
-type XAtlasProperties = XProperties<XAtlas, 'menu'> & {
-   /** The navigators associated with this atlas. */
-   navigators?: XKeyed<XNavigator> | void;
-};
-
 /** An audio daemon, supplier of audio instances. */
 type XDaemon = {
    /** The audio source to use. */
@@ -124,6 +54,114 @@ type XDaemon = {
    rate: number;
    /** The audio router to use for this object. */
    router: XRouter;
+};
+
+/** Excludes nullish values from the given type. */
+type XDefined<A> = Exclude<A, null | undefined | void>;
+
+/** The raw properties of an XHitbox object. */
+type XHitboxProperties = XObjectProperties & XProperties<XHitbox, 'size'>;
+
+/** An image asset. */
+type XImage = XAsset<HTMLImageElement | ImageBitmap>;
+
+/** The raw properties of an XInput object. */
+type XInputProperties = { target?: HTMLElement; codes?: (string | number)[] };
+
+/** An audio instance. */
+type XInstance = {
+   /** The context used by this instance. */
+   context: AudioContext;
+   /** The daemon which generated this instance. */
+   daemon: XDaemon;
+   /** The loop parameter of this instance. */
+   loop: boolean;
+   /** The gain parameter of this instance. */
+   gain: AudioParam;
+   /** The rate parameter of this instance. */
+   rate: AudioParam;
+   /** Stops the instance's audio and throws away the buffer. */
+   stop(): void;
+};
+
+/** Specifies an object whose values are of the given type. Can also specify the type of the object's keys. */
+type XKeyed<A = any, B extends string = any> = { [x in B]: A };
+
+/** An event handler. Can either be a listener (uses `0` as its priority) or a listener and a custom priority value. */
+type XHandler<A extends any[] = any> = ((...data: A) => any) | { listener: (...data: A) => any; priority: number };
+
+/** A valid XNavigator key. A string type refers to a navigator, a null type refers to no navigator, and a void type refers to the current navigator. */
+type XNavigatorKey = string | null | undefined | void;
+
+/** Extracts a "primitive" clone of the given type. */
+type XPrimitive<A> =
+   // actual primitives
+   A extends string | number | boolean | null | undefined
+      ? A | void
+      : A extends XAudio
+      ? XAudio | void
+      : A extends AudioParam | XNumber
+      ? number | void
+      : A extends HTMLElement
+      ? HTMLElement
+      : A extends XImage[]
+      ? XImage[] | void
+      : A extends XObject[]
+      ? (XObject | XObjectProperties)[] | void
+      : A extends XSprite
+      ? XSprite | XSpriteProperties | void
+      : A extends XVector
+      ? { x?: number | void; y?: number | void } | void
+      : A extends Map<infer B, infer C>
+      ? XPrimitive<{ [x in B & string]?: C }> | void
+      : A extends (infer B)[] | Set<infer B>
+      ? XPrimitive<B>[] | void
+      : A extends XKeyed
+      ? Partial<{ [x in keyof A]?: XPrimitive<A[x]> }> | void
+      : never;
+
+/** Transforms a subset of class properties into a raw and flexible input format. */
+type XProperties<A extends XKeyed, B extends keyof A> = XPrimitive<{ [x in B]: A[x] }>;
+
+/** Expands a type to include both itself and a "provider function" which returns itself. Can also specify which arguments this "provider function" accepts. */
+type XProvider<A, B extends any[] = []> = A | ((...args: B) => A);
+
+/** A two-dimensional region, constrained by a minimum and maximum position. */
+type XRegion = [X2, X2];
+
+/** The raw properties of an XRectangle object. */
+type XRectangleProperties = XObjectProperties & XProperties<XRectangle, 'size'>;
+
+/** The type of an XRenderer's layer. */
+type XRendererLayerModifier = 'ambient' | 'cumulative' | 'static';
+
+/** A function ideally used to route audio from the given source node to the given context's destination. */
+type XRouter = (context: AudioContext, input: GainNode) => void;
+
+/** The raw properties of an XSprite object. */
+type XSpriteProperties = XObjectProperties & XProperties<XSprite, 'crop' | 'frames' | 'step' | 'steps'>;
+
+/** The raw properties of an XText object. */
+type XTextProperties = XObjectProperties & XProperties<XText, 'charset' | 'content' | 'spacing'>;
+
+/** The raw properties of an XTile object. */
+type XTileProperties = XSpriteProperties & XProperties<XTile, 'offset' | 'size'>;
+
+/** A function ideally used to trace a path on a canvas. */
+type XTracer = (context: CanvasRenderingContext2D, x: number, y: number) => void;
+
+/** An array of three values, specifying the POSITION, ROTATION, and SCALE of a canvas transform in that order. */
+type XTransform = [XVector, XNumber, XVector];
+
+/** The raw properties of an XAtlas object. */
+type XAtlasProperties = XProperties<XAtlas, 'menu'> & {
+   /** The navigators associated with this atlas. */
+   navigators?: XKeyed<XNavigator> | void;
+};
+
+/** The raw properties of an XNavigator object. */
+type XNavigatorProperties = XProperties<XNavigator, 'objects' | 'position'> & {
+   [x in 'flip' | 'grid' | 'next' | 'prev']?: XNavigator[x] | void;
 };
 
 /** The raw properties of an XObject object. XObject object? Golly, that's not confusing at all! */
@@ -153,22 +191,6 @@ type XPathProperties = XObjectProperties &
       tracer?: XTracer | void;
    };
 
-/** An audio instance. */
-type XInstance = {
-   /** The context used by this instance. */
-   context: AudioContext;
-   /** The daemon which generated this instance. */
-   daemon: XDaemon;
-   /** The loop parameter of this instance. */
-   loop: boolean;
-   /** The gain parameter of this instance. */
-   gain: AudioParam;
-   /** The rate parameter of this instance. */
-   rate: AudioParam;
-   /** Stops the instance's audio and throws away the buffer. */
-   stop(): void;
-};
-
 /** The raw properties of an XRenderer object. */
 type XRendererProperties = XProperties<
    XRenderer,
@@ -177,7 +199,7 @@ type XRendererProperties = XProperties<
    /** Whether or not this renderer should be automatically started upon construction. */
    auto?: boolean | void;
    /** The layers associated with this renderer. */
-   layers?: XKeyed<XRendererLayerMode> | void;
+   layers?: XKeyed<XRendererLayerModifier[]> | void;
 };
 
 /** An event host. The type parameter `A` defines which events this host should fire and listen for. */
@@ -205,11 +227,11 @@ class XHost<A extends XKeyed<any[]> = {}> {
       return this;
    }
    /** Listens for an event and returns a promise that will resolve when the event is next fired. */
-   on<B extends keyof A> (name: B): Promise<A[B]>;
+   on<B extends keyof A>(name: B): Promise<A[B]>;
    /** Listens for an event at a given priority and returns a promise that will resolve when the event is next fired. */
-   on<B extends keyof A> (name: B, priority: number): Promise<A[B]>;
+   on<B extends keyof A>(name: B, priority: number): Promise<A[B]>;
    /** Listens for an event and calls the given listener whenever the event is fired. */
-   on<B extends keyof A> (name: B, listener: XHandler<A[B]>): this;
+   on<B extends keyof A>(name: B, listener: XHandler<A[B]>): this;
    on<B extends keyof A> (name: B, a2: number | XHandler<A[B]> = 0) {
       if (typeof a2 === 'number') {
          return new Promise(resolve => {
@@ -258,17 +280,17 @@ class XObject extends XHost<{ tick: [] }> {
     * // if unspecified, an anchor of (-1, -1) is used by default.
     * // this anchor value will result in the object's dimensions extending down and to the right from its base position.
     * new XObject({});
-    * 
+    *
     * // an anchor of (0, 0) will center the object's dimensions around its base position.
     * new XObject({ anchor: { x: 0, y: 0 } });
-    * 
+    *
     * // an anchor of (1, 1) will result in the object's dimensions extending up and to the left from its base position.
     * new XObject({ anchor: { x: 1, y: 1 } });
-    * 
+    *
     * // the X and Y of an anchor can be independently controlled.
     * // in the following example, the object will be top-aligned and horizontally centered.
     * new XObject({ anchor: { x 0, y: -1 } })
-    * 
+    *
     * // the X and Y of an anchor can also extend beyond 1 and -1, if necessary.
     * // in the following example, the object will be placed a fair distance down and to the left from it's base position.
     * new XObject({ anchor: { x: -5, y: -5 } });
@@ -407,29 +429,23 @@ class XObject extends XHost<{ tick: [] }> {
        */
       font?: string | void;
    };
-   constructor (
-      {
-         alpha = 1,
-         anchor: { x: anchor_x = -1, y: anchor_y = -1 } = {},
-         blend,
-         fill = void 0,
-         line: { cap = void 0, dash = void 0, join = void 0, miter = void 0, width = void 0 } = {},
-         metadata = {},
-         objects = [],
-         parallax: { x: parallax_x = 0, y: parallax_y = 0 } = {},
-         position: { x: position_x = 0, y: position_y = 0 } = {},
-         priority = 0,
-         rotation = 0,
-         scale: { x: scale_x = 1, y: scale_y = 1 } = {},
-         shadow: {
-            blur = void 0,
-            color = void 0,
-            offset: { x: shadow$offset_x = 0, y: shadow$offset_y = 0 } = {}
-         } = {},
-         stroke = void 0,
-         text: { align = void 0, baseline = void 0, direction = void 0, font = void 0 } = {}
-      }: XObjectProperties = {}
-   ) {
+   constructor ({
+      alpha = 1,
+      anchor: { x: anchor_x = -1, y: anchor_y = -1 } = {},
+      blend,
+      fill = void 0,
+      line: { cap = void 0, dash = void 0, join = void 0, miter = void 0, width = void 0 } = {},
+      metadata = {},
+      objects = [],
+      parallax: { x: parallax_x = 0, y: parallax_y = 0 } = {},
+      position: { x: position_x = 0, y: position_y = 0 } = {},
+      priority = 0,
+      rotation = 0,
+      scale: { x: scale_x = 1, y: scale_y = 1 } = {},
+      shadow: { blur = void 0, color = void 0, offset: { x: shadow$offset_x = 0, y: shadow$offset_y = 0 } = {} } = {},
+      stroke = void 0,
+      text: { align = void 0, baseline = void 0, direction = void 0, font = void 0 } = {}
+   }: XObjectProperties = {}) {
       super();
       this.alpha = new XNumber(alpha);
       this.anchor = new XVector(anchor_x, anchor_y);
@@ -465,11 +481,11 @@ class XObject extends XHost<{ tick: [] }> {
     * list. The `calculate` method is then called on this object's children, and the process repeats until the entire
     * object tree has been iterated over and filtered into the list. The list is then returned.
     */
-   calculate (filter: (object: XHitbox) => boolean, list: XHitbox[], camera: X2, transform: XTransform) {
+   calculate (filter: XProvider<boolean, [XHitbox]>, list: XHitbox[], camera: X2, transform: XTransform) {
       const position = transform[0].add(this.position).add(this.parallax.multiply(camera));
       const rotation = transform[1].add(this.rotation);
       const scale = transform[2].multiply(this.scale);
-      if (this instanceof XHitbox && filter(this)) {
+      if (this instanceof XHitbox && (typeof filter === 'function' ? filter(this) : filter)) {
          list.push(this);
          const size = this.size.multiply(scale);
          const half = size.divide(2);
@@ -498,12 +514,12 @@ class XObject extends XHost<{ tick: [] }> {
       for (const object of this.objects) object.calculate(filter, list, camera, [ position, rotation, scale ]);
    }
    /** Computes this object's size based on itself and the given canvas context. */
-   compute (context: CanvasRenderingContext2D): XVector;
+   compute(context: CanvasRenderingContext2D): XVector;
    compute () {
       return new XVector();
    }
    /** Draws this object to the given canvas context. */
-   draw (context: CanvasRenderingContext2D, base: XVector): void;
+   draw(context: CanvasRenderingContext2D, base: XVector): void;
    draw () {}
    /** Renders this object to a context with the given camera position and transform values. */
    render (camera: X2, context: CanvasRenderingContext2D, transform: XTransform, debug: boolean) {
@@ -554,7 +570,7 @@ class XObject extends XHost<{ tick: [] }> {
       const size = this.compute(context);
       const half = size.divide(2);
       const base = position.subtract(half.add(half.multiply(this.anchor)));
-      const rads = Math.PI / 180 * this.rotation.value;
+      const rads = (Math.PI / 180) * this.rotation.value;
 
       context.translate(position.x, position.y);
       context.rotate(rads);
@@ -584,10 +600,7 @@ class XObject extends XHost<{ tick: [] }> {
          context.strokeStyle = `hsla(${(Date.now() % 1000) * 0.25}, 100%, 50%, 0.5)`;
 
          context.save();
-         context.scale(1 / scale.x, 1 / scale.y);
-         const { a, e, f } = context.getTransform();
          context.resetTransform();
-         context.setTransform(a, 0, 0, a, e, f);
 
          try {
             const vertices = this.vertices();
@@ -618,6 +631,8 @@ class XObject extends XHost<{ tick: [] }> {
 class XAsset<A = any> extends XHost<{ load: []; unload: [] }> {
    /** The asset's loading function. */
    loader: () => Promise<A>;
+   /** The asset's source URL. */
+   source: string;
    state = { value: void 0 as A | void };
    /** The asset's unloading function. */
    unloader: () => Promise<void>;
@@ -625,14 +640,23 @@ class XAsset<A = any> extends XHost<{ load: []; unload: [] }> {
    get value () {
       const value = this.state.value;
       if (value === void 0) {
-         throw 'This asset is not currently loaded!';
+         throw `The asset of "${this.source}" is not currently loaded!`;
       } else {
          return value;
       }
    }
-   constructor ({ loader, unloader }: { loader: () => Promise<A>; unloader: () => Promise<void> }) {
+   constructor ({
+      loader,
+      source,
+      unloader
+   }: {
+      loader: () => Promise<A>;
+      source: string;
+      unloader: () => Promise<void>;
+   }) {
       super();
       this.loader = loader;
+      this.source = source;
       this.unloader = unloader;
    }
    /** Loads the asset. */
@@ -859,7 +883,7 @@ class XHitbox extends XObject {
    /** Returns the vertices of this hitbox. */
    vertices () {
       if (this.state.dimensions === void 0) {
-         throw 'This object\'s vertices are unresolved!';
+         throw "This object's vertices are unresolved!";
       } else {
          return this.state.vertices as [X2, X2, X2, X2];
       }
@@ -924,16 +948,14 @@ class XNavigator extends XHost<
    objects: XObject[];
    position: X2;
    prev: XProvider<XNavigatorKey, [XNavigator, XAtlas]>;
-   constructor (
-      {
-         flip = false,
-         grid = [],
-         next = '',
-         objects = [],
-         position: { x = 0, y = 0 } = {},
-         prev = ''
-      }: XNavigatorProperties = {}
-   ) {
+   constructor ({
+      flip = false,
+      grid = [],
+      next = '',
+      objects = [],
+      position: { x = 0, y = 0 } = {},
+      prev = ''
+   }: XNavigatorProperties = {}) {
       super();
       this.flip = flip;
       this.grid = grid;
@@ -959,8 +981,8 @@ class XNavigator extends XHost<
 /** An object representing a numeric value. */
 class XNumber {
    value: number;
-   constructor ();
-   constructor (value: number);
+   constructor();
+   constructor(value: number);
    constructor (value = 0) {
       this.value = value;
    }
@@ -1002,16 +1024,19 @@ class XNumber {
          let index = 0;
          const value = this.value;
          clearInterval(X.cache.modulationTasks.get(this));
-         X.cache.modulationTasks.set(this, setInterval(() => {
-            if (index < duration) {
-               this.value = X.math.bezier(index / duration, value, ...points);
-               index += 20;
-            } else {
-               this.value = X.math.bezier(1, value, ...points);
-               clearInterval(X.cache.modulationTasks.get(this));
-               resolve();
-            }
-         }, 20) as any);
+         X.cache.modulationTasks.set(
+            this,
+            setInterval(() => {
+               if (index < duration) {
+                  this.value = X.math.bezier(index / duration, value, ...points);
+                  index += 20;
+               } else {
+                  this.value = X.math.bezier(1, value, ...points);
+                  clearInterval(X.cache.modulationTasks.get(this));
+                  resolve();
+               }
+            }, 20) as any
+         );
       });
    }
    /** Multiplies this object's value by another value and returns a new `XNumber` object with said value. */
@@ -1104,8 +1129,8 @@ class XRenderer extends XHost<{ tick: [] }> {
        * element is resized.
        */
       context: CanvasRenderingContext2D;
-      /** The rendering mode for this layer. */
-      mode: XRendererLayerMode;
+      /** The rendering modifiers for this layer. */
+      modifiers: XRendererLayerModifier[];
       /** All objects currently being rendered onto this layer. */
       objects: XObject[];
    }>;
@@ -1127,23 +1152,21 @@ class XRenderer extends XHost<{ tick: [] }> {
     * container height, last computed scale, and last known container width.
     */
    state = { camera: { x: NaN, y: NaN }, handle: void 0 as number | void, height: 0, scale: 1, width: 0 };
-   constructor (
-      {
-         alpha = 1,
-         auto = false,
-         camera: { x: camera_x = -1, y: camera_y = -1 } = {},
-         container = document.body,
-         debug = false,
-         framerate = 30,
-         layers = {},
-         region: [
-            { x: min_x = -Infinity, y: min_y = -Infinity } = {},
-            { x: max_x = Infinity, y: max_y = Infinity } = {}
-         ] = [],
-         shake = 0,
-         size: { x: size_x = 320, y: size_y = 240 } = {}
-      }: XRendererProperties = {}
-   ) {
+   constructor ({
+      alpha = 1,
+      auto = false,
+      camera: { x: camera_x = -1, y: camera_y = -1 } = {},
+      container = document.body,
+      debug = false,
+      framerate = 30,
+      layers = {},
+      region: [
+         { x: min_x = -Infinity, y: min_y = -Infinity } = {},
+         { x: max_x = Infinity, y: max_y = Infinity } = {}
+      ] = [],
+      shake = 0,
+      size: { x: size_x = 320, y: size_y = 240 } = {}
+   }: XRendererProperties = {}) {
       super();
       Object.assign(container.style, {
          display: 'grid',
@@ -1170,13 +1193,16 @@ class XRenderer extends XHost<{ tick: [] }> {
                {
                   canvas,
                   context: X.context(canvas),
-                  mode: value,
+                  modifiers: value,
                   objects: []
                }
             ];
          })
       );
-      this.region = [ { x: min_x, y: min_y }, { x: max_x, y: max_y } ];
+      this.region = [
+         { x: min_x, y: min_y },
+         { x: max_x, y: max_y }
+      ];
       this.shake = new XNumber(shake);
       this.size = new XVector(size_x, size_y);
       auto && this.start();
@@ -1185,7 +1211,7 @@ class XRenderer extends XHost<{ tick: [] }> {
    attach (key: string, ...objects: XObject[]) {
       if (key in this.layers) {
          const layer = this.layers[key];
-         layer.mode === 'ambient' && this.refresh();
+         layer.modifiers.includes('ambient') && this.refresh();
          for (const object of objects) layer.objects.includes(object) || layer.objects.push(object);
          X.chain(layer as { objects: XObject[] }, (parent, next) => {
             parent.objects.sort((object1, object2) => object1.priority.value - object2.priority.value).forEach(next);
@@ -1196,7 +1222,7 @@ class XRenderer extends XHost<{ tick: [] }> {
     * Calls the `calculate` method on all objects in this renderer with the given filter, and returns a list of all
     * computed hitboxes.
     */
-   calculate (filter: (hitbox: XHitbox) => boolean) {
+   calculate (filter = true as XProvider<boolean, [XHitbox]>) {
       const list: XHitbox[] = [];
       for (const key in this.layers) {
          for (const object of this.layers[key].objects) {
@@ -1209,7 +1235,7 @@ class XRenderer extends XHost<{ tick: [] }> {
    clear (key: string) {
       if (key in this.layers) {
          const layer = this.layers[key];
-         layer.mode === 'ambient' && this.refresh();
+         layer.modifiers.includes('ambient') && this.refresh();
          layer.objects.splice(0, layer.objects.length);
       }
    }
@@ -1217,7 +1243,7 @@ class XRenderer extends XHost<{ tick: [] }> {
    detach (key: string, ...objects: XObject[]) {
       if (key in this.layers) {
          const layer = this.layers[key];
-         layer.mode === 'ambient' && this.refresh();
+         layer.modifiers.includes('ambient') && this.refresh();
          for (const object of objects) {
             const index = layer.objects.indexOf(object);
             if (index > -1) {
@@ -1228,7 +1254,10 @@ class XRenderer extends XHost<{ tick: [] }> {
    }
    /** Gets the actual on-screen position of a position in the scene. */
    resolve (position: X2) {
-      return this.size.divide(2).subtract(this.camera.clamp(...this.region)).add(position);
+      return this.size
+         .divide(2)
+         .subtract(this.camera.clamp(...this.region))
+         .add(position);
    }
    /** Starts the rendering loop and stops any previously active loop if applicable. */
    start () {
@@ -1275,20 +1304,20 @@ class XRenderer extends XHost<{ tick: [] }> {
          }
       }
       for (const key in this.layers) {
-         const { context, mode, objects } = this.layers[key];
-         if (update || mode !== 'ambient') {
+         const { context, modifiers, objects } = this.layers[key];
+         if (update || !modifiers.includes('ambient')) {
             const scale = this.state.scale;
             const center = this.size.divide(2);
             context.resetTransform();
-            context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+            modifiers.includes('cumulative') || context.clearRect(0, 0, context.canvas.width, context.canvas.height);
             context.setTransform(
                scale,
                0,
                0,
                scale,
-               scale * (center.x + -(mode === 'static' ? center.x : camera.x)) +
+               scale * (center.x + -(modifiers.includes('static') ? center.x : camera.x)) +
                   (this.shake.value ? scale * this.shake.value * (Math.random() - 0.5) : 0),
-               scale * (center.y + -(mode === 'static' ? center.y : camera.y)) +
+               scale * (center.y + -(modifiers.includes('static') ? center.y : camera.y)) +
                   (this.shake.value ? scale * this.shake.value * (Math.random() - 0.5) : 0)
             );
             for (const object of objects) object.render(camera, context, X.transform, this.debug);
@@ -1299,12 +1328,14 @@ class XRenderer extends XHost<{ tick: [] }> {
 
 /** A rendered object specifically designed to draw an image or images on a canvas. */
 class XSprite extends XObject {
+   /** The crop to use when rendering the image. */
+   crop: XKeyed<number, 'bottom' | 'left' | 'right' | 'top'>;
+   /** The underlying frames of this sprite. */
+   frames: XImage[];
    /** The default step value. */
    step: number;
    /** The number of steps per frame. */
    steps: number;
-   /** The underlying frames of this sprite. */
-   frames: XImage[];
    /**
     * This sprite's state. Contains the index of the currently displayed frame, whether or not the sprite is active, and
     * the current step value.
@@ -1312,10 +1343,16 @@ class XSprite extends XObject {
    state = { index: 0, active: false, step: 0 };
    constructor (properties: XSpriteProperties = {}) {
       super(properties);
-      (({ step = 0, steps = 1, frames = [] }: XSpriteProperties = {}) => {
+      (({
+         crop: { bottom = 0, left = 0, right = 0, top = 0 } = {},
+         step = 0,
+         steps = 1,
+         frames = []
+      }: XSpriteProperties = {}) => {
+         this.crop = { bottom, left, right, top };
+         this.frames = frames;
          this.step = step;
          this.steps = steps;
-         this.frames = frames;
       })(properties);
    }
    compute () {
@@ -1333,7 +1370,13 @@ class XSprite extends XObject {
    }
    draw (context: CanvasRenderingContext2D, base: XVector) {
       const texture = this.frames[this.state.index];
-      texture && context.drawImage(texture.value, base.x, base.y);
+      if (texture) {
+         const x = Math.round((this.crop.left < 0 ? texture.value.width : 0) + this.crop.left);
+         const y = Math.round((this.crop.top < 0 ? texture.value.height : 0) + this.crop.top);
+         const w = Math.round((this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right) - x;
+         const h = Math.round((this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom) - y;
+         context.drawImage(texture.value, x, y, w, h, base.x, base.y, w, h);
+      }
       if (this.steps <= ++this.state.step) {
          this.state.step = 0;
          if (this.state.active && this.frames.length <= ++this.state.index) {
@@ -1363,6 +1406,8 @@ class XSprite extends XObject {
 
 /** A rendered object specifically designed to draw text on a canvas. */
 class XText extends XObject {
+   /* The character set used for text height approximations. */
+   charset: string;
    /**
     * The text content to draw. For a detailed guide on how to make the most out of this, please raise an issue telling
     * me (harrix432) to get off my fatass and make one.
@@ -1372,7 +1417,12 @@ class XText extends XObject {
    spacing: XVector;
    constructor (properties: XTextProperties = {}) {
       super(properties);
-      (({ content = '', spacing: { x: spacing_x = 0, y: spacing_y = 0 } = {} }: XTextProperties = {}) => {
+      (({
+         charset = '/0123456789=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
+         content = '',
+         spacing: { x: spacing_x = 0, y: spacing_y = 0 } = {}
+      }: XTextProperties = {}) => {
+         this.charset = charset;
          this.content = content;
          this.spacing = new XVector(spacing_x, spacing_y);
       })(properties);
@@ -1383,12 +1433,12 @@ class XText extends XObject {
          for (const char of section) total += context.measureText(char).width + this.spacing.x;
          return total;
       });
-      const ascent = context.measureText(this.content).actualBoundingBoxAscent;
-      return new XVector(Math.max(...lines), ascent + (ascent + this.spacing.y) * (lines.length - 1));
+      const metrics = context.measureText(this.charset);
+      const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+      return new XVector(Math.max(...lines), height + (height + this.spacing.y) * (lines.length - 1));
    }
    draw (context: CanvasRenderingContext2D, base: XVector) {
       let index = 0;
-      const lines = this.content.split('\n');
       const state = {
          fillStyle: context.fillStyle,
          globalAlpha: context.globalAlpha,
@@ -1406,13 +1456,13 @@ class XText extends XObject {
       };
       const offset = { x: 0, y: 0 };
       const random = { x: 0, y: 0 };
-      const ascent = context.measureText(this.content).actualBoundingBoxAscent;
-      const height = ascent + (ascent + this.spacing.y) * (lines.length - 1);
+      const metrics = context.measureText(this.charset);
+      const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
       while (index < this.content.length) {
          const char = this.content[index++];
          if (char === '\n') {
             offset.x = 0;
-            offset.y += ascent + this.spacing.y;
+            offset.y += height + this.spacing.y;
          } else if (char === '\xa7') {
             const code = this.content.slice(index, this.content.indexOf('\xa7', index));
             const [ key, value ] = code.split(':');
@@ -1479,8 +1529,7 @@ class XText extends XObject {
             const y = base.y + offset.y + random.y * (Math.random() - 0.5) + height;
             context.fillText(char, x, y);
             context.strokeText(char, x, y);
-            const width = context.measureText(char).width;
-            offset.x += width + this.spacing.x;
+            offset.x += context.measureText(char).width + this.spacing.x;
          }
       }
       Object.assign(context, state);
@@ -1492,12 +1541,10 @@ class XTile extends XSprite {
    size: XVector;
    constructor (properties: XTileProperties = {}) {
       super(properties);
-      ((
-         {
-            offset: { x: offset_x = 0, y: offset_y = 0 } = {},
-            size: { x: size_x = 0, y: size_y = 0 } = {}
-         }: XTileProperties = {}
-      ) => {
+      (({
+         offset: { x: offset_x = 0, y: offset_y = 0 } = {},
+         size: { x: size_x = 0, y: size_y = 0 } = {}
+      }: XTileProperties = {}) => {
          this.offset = new XVector(offset_x, offset_y);
          this.size = new XVector(size_x, size_y);
       })(properties);
@@ -1534,9 +1581,9 @@ class XVector {
    x: number;
    /** The Y value of the underlying position. */
    y: number;
-   constructor ();
-   constructor (x: number, y: number);
-   constructor (a1: number | X2);
+   constructor();
+   constructor(x: number, y: number);
+   constructor(a1: number | X2);
    constructor (a1: number | X2 = 0, y = a1 as number) {
       if (typeof a1 === 'number') {
          this.x = a1;
@@ -1546,8 +1593,8 @@ class XVector {
       }
    }
    /** Adds another position to this object's position and returns a new `XVector` object with said position. */
-   add (x: number, y: number): XVector;
-   add (a1: number | X2): XVector;
+   add(x: number, y: number): XVector;
+   add(a1: number | X2): XVector;
    add (a1: number | X2, y = a1 as number) {
       if (typeof a1 === 'number') {
          return new XVector(this.x + a1, this.y + y);
@@ -1565,15 +1612,15 @@ class XVector {
    }
    /** Calculates the relative direction from this object's position and another position. */
    direction (vector: X2) {
-      return 180 / Math.PI * Math.atan2(this.y - vector.y, this.x - vector.x);
+      return (180 / Math.PI) * Math.atan2(this.y - vector.y, this.x - vector.x);
    }
    /** Calculates the distance between this object's position and another position. */
    distance (vector: X2) {
       return Math.sqrt(Math.pow(vector.x - this.x, 2) + Math.pow(vector.y - this.y, 2));
    }
    /** Divides this object's position by another position and returns a new `XVector` object with said position. */
-   divide (x: number, y: number): XVector;
-   divide (a1: number | X2): XVector;
+   divide(x: number, y: number): XVector;
+   divide(a1: number | X2): XVector;
    divide (a1: number | X2, y = a1 as number) {
       if (typeof a1 === 'number') {
          return new XVector(this.x / a1, this.y / y);
@@ -1586,7 +1633,7 @@ class XVector {
     * a new `XVector` object with the result as its position.
     */
    endpoint (direction: number, distance: number) {
-      const radians = ((direction + 90) % 360) * Math.PI / 180;
+      const radians = (((direction + 90) % 360) * Math.PI) / 180;
       return new XVector(
          this.x + distance * Math.sin(Math.PI - radians),
          this.y + distance * Math.cos(Math.PI - radians)
@@ -1599,23 +1646,26 @@ class XVector {
          const x = this.x;
          const y = this.y;
          clearInterval(X.cache.modulationTasks.get(this));
-         X.cache.modulationTasks.set(this, setInterval(() => {
-            if (index < duration) {
-               this.x = X.math.bezier(index / duration, x, ...points.map(point => point.x));
-               this.y = X.math.bezier(index / duration, y, ...points.map(point => point.y));
-               index += 20;
-            } else {
-               this.x = X.math.bezier(1, x, ...points.map(point => point.x));
-               this.y = X.math.bezier(1, y, ...points.map(point => point.y));
-               clearInterval(X.cache.modulationTasks.get(this));
-               resolve();
-            }
-         }, 20) as any);
+         X.cache.modulationTasks.set(
+            this,
+            setInterval(() => {
+               if (index < duration) {
+                  this.x = X.math.bezier(index / duration, x, ...points.map(point => point.x));
+                  this.y = X.math.bezier(index / duration, y, ...points.map(point => point.y));
+                  index += 20;
+               } else {
+                  this.x = X.math.bezier(1, x, ...points.map(point => point.x));
+                  this.y = X.math.bezier(1, y, ...points.map(point => point.y));
+                  clearInterval(X.cache.modulationTasks.get(this));
+                  resolve();
+               }
+            }, 20) as any
+         );
       });
    }
    /** Multiplies this object's position by another position and returns a new `XVector` object with said position. */
-   multiply (x: number, y: number): XVector;
-   multiply (a1: number | X2): XVector;
+   multiply(x: number, y: number): XVector;
+   multiply(a1: number | X2): XVector;
    multiply (a1: number | X2, y = a1 as number) {
       if (typeof a1 === 'number') {
          return new XVector(this.x * a1, this.y * y);
@@ -1628,8 +1678,8 @@ class XVector {
       return base ? this.multiply(base).round().divide(base) : new XVector(Math.round(this.x), Math.round(this.y));
    }
    /** Subtracts another position from this object's position and returns a new `XVector` object with said position. */
-   subtract (x: number, y: number): XVector;
-   subtract (a1: number | X2): XVector;
+   subtract(x: number, y: number): XVector;
+   subtract(a1: number | X2): XVector;
    subtract (a1: number | X2, y = a1 as number) {
       if (typeof a1 === 'number') {
          return new XVector(this.x - a1, this.y - y);
@@ -1671,7 +1721,7 @@ const X = {
          /** The trim to apply to the buffer. */
          trim: { start = 0, stop = 0 } = {}
       } = {}
-   ) {
+   ): XAudio {
       const asset = new XAsset<AudioBuffer>({
          async loader () {
             const assets = X.cache.bufferAssets[source] || (X.cache.bufferAssets[source] = []);
@@ -1699,6 +1749,7 @@ const X = {
                return buffer;
             }
          },
+         source,
          async unloader () {
             const assets = X.cache.bufferAssets[source] || (X.cache.bufferAssets[source] = []);
             X.pause(cache).then(() => {
@@ -1759,12 +1810,10 @@ const X = {
           * siblings (other assets which share this asset's source image) are unloaded.
           */
          cache = 0,
-         /** The crop to apply to the image. */
-         crop: { bottom = 0, left = 0, right = 0, top = 0 } = {},
          /** The pixel shader to apply to the image. */
          shader = void 0 as ((color: XColor, index: X2, total: X2) => XColor) | void
       } = {}
-   ) {
+   ): XImage {
       const asset = new XAsset<HTMLImageElement | ImageBitmap>({
          async loader () {
             const assets = X.cache.imageAssets[source] || (X.cache.imageAssets[source] = []);
@@ -1772,36 +1821,31 @@ const X = {
             const image = await X.image(source);
             if (image.width === 0 || image.height === 0) {
                return await createImageBitmap(new ImageData(1, 1));
-            } else if (bottom || left || right || top || shader) {
+            } else if (shader) {
                const context = X.context(document.createElement('canvas'), image.width, image.height);
                context.drawImage(image, 0, 0);
-               const x = Math.round((left < 0 ? image.width : 0) + left);
-               const y = Math.round((top < 0 ? image.height : 0) + top);
-               const w = Math.round((right < 0 ? 0 : image.width) - right) - x;
-               const h = Math.round((bottom < 0 ? 0 : image.height) - bottom) - y;
-               const { data } = context.getImageData(x, y, w, h);
-               if (shader) {
-                  const x4 = w * 4;
-                  const index = { x: -1, y: -1 };
-                  const total = { x: w, y: h };
-                  while (++index.x < w) {
-                     const n4 = index.x * 4;
-                     while (++index.y < h) {
-                        let step = index.y * x4 + n4;
-                        const color = shader([ data[step++], data[step++], data[step++], data[step++] ], index, total);
-                        data[--step] = color[3];
-                        data[--step] = color[2];
-                        data[--step] = color[1];
-                        data[--step] = color[0];
-                     }
-                     index.y = -1;
+               const { data } = context.getImageData(0, 0, image.width, image.height);
+               const x4 = image.width * 4;
+               const index = { x: -1, y: -1 };
+               const total = { x: image.width, y: image.height };
+               while (++index.x < image.width) {
+                  const n4 = index.x * 4;
+                  while (++index.y < image.height) {
+                     let step = index.y * x4 + n4;
+                     const color = shader([ data[step++], data[step++], data[step++], data[step++] ], index, total);
+                     data[--step] = color[3];
+                     data[--step] = color[2];
+                     data[--step] = color[1];
+                     data[--step] = color[0];
                   }
+                  index.y = -1;
                }
-               return await createImageBitmap(new ImageData(data, w));
+               return await createImageBitmap(new ImageData(data, image.width));
             } else {
                return image;
             }
          },
+         source,
          async unloader () {
             const assets = X.cache.imageAssets[source] || (X.cache.imageAssets[source] = []);
             X.pause(cache).then(() => {
@@ -1842,6 +1886,7 @@ const X = {
          return Math.sin(((value + 0.5) * 2 - 1) * Math.PI) / 2 + 0.5;
       }
    },
+   /** Parses JS objects previously stringified with `X.stringify()` */
    parse (text: string) {
       return JSON.parse(text, (key, value) => {
          if (typeof value === 'string') {
@@ -1858,6 +1903,8 @@ const X = {
                         return void 0;
                      }
                   }
+               case '#':
+                  return eval(value);
             }
          } else {
             return value;
@@ -1928,17 +1975,36 @@ const X = {
       };
       return daemon;
    },
+   /** Converts JS objects to JSON with support for functions, undefined values, infinity, and nan values. */
    stringify (value: any) {
       return JSON.stringify(value, (key, value) => {
-         if (typeof value === 'string') {
-            return `!${value}`;
-         } else if (typeof value === 'function') {
-            return `@${value}`;
-         } else {
-            return value;
+         switch (value) {
+            case +Infinity:
+               return '#+Infinity';
+            case -Infinity:
+               return '#-Infinity';
+            default:
+               switch (typeof value) {
+                  case 'bigint':
+                     return `#${value}n`;
+                  case 'function':
+                     return `@${value}`;
+                  case 'number':
+                     return value === value ? value : '#NaN';
+                  case 'string':
+                     return `!${value}`;
+                  default:
+                     return value;
+               }
          }
       });
    },
    /** The inital transform used in rendering and vertex calculations. */
    transform: [ new XVector(), new XNumber(), new XVector(1) ] as XTransform
 };
+
+Object.assign(AudioParam.prototype, {
+   modulate (duration: number, ...points: number[]) {
+      return XNumber.prototype.modulate.call(this, duration, ...points);
+   }
+});

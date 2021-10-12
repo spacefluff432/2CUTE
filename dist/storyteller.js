@@ -10,11 +10,6 @@
 //   ########   ########   ##   ###   ########                                                          //
 //                                                                                                      //
 //// needs more optimizating /////////////////////////////////////////////////////////////////////////////
-Object.assign(AudioParam.prototype, {
-    modulate(duration, ...points) {
-        return XNumber.prototype.modulate.call(this, duration, ...points);
-    }
-});
 /** An event host. The type parameter `A` defines which events this host should fire and listen for. */
 class XHost {
     constructor() {
@@ -117,10 +112,10 @@ class XObject extends XHost {
     calculate(filter, list, camera, transform) {
         const position = transform[0].add(this.position).add(this.parallax.multiply(camera));
         const rotation = transform[1].add(this.rotation);
-        const scale = transform[2]; // .multiply(this.scale);
-        if (this instanceof XHitbox && filter(this)) {
+        const scale = transform[2].multiply(this.scale);
+        if (this instanceof XHitbox && (typeof filter === 'function' ? filter(this) : filter)) {
             list.push(this);
-            const size = this.size;
+            const size = this.size.multiply(scale);
             const half = size.divide(2);
             const base = position.subtract(half.add(half.multiply(this.anchor)));
             const dimensions = `${base.x}:${base.y}:${position.x}:${position.y}:${rotation.value}:${size.x}:${size.y}`;
@@ -196,87 +191,86 @@ class XObject extends XHost {
         const size = this.compute(context);
         const half = size.divide(2);
         const base = position.subtract(half.add(half.multiply(this.anchor)));
-        const rads = Math.PI / 180 * this.rotation.value;
+        const rads = (Math.PI / 180) * this.rotation.value;
         context.translate(position.x, position.y);
         context.rotate(rads);
-        context.scale(scale.x, scale.y);
+        context.scale(this.scale.x, this.scale.y);
         context.translate(-position.x, -position.y);
-        this.draw(context, base);
-        if (debug) {
-            if (this instanceof XHitbox) {
-                // rainbow hitboxes! :D
-                context.strokeStyle = `hsla(${(Date.now() % 1000) * 0.25}, 100%, 50%, 0.5)`;
-                try {
-                    const vertices = this.vertices();
-                    for (const [b1, b2] of [
-                        [vertices[0], vertices[1]],
-                        [vertices[1], vertices[2]],
-                        [vertices[2], vertices[3]],
-                        [vertices[3], vertices[0]]
-                    ]) {
-                        context.beginPath();
-                        context.moveTo(b1.x, b1.y);
-                        context.lineTo(b2.x, b2.y);
-                        context.stroke();
-                        context.closePath();
-                    }
-                }
-                catch (error) {
-                    //
-                }
-            }
-            else {
-                context.strokeStyle = `rgba(255, 255, 255, 0.25)`;
-                context.strokeRect(base.x, base.y, size.x, size.y);
-            }
-        }
+        context.globalAlpha === 0 || this.draw(context, base);
         if (this.objects.length > 0) {
             for (const object of this.objects)
                 object.render(camera, context, [position, rotation, scale], debug);
         }
+        if (debug) {
+            const previous = context.strokeStyle;
+            context.strokeStyle = '#fff8';
+            context.strokeRect(base.x, base.y, size.x, size.y);
+            context.strokeStyle = previous;
+        }
         context.translate(position.x, position.y);
+        context.scale(1 / this.scale.x, 1 / this.scale.y);
         context.rotate(-rads);
-        context.scale(1 / scale.x, 1 / scale.y);
         context.translate(-position.x, -position.y);
+        if (debug && this instanceof XHitbox) {
+            // rainbow hitboxes! :D
+            context.strokeStyle = `hsla(${(Date.now() % 1000) * 0.25}, 100%, 50%, 0.5)`;
+            context.save();
+            context.resetTransform();
+            try {
+                const vertices = this.vertices();
+                for (const [b1, b2] of [
+                    [vertices[0], vertices[1]],
+                    [vertices[1], vertices[2]],
+                    [vertices[2], vertices[3]],
+                    [vertices[3], vertices[0]]
+                ]) {
+                    context.beginPath();
+                    context.moveTo(b1.x, b1.y);
+                    context.lineTo(b2.x, b2.y);
+                    context.stroke();
+                    context.closePath();
+                }
+            }
+            catch (error) {
+                //
+            }
+            context.restore();
+        }
         Object.assign(context, state);
     }
-    /** Serializes this object. */
-    serialize() {
-        return {
-            alpha: this.alpha.value,
-            anchor: this.anchor,
-            blend: this.blend,
-            fill: this.fill,
-            line: this.line && {
-                cap: this.line.cap,
-                dash: this.line.dash === void 0 ? void 0 : this.line.dash.value,
-                join: this.line.join,
-                miter: this.line.miter === void 0 ? void 0 : this.line.miter.value,
-                width: this.line.width === void 0 ? void 0 : this.line.width.value
-            },
-            metadata: this.metadata,
-            objects: this.objects.map(object => object.serialize()),
-            parallax: this.parallax.serialize(),
-            position: this.position.serialize(),
-            priority: this.priority.value,
-            rotation: this.rotation.value,
-            scale: this.scale.serialize(),
-            shadow: this.shadow && {
-                blur: this.shadow.blur === void 0 ? void 0 : this.shadow.blur.value,
-                color: this.shadow.color,
-                offset: this.shadow.offset && {
-                    x: this.shadow.offset.x === void 0 ? void 0 : this.shadow.offset.x.value,
-                    y: this.shadow.offset.y === void 0 ? void 0 : this.shadow.offset.y.value
-                }
-            },
-            stroke: this.stroke,
-            text: this.text && {
-                align: this.text.align,
-                baseline: this.text.baseline,
-                direction: this.text.direction,
-                font: this.text.font
-            }
-        };
+}
+/** An asset, either loaded or not. */
+class XAsset extends XHost {
+    constructor({ loader, source, unloader }) {
+        super();
+        this.state = { value: void 0 };
+        this.loader = loader;
+        this.source = source;
+        this.unloader = unloader;
+    }
+    /** A getter for the asset's internal value. Throws an error if the asset is not current loaded. */
+    get value() {
+        const value = this.state.value;
+        if (value === void 0) {
+            throw `The asset of "${this.source}" is not currently loaded!`;
+        }
+        else {
+            return value;
+        }
+    }
+    /** Loads the asset. */
+    async load(force) {
+        if (force || this.state.value === void 0) {
+            this.state.value = await this.loader();
+            this.fire('load');
+        }
+    }
+    /** Unloads the asset. */
+    async unload(force) {
+        if (force || this.state.value !== void 0) {
+            this.state.value = await this.unloader();
+            this.fire('unload');
+        }
     }
 }
 /**
@@ -284,7 +278,7 @@ class XObject extends XHost {
  * navigators share an atlas, those navigators can be traversed between.
  */
 class XAtlas {
-    constructor({ menu, navigators = {} } = {}) {
+    constructor({ menu = null, navigators = {} } = {}) {
         /** This navigator's state. Contains the currently open navigator. */
         this.state = { navigator: null };
         this.menu = menu;
@@ -336,14 +330,14 @@ class XAtlas {
     /**
      * This function accepts one of three values, those being `'menu'`, `'next'`, and `'prev'`. If `'menu'` is
      * specified and this atlas's `menu` property is non-void, the atlas will switch to the navigator associated with the
-     * aforementioned `menu` property as long as no navigator is currently open. If `'next'` or `'prev'` is specified
-     * and this atlas has a navigator open, the respective `next` or `prev` property on said open navigator is resolved
-     * and the navigator associated with the resolved value is switched to, given it's associated with this atlas.
-    */
+     * aforementioned `menu` property. If `'next'` or `'prev'` is specified and this atlas has a navigator open, the
+     * respective `next` or `prev` property on said open navigator is resolved and the navigator associated with the
+     * resolved value is switched to, given it's associated with this atlas.
+     */
     navigate(action) {
         switch (action) {
             case 'menu':
-                this.navigator() || this.switch(this.menu);
+                this.switch(this.menu);
                 break;
             case 'next':
             case 'prev':
@@ -377,53 +371,6 @@ class XAtlas {
             next && next.fire('from', this, this.state.navigator, navigator);
             this.state.navigator = name;
         }
-    }
-}
-/** A general-purpose game manager. */
-class XGame extends XHost {
-    constructor(player, renderer, rooms) {
-        super();
-        this.state = { room: void 0 };
-        this.player = player;
-        this.renderer = renderer;
-        this.rooms = rooms;
-    }
-    /**
-     * Switches to a room. Can optionally specify fade and unfade durations. If `fade` is specified while `unfade` is
-     * not, `unfade` will default to the value of `fade`. If both values are unspecified, they default to `0`.
-     */
-    async room(value, fade = 0, unfade = fade) {
-        if (typeof this.state.room === 'string' && this.state.room in this.rooms) {
-            const room = this.rooms[this.state.room];
-            await this.renderer.alpha.modulate(fade, 0);
-            for (const key in room.layers) {
-                this.renderer.detach(key, ...room.layers[key]);
-            }
-        }
-        if (typeof value === 'string' && value in this.rooms) {
-            const room = this.rooms[value];
-            this.renderer.alpha.modulate(unfade, 1);
-            for (const key in room.layers) {
-                this.renderer.attach(key, ...this.rooms[value].layers[key]);
-            }
-            Object.assign(this.renderer.region[0], room.region[0]);
-            Object.assign(this.renderer.region[1], room.region[1]);
-        }
-        this.state.room = value;
-        this.fire('teleport', value);
-    }
-    /** Initializes a new `XGame` object with the given properties. */
-    static build({ alpha, auto, container, debug, framerate, layers, player, rooms, size } = {}) {
-        const instance = new XGame(player instanceof XObject ? player : new XObject(player), new XRenderer({ alpha, auto, container, debug, framerate, layers, size }).on('tick', {
-            priority: Infinity,
-            listener() {
-                Object.assign(instance.renderer.camera, instance.player.position.serialize());
-            }
-        }), Object.fromEntries(Object.entries(rooms || {}).map(([key, properties = {}]) => [
-            key,
-            properties instanceof XRoom ? properties : new XRoom(properties)
-        ])));
-        return instance;
     }
 }
 /** A hitbox object. Hitboxes have a defined size and a set of calculated vertices used for hit detection. */
@@ -477,9 +424,9 @@ class XHitbox extends XObject {
                         }
                         else {
                             for (const a1 of vertices1) {
-                                // point raycast - if a line drawn from box1 intersects with box2 once, there is collision
-                                let hit = 0;
-                                const a2 = new XVector(a1).add(new XVector(max2).subtract(min2).multiply(2)).serialize();
+                                // point raycast - if a line drawn from box1 intersects with box2 only once, there is collision
+                                let miss = true;
+                                const a2 = new XVector(a1).add(new XVector(max2).subtract(min2).multiply(2)).value();
                                 for (const [b1, b2] of [
                                     [vertices2[0], vertices2[1]],
                                     [vertices2[1], vertices2[2]],
@@ -487,12 +434,11 @@ class XHitbox extends XObject {
                                     [vertices2[3], vertices2[0]]
                                 ]) {
                                     if (X.math.intersection(a1, a2, b1, b2)) {
-                                        if (hit++ === 1) {
+                                        if ((miss = !miss))
                                             break;
-                                        }
                                     }
                                 }
-                                if (hit === 1) {
+                                if (!miss) {
                                     hits.push(hitbox);
                                     break;
                                 }
@@ -529,13 +475,10 @@ class XHitbox extends XObject {
             new XVector(Math.max(x1, x2, x3, x4), Math.max(y1, y2, y3, y4))
         ];
     }
-    serialize() {
-        return Object.assign(super.serialize(), { size: this.size.serialize() });
-    }
     /** Returns the vertices of this hitbox. */
     vertices() {
         if (this.state.dimensions === void 0) {
-            throw 'This object\'s vertices have not yet been calculated!';
+            throw "This object's vertices are unresolved!";
         }
         else {
             return this.state.vertices;
@@ -657,15 +600,15 @@ class XNumber {
         return new Promise(resolve => {
             let index = 0;
             const value = this.value;
-            clearInterval(X.cache.modulators.get(this));
-            X.cache.modulators.set(this, setInterval(() => {
+            clearInterval(X.cache.modulationTasks.get(this));
+            X.cache.modulationTasks.set(this, setInterval(() => {
                 if (index < duration) {
                     this.value = X.math.bezier(index / duration, value, ...points);
                     index += 20;
                 }
                 else {
                     this.value = X.math.bezier(1, value, ...points);
-                    clearInterval(X.cache.modulators.get(this));
+                    clearInterval(X.cache.modulationTasks.get(this));
                     resolve();
                 }
             }, 20));
@@ -713,66 +656,6 @@ class XPath extends XObject {
         context.stroke();
         context.closePath();
     }
-    serialize() {
-        return Object.assign(super.serialize(), { size: this.size.serialize(), tracer: this.tracer });
-    }
-}
-/** An audio player based on the AudioContext API. */
-class XPlayer extends XHost {
-    constructor({ buffer, rate = 1, router = (context, source) => source.connect(context.destination), volume = 1 } = {}) {
-        super();
-        /**
-         * This player's state. Contains the base context, base gain node, placeholder rate node, and all currently active
-         * `AudioBufferSourceNode` instances that are currently active and/or awaiting closure.
-         */
-        this.state = (() => {
-            const context = new AudioContext();
-            return {
-                context,
-                gain: context.createGain(),
-                rate: context.createGain().gain,
-                sources: []
-            };
-        })();
-        this.buffer = buffer || this.state.context.createBuffer(1, 1, 8000);
-        this.rate = this.state.rate;
-        this.router = router;
-        this.volume = this.state.gain.gain;
-        this.state.rate.value = rate;
-        this.state.gain.gain.value = volume;
-        this.router(this.state.context, this.state.gain);
-    }
-    /** Returns the audio source most recently initialized by this player. */
-    source() {
-        return this.state.sources[this.state.sources.length - 1];
-    }
-    /**
-     * Initializes a new audio source and starts the audio from the beginning. If `stop` is specified as true, the
-     * `player.stop` method will be called before the new audio source is initialized.
-     */
-    start(stop) {
-        stop && this.stop();
-        const source = Object.assign(this.state.context.createBufferSource(), { buffer: this.buffer });
-        source.connect(this.state.gain);
-        source.playbackRate.value = this.rate.value;
-        this.rate = source.playbackRate;
-        source.start();
-        this.state.sources.push(source);
-        this.fire('start');
-        return source;
-    }
-    /** Stops, de-activates, and flushes any currently active audio sources. */
-    stop() {
-        for (const source of this.state.sources.splice(0, this.state.sources.length)) {
-            source.stop();
-            source.disconnect(this.state.gain);
-        }
-        this.fire('stop');
-    }
-    /** Returns the current time of this player's associated audio context. */
-    time() {
-        return this.state.context.currentTime;
-    }
 }
 /** A rendered object specifically designed to draw a rectangle on a canvas. */
 class XRectangle extends XObject {
@@ -789,16 +672,13 @@ class XRectangle extends XObject {
         context.fillRect(base.x, base.y, this.size.x, this.size.y);
         context.strokeRect(base.x, base.y, this.size.x, this.size.y);
     }
-    serialize() {
-        return Object.assign(super.serialize(), { size: this.size.serialize() });
-    }
 }
 /**
  * The business end of the Storyteller engine, where objects are rendered to canvases and all is made right with the
  * world. Jokes aside, this class is responsible for canvas and context management.
  */
 class XRenderer extends XHost {
-    constructor({ alpha = 1, auto = false, camera: { x: camera_x = -1, y: camera_y = -1 } = {}, container = document.body, debug = false, framerate = 30, layers = {}, region: [{ x: min_x = -Infinity, y: min_y = -Infinity } = {}, { x: max_x = Infinity, y: max_y = Infinity } = {}] = [], size: { x: size_x = 320, y: size_y = 240 } = {} } = {}) {
+    constructor({ alpha = 1, auto = false, camera: { x: camera_x = -1, y: camera_y = -1 } = {}, container = document.body, debug = false, framerate = 30, layers = {}, region: [{ x: min_x = -Infinity, y: min_y = -Infinity } = {}, { x: max_x = Infinity, y: max_y = Infinity } = {}] = [], shake = 0, size: { x: size_x = 320, y: size_y = 240 } = {} } = {}) {
         super();
         /**
          * This renderer's state. Contains the last computed camera position, rendering interval timer handle, last known
@@ -829,12 +709,16 @@ class XRenderer extends XHost {
                 {
                     canvas,
                     context: X.context(canvas),
-                    mode: value,
+                    modifiers: value,
                     objects: []
                 }
             ];
         }));
-        this.region = [{ x: min_x, y: min_y }, { x: max_x, y: max_y }];
+        this.region = [
+            { x: min_x, y: min_y },
+            { x: max_x, y: max_y }
+        ];
+        this.shake = new XNumber(shake);
         this.size = new XVector(size_x, size_y);
         auto && this.start();
     }
@@ -842,11 +726,11 @@ class XRenderer extends XHost {
     attach(key, ...objects) {
         if (key in this.layers) {
             const layer = this.layers[key];
-            layer.mode === 'ambient' && this.refresh();
+            layer.modifiers.includes('ambient') && this.refresh();
             for (const object of objects)
                 layer.objects.includes(object) || layer.objects.push(object);
-            layer.objects = layer.objects.sort((object1, object2) => {
-                return object1.priority.value - object2.priority.value;
+            X.chain(layer, (parent, next) => {
+                parent.objects.sort((object1, object2) => object1.priority.value - object2.priority.value).forEach(next);
             });
         }
     }
@@ -854,7 +738,7 @@ class XRenderer extends XHost {
      * Calls the `calculate` method on all objects in this renderer with the given filter, and returns a list of all
      * computed hitboxes.
      */
-    calculate(filter) {
+    calculate(filter = true) {
         const list = [];
         for (const key in this.layers) {
             for (const object of this.layers[key].objects) {
@@ -867,7 +751,7 @@ class XRenderer extends XHost {
     clear(key) {
         if (key in this.layers) {
             const layer = this.layers[key];
-            layer.mode === 'ambient' && this.refresh();
+            layer.modifiers.includes('ambient') && this.refresh();
             layer.objects.splice(0, layer.objects.length);
         }
     }
@@ -875,17 +759,21 @@ class XRenderer extends XHost {
     detach(key, ...objects) {
         if (key in this.layers) {
             const layer = this.layers[key];
-            layer.mode === 'ambient' && this.refresh();
+            layer.modifiers.includes('ambient') && this.refresh();
             for (const object of objects) {
                 const index = layer.objects.indexOf(object);
                 if (index > -1) {
                     layer.objects.splice(index, 1);
                 }
             }
-            layer.objects = layer.objects.sort((object1, object2) => {
-                return object1.priority.value - object2.priority.value;
-            });
         }
+    }
+    /** Gets the actual on-screen position of a position in the scene. */
+    resolve(position) {
+        return this.size
+            .divide(2)
+            .subtract(this.camera.clamp(...this.region))
+            .add(position);
     }
     /** Starts the rendering loop and stops any previously active loop if applicable. */
     start() {
@@ -904,7 +792,7 @@ class XRenderer extends XHost {
     render() {
         this.fire('tick');
         let update = false;
-        const camera = this.camera.clamp(...this.region).serialize();
+        const camera = this.camera.clamp(...this.region).value();
         this.container.style.opacity = this.alpha.clamp(0, 1).value.toString();
         if (camera.x !== this.state.camera.x || camera.y !== this.state.camera.y) {
             update = true;
@@ -933,29 +821,19 @@ class XRenderer extends XHost {
             }
         }
         for (const key in this.layers) {
-            const { context, mode, objects } = this.layers[key];
-            if (update || mode !== 'ambient') {
+            const { context, modifiers, objects } = this.layers[key];
+            if (update || !modifiers.includes('ambient')) {
                 const scale = this.state.scale;
                 const center = this.size.divide(2);
                 context.resetTransform();
-                context.clearRect(0, 0, context.canvas.width, context.canvas.height);
-                context.setTransform(scale, 0, 0, scale, scale * (center.x + -(mode === 'static' ? center.x : camera.x)), scale * (center.y + -(mode === 'static' ? center.y : camera.y)));
+                modifiers.includes('cumulative') || context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+                context.setTransform(scale, 0, 0, scale, scale * (center.x + -(modifiers.includes('static') ? center.x : camera.x)) +
+                    (this.shake.value ? scale * this.shake.value * (Math.random() - 0.5) : 0), scale * (center.y + -(modifiers.includes('static') ? center.y : camera.y)) +
+                    (this.shake.value ? scale * this.shake.value * (Math.random() - 0.5) : 0));
                 for (const object of objects)
                     object.render(camera, context, X.transform, this.debug);
             }
         }
-    }
-}
-/** Used in the `XGame` class to assign a region to a renderer and delegate objects to its rendering layers. */
-class XRoom {
-    constructor({ layers = {}, region: [{ x: min_x = -Infinity, y: min_y = -Infinity } = {}, { x: max_x = Infinity, y: max_y = Infinity } = {}] = [] } = {}) {
-        this.layers = Object.fromEntries(Object.entries(layers).map(([key, objects = []]) => {
-            return [
-                key,
-                objects.map(properties => (properties instanceof XObject ? properties : new XObject(properties)))
-            ];
-        }));
-        this.region = [{ x: min_x, y: min_y }, { x: max_x, y: max_y }];
     }
 }
 /** A rendered object specifically designed to draw an image or images on a canvas. */
@@ -967,17 +845,17 @@ class XSprite extends XObject {
          * the current step value.
          */
         this.state = { index: 0, active: false, step: 0 };
-        (({ step = 0, steps = 1, textures = [] } = {}) => {
+        (({ crop: { bottom = 0, left = 0, right = 0, top = 0 } = {}, step = 0, steps = 1, frames = [] } = {}) => {
+            this.crop = { bottom, left, right, top };
+            this.frames = frames;
             this.step = step;
             this.steps = steps;
-            this.textures = textures;
         })(properties);
     }
-    /** Computes the sprite's current texture. */
     compute() {
-        const texture = this.textures[this.state.index];
+        const texture = this.frames[this.state.index];
         if (texture) {
-            return new XVector(texture.width, texture.height);
+            return new XVector(texture.value.width, texture.value.height);
         }
         else {
             return new XVector(0, 0);
@@ -989,11 +867,17 @@ class XSprite extends XObject {
         return this;
     }
     draw(context, base) {
-        const texture = this.textures[this.state.index];
-        texture && context.drawImage(texture, base.x, base.y);
+        const texture = this.frames[this.state.index];
+        if (texture) {
+            const x = Math.round((this.crop.left < 0 ? texture.value.width : 0) + this.crop.left);
+            const y = Math.round((this.crop.top < 0 ? texture.value.height : 0) + this.crop.top);
+            const w = Math.round((this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right) - x;
+            const h = Math.round((this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom) - y;
+            context.drawImage(texture.value, x, y, w, h, base.x, base.y, w, h);
+        }
         if (this.steps <= ++this.state.step) {
             this.state.step = 0;
-            if (this.state.active && this.textures.length <= ++this.state.index) {
+            if (this.state.active && this.frames.length <= ++this.state.index) {
                 this.state.index = 0;
             }
         }
@@ -1003,26 +887,26 @@ class XSprite extends XObject {
         this.state.active = true;
         return this;
     }
+    /** Loads this sprite's frames. */
+    async load() {
+        await Promise.all(this.frames.map(asset => asset.load()));
+    }
     /** Resets the sprite's animation to its default state. */
     reset() {
         Object.assign(this.state, { active: false, index: 0, step: this.step });
         return this;
     }
-    serialize() {
-        return Object.assign(super.serialize(), {
-            step: this.step,
-            steps: this.steps,
-            textures: this.textures.map(texture => {
-                return texture instanceof HTMLImageElement ? texture.cloneNode() : texture;
-            })
-        });
+    /** Unloads this sprite's frames. */
+    async unload() {
+        await Promise.all(this.frames.map(asset => asset.unload()));
     }
 }
 /** A rendered object specifically designed to draw text on a canvas. */
 class XText extends XObject {
     constructor(properties = {}) {
         super(properties);
-        (({ content = '', spacing: { x: spacing_x = 0, y: spacing_y = 0 } = {} } = {}) => {
+        (({ charset = '/0123456789=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', content = '', spacing: { x: spacing_x = 0, y: spacing_y = 0 } = {} } = {}) => {
+            this.charset = charset;
             this.content = content;
             this.spacing = new XVector(spacing_x, spacing_y);
         })(properties);
@@ -1034,12 +918,12 @@ class XText extends XObject {
                 total += context.measureText(char).width + this.spacing.x;
             return total;
         });
-        const ascent = context.measureText(this.content).actualBoundingBoxAscent;
-        return new XVector(Math.max(...lines), ascent + (ascent + this.spacing.y) * (lines.length - 1));
+        const metrics = context.measureText(this.charset);
+        const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+        return new XVector(Math.max(...lines), height + (height + this.spacing.y) * (lines.length - 1));
     }
     draw(context, base) {
         let index = 0;
-        const lines = this.content.split('\n');
         const state = {
             fillStyle: context.fillStyle,
             globalAlpha: context.globalAlpha,
@@ -1057,13 +941,13 @@ class XText extends XObject {
         };
         const offset = { x: 0, y: 0 };
         const random = { x: 0, y: 0 };
-        const ascent = context.measureText(this.content).actualBoundingBoxAscent;
-        const height = ascent + (ascent + this.spacing.y) * (lines.length - 1);
+        const metrics = context.measureText(this.charset);
+        const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
         while (index < this.content.length) {
             const char = this.content[index++];
             if (char === '\n') {
                 offset.x = 0;
-                offset.y += ascent + this.spacing.y;
+                offset.y += height + this.spacing.y;
             }
             else if (char === '\xa7') {
                 const code = this.content.slice(index, this.content.indexOf('\xa7', index));
@@ -1132,14 +1016,33 @@ class XText extends XObject {
                 const y = base.y + offset.y + random.y * (Math.random() - 0.5) + height;
                 context.fillText(char, x, y);
                 context.strokeText(char, x, y);
-                const width = context.measureText(char).width;
-                offset.x += width + this.spacing.x;
+                offset.x += context.measureText(char).width + this.spacing.x;
             }
         }
         Object.assign(context, state);
     }
-    serialize() {
-        return Object.assign(super.serialize(), { content: this.content });
+}
+class XTile extends XSprite {
+    constructor(properties = {}) {
+        super(properties);
+        (({ offset: { x: offset_x = 0, y: offset_y = 0 } = {}, size: { x: size_x = 0, y: size_y = 0 } = {} } = {}) => {
+            this.offset = new XVector(offset_x, offset_y);
+            this.size = new XVector(size_x, size_y);
+        })(properties);
+    }
+    compute() {
+        return this.size;
+    }
+    draw(context, base) {
+        const texture = this.frames[this.state.index];
+        texture &&
+            context.drawImage(texture.value, this.offset.x, this.offset.y, this.size.x, this.size.y, base.x, base.y, this.size.x, this.size.y);
+        if (this.steps <= ++this.state.step) {
+            this.state.step = 0;
+            if (this.state.active && this.frames.length <= ++this.state.index) {
+                this.state.index = 0;
+            }
+        }
     }
 }
 /** An object representing a two-dimensional positional value. */
@@ -1171,7 +1074,7 @@ class XVector {
     }
     /** Calculates the relative direction from this object's position and another position. */
     direction(vector) {
-        return 180 / Math.PI * Math.atan2(this.y - vector.y, this.x - vector.x);
+        return (180 / Math.PI) * Math.atan2(this.y - vector.y, this.x - vector.x);
     }
     /** Calculates the distance between this object's position and another position. */
     distance(vector) {
@@ -1190,7 +1093,7 @@ class XVector {
      * a new `XVector` object with the result as its position.
      */
     endpoint(direction, distance) {
-        const radians = ((direction + 90) % 360) * Math.PI / 180;
+        const radians = (((direction + 90) % 360) * Math.PI) / 180;
         return new XVector(this.x + distance * Math.sin(Math.PI - radians), this.y + distance * Math.cos(Math.PI - radians));
     }
     /** Alter the internal value of this positional over a specified duration. */
@@ -1199,8 +1102,8 @@ class XVector {
             let index = 0;
             const x = this.x;
             const y = this.y;
-            clearInterval(X.cache.modulators.get(this));
-            X.cache.modulators.set(this, setInterval(() => {
+            clearInterval(X.cache.modulationTasks.get(this));
+            X.cache.modulationTasks.set(this, setInterval(() => {
                 if (index < duration) {
                     this.x = X.math.bezier(index / duration, x, ...points.map(point => point.x));
                     this.y = X.math.bezier(index / duration, y, ...points.map(point => point.y));
@@ -1209,7 +1112,7 @@ class XVector {
                 else {
                     this.x = X.math.bezier(1, x, ...points.map(point => point.x));
                     this.y = X.math.bezier(1, y, ...points.map(point => point.y));
-                    clearInterval(X.cache.modulators.get(this));
+                    clearInterval(X.cache.modulationTasks.get(this));
                     resolve();
                 }
             }, 20));
@@ -1227,9 +1130,6 @@ class XVector {
     round(base) {
         return base ? this.multiply(base).round().divide(base) : new XVector(Math.round(this.x), Math.round(this.y));
     }
-    serialize() {
-        return { x: this.x, y: this.y };
-    }
     subtract(a1, y = a1) {
         if (typeof a1 === 'number') {
             return new XVector(this.x - a1, this.y - y);
@@ -1238,51 +1138,12 @@ class XVector {
             return this.subtract(a1.x, a1.y);
         }
     }
+    /** Returns the raw values of this object's position. */
+    value() {
+        return { x: this.x, y: this.y };
+    }
 }
 const X = {
-    /** Creates an `ImageBitmap` from a given source URL. */
-    async bitmap(
-    /** The source URL of the image. */
-    source, 
-    /** The image's color transformation function. */
-    transformer, 
-    /**
-     * The crop to apply to the image. If a value is positive, it will subtract from its associated edge. If a value
-     * is negative, it will cut all but its own size from the opposite edge that it's associated with. All values
-     * default to `0` if not specified.
-     */
-    { bottom = 0, left = 0, right = 0, top = 0 } = {}) {
-        const image = await X.image(source);
-        if (image.width === 0 || image.height === 0) {
-            return await createImageBitmap(new ImageData(1, 1));
-        }
-        else {
-            const context = X.context(document.createElement('canvas'), image.width, image.height);
-            context.drawImage(image, 0, 0);
-            const max = image.width * 4;
-            const size = new XVector(image.width, image.height);
-            const sx = Math.round((left < 0 ? image.width : 0) + left);
-            const sy = Math.round((top < 0 ? image.height : 0) + top);
-            const sw = Math.round((right < 0 ? 0 : image.width) - right) - sx;
-            const sh = Math.round((bottom < 0 ? 0 : image.height) - bottom) - sy;
-            const data = context.getImageData(sx, sy, sw, sh).data.slice();
-            const index = new XVector(-1, -1);
-            while (++index.x < image.width) {
-                const offset = index.x * 4;
-                while (++index.y < image.height) {
-                    let step = index.y * max + offset;
-                    const color = transformer([data[step++], data[step++], data[step++], data[step++]], index, size);
-                    data[--step] = color[3];
-                    data[--step] = color[2];
-                    data[--step] = color[1];
-                    data[--step] = color[0];
-                }
-                index.y = -1;
-            }
-            index.x = -1;
-            return await createImageBitmap(new ImageData(data, sw));
-        }
-    },
     /** Gets an `AudioBuffer` from the given source URL. */
     buffer(source) {
         if (source in X.cache.buffers) {
@@ -1297,14 +1158,76 @@ const X = {
             }));
         }
     },
+    bufferAsset(
+    /** The buffer's source. */
+    source, { 
+    /**
+     * The extra duration in which to keep this asset's source buffer in memory after this asset and all of its
+     * siblings (other assets which share this asset's source buffer) are unloaded.
+     */
+    cache = 0, 
+    /** The data modifier to apply to the buffer. */
+    transformer = void 0, 
+    /** The trim to apply to the buffer. */
+    trim: { start = 0, stop = 0 } = {} } = {}) {
+        const asset = new XAsset({
+            async loader() {
+                const assets = X.cache.bufferAssets[source] || (X.cache.bufferAssets[source] = []);
+                assets.includes(asset) || assets.push(asset);
+                const buffer = await X.buffer(source);
+                if (start || stop || transformer) {
+                    const c = buffer.numberOfChannels;
+                    const b = Math.round(buffer.sampleRate * ((start < 0 ? buffer.duration : 0) + start));
+                    const l = Math.round(buffer.sampleRate * ((stop < 0 ? 0 : buffer.duration) - stop)) - b;
+                    const index = new XVector(-1);
+                    const clone = new AudioBuffer({ length: l, numberOfChannels: c, sampleRate: buffer.sampleRate });
+                    while (++index.y < c) {
+                        const data = buffer.getChannelData(index.y).slice(b, b + l);
+                        if (transformer) {
+                            const total = { x: c, y: l };
+                            while (++index.x < l) {
+                                data[index.x] = transformer(data[index.x], index, total);
+                            }
+                            index.x = -1;
+                        }
+                        clone.copyToChannel(data, index.y);
+                    }
+                    return clone;
+                }
+                else {
+                    return buffer;
+                }
+            },
+            source,
+            async unloader() {
+                const assets = X.cache.bufferAssets[source] || (X.cache.bufferAssets[source] = []);
+                X.pause(cache).then(() => {
+                    assets.includes(asset) && assets.splice(assets.indexOf(asset), 1);
+                    if (assets.length === 0) {
+                        delete X.cache.buffers[source];
+                    }
+                });
+            }
+        });
+        return asset;
+    },
     /** A cache for various types of resources. */
     cache: {
-        /** Stores promises for all `X.buffer()` requests. */
+        /** Stores promises for all audio requests. */
         buffers: {},
-        /** Stores promises for all `X.image()` requests. */
+        /** All loaded assets attached to any given cached buffer. */
+        bufferAssets: {},
+        /** Stores promises for all image requests. */
         images: {},
+        /** All loaded assets attached to any given cached image. */
+        imageAssets: {},
         /** Stores all active modulation tasks for any `AudioParam`, `XNumber`, or `XVector` objects. */
-        modulators: new Map()
+        modulationTasks: new Map()
+    },
+    /** A recursive operator function. */
+    chain(input, handler) {
+        const loop = (input) => handler(input, loop);
+        return loop(input);
     },
     /** Sets the given canvas to the specified size and generates a new `CanvasRenderingContext2D` from it. */
     context(canvas, width = 1, height = 1) {
@@ -1328,6 +1251,63 @@ const X = {
             }));
         }
     },
+    imageAsset(
+    /** The image's source. */
+    source, { 
+    /**
+     * The extra duration in which to keep this asset's source image in memory after this asset and all of its
+     * siblings (other assets which share this asset's source image) are unloaded.
+     */
+    cache = 0, 
+    /** The pixel shader to apply to the image. */
+    shader = void 0 } = {}) {
+        const asset = new XAsset({
+            async loader() {
+                const assets = X.cache.imageAssets[source] || (X.cache.imageAssets[source] = []);
+                assets.includes(asset) || assets.push(asset);
+                const image = await X.image(source);
+                if (image.width === 0 || image.height === 0) {
+                    return await createImageBitmap(new ImageData(1, 1));
+                }
+                else if (shader) {
+                    const context = X.context(document.createElement('canvas'), image.width, image.height);
+                    context.drawImage(image, 0, 0);
+                    const { data } = context.getImageData(0, 0, image.width, image.height);
+                    const x4 = image.width * 4;
+                    const index = { x: -1, y: -1 };
+                    const total = { x: image.width, y: image.height };
+                    while (++index.x < image.width) {
+                        const n4 = index.x * 4;
+                        while (++index.y < image.height) {
+                            let step = index.y * x4 + n4;
+                            const color = shader([data[step++], data[step++], data[step++], data[step++]], index, total);
+                            data[--step] = color[3];
+                            data[--step] = color[2];
+                            data[--step] = color[1];
+                            data[--step] = color[0];
+                        }
+                        index.y = -1;
+                    }
+                    return await createImageBitmap(new ImageData(data, image.width));
+                }
+                else {
+                    return image;
+                }
+            },
+            source,
+            async unloader() {
+                const assets = X.cache.imageAssets[source] || (X.cache.imageAssets[source] = []);
+                X.pause(cache).then(() => {
+                    assets.includes(asset) && assets.splice(assets.indexOf(asset), 1);
+                    if (assets.length === 0) {
+                        X.cache.images[source].then(image => URL.revokeObjectURL(image.src));
+                        delete X.cache.images[source];
+                    }
+                });
+            }
+        });
+        return asset;
+    },
     /** Various math-related methods used throughout the engine. */
     math: {
         /** Calculates the value of a position on an polynomial bezier curve. */
@@ -1344,8 +1324,13 @@ const X = {
         /** Rotates a line segment for optimized intersection checking. */
         rotation(a1, a2, a3) {
             return (a3.y - a1.y) * (a2.x - a1.x) > (a2.y - a1.y) * (a3.x - a1.x);
+        },
+        /** Maps a value to a sine wave with a 0-1 input and output range. */
+        wave(value) {
+            return Math.sin(((value + 0.5) * 2 - 1) * Math.PI) / 2 + 0.5;
         }
     },
+    /** Parses JS objects previously stringified with `X.stringify()` */
     parse(text) {
         return JSON.parse(text, (key, value) => {
             if (typeof value === 'string') {
@@ -1364,6 +1349,8 @@ const X = {
                                 return void 0;
                             }
                         }
+                    case '#':
+                        return eval(value);
                 }
             }
             else {
@@ -1375,20 +1362,89 @@ const X = {
     pause(duration = 0) {
         return new Promise(resolve => setTimeout(() => resolve(), duration));
     },
+    /** Returns an audio daemon for generating audio player instances. */
+    daemon(audio, { 
+    /** The base gain of this player. */
+    gain = 1, 
+    /** Whether or not this player's instances should loop by default. */
+    loop = false, 
+    /** The base playback rate of this player. */
+    rate = 1, 
+    /** The audio router to use for this object. */
+    router = ((context, input) => input.connect(context.destination)) } = {}) {
+        const daemon = {
+            audio,
+            gain,
+            instance() {
+                // initialize values
+                const context = new AudioContext();
+                const gain = context.createGain();
+                const source = context.createBufferSource();
+                // set defaults
+                gain.gain.value = daemon.gain;
+                source.buffer = daemon.audio.value;
+                source.loop = daemon.loop;
+                source.playbackRate.value = daemon.rate;
+                // establish connections
+                daemon.router(context, gain);
+                source.connect(gain);
+                source.start();
+                // return controller
+                return {
+                    context,
+                    daemon,
+                    gain: gain.gain,
+                    get loop() {
+                        return source.loop;
+                    },
+                    set loop(value) {
+                        source.loop = value;
+                    },
+                    rate: source.playbackRate,
+                    stop() {
+                        source.stop();
+                        source.disconnect();
+                        source.buffer = null;
+                    }
+                };
+            },
+            instances: [],
+            loop,
+            rate,
+            router
+        };
+        return daemon;
+    },
+    /** Converts JS objects to JSON with support for functions, undefined values, infinity, and nan values. */
     stringify(value) {
         return JSON.stringify(value, (key, value) => {
-            if (typeof value === 'string') {
-                return `!${value}`;
-            }
-            else if (typeof value === 'function') {
-                return `@${value}`;
-            }
-            else {
-                return value;
+            switch (value) {
+                case +Infinity:
+                    return '#+Infinity';
+                case -Infinity:
+                    return '#-Infinity';
+                default:
+                    switch (typeof value) {
+                        case 'bigint':
+                            return `#${value}n`;
+                        case 'function':
+                            return `@${value}`;
+                        case 'number':
+                            return value === value ? value : '#NaN';
+                        case 'string':
+                            return `!${value}`;
+                        default:
+                            return value;
+                    }
             }
         });
     },
     /** The inital transform used in rendering and vertex calculations. */
     transform: [new XVector(), new XNumber(), new XVector(1)]
 };
+Object.assign(AudioParam.prototype, {
+    modulate(duration, ...points) {
+        return XNumber.prototype.modulate.call(this, duration, ...points);
+    }
+});
 //# sourceMappingURL=storyteller.js.map

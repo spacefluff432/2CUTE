@@ -1,15 +1,12 @@
 {
    "compilerOptions": {
       "lib": [ "ESNext", "DOM" ],
-      "module": "ESNext",
+      "module": "ES2020",
       "outDir": "./dist",
       "rootDir": "./src",
       "skipLibCheck": true,
       "sourceMap": true,
       "strict": true,
       "target": "ES2020"
-   },
-   "include": [
-      "src/**/*.*"
-   ]
+   }
 }
