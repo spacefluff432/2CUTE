@@ -1,7 +1,6 @@
 {
    "compilerOptions": {
       "lib": [ "ESNext", "DOM" ],
-      "module": "ES2020",
       "outDir": "./dist",
       "rootDir": "./src",
       "skipLibCheck": true,
