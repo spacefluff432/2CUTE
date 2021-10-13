@@ -1418,7 +1418,7 @@ class XText extends XObject {
    charset: string;
    /**
     * The text content to draw. For a detailed guide on how to make the most out of this, please raise an issue telling
-    * me (harrix432) to get off my fatass and make one.
+    * me (harrix432) to get off my horny ass and make one.
     */
    content: string;
    /** The vertical and horizontal spacing of the rendered text. */
