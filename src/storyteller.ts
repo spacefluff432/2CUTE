@@ -511,7 +511,9 @@ class XObject extends XHost<{ tick: [] }> {
             this.state.dimensions = dimensions;
          }
       }
-      for (const object of this.objects) object.calculate(filter, list, camera, [ position, rotation, scale ]);
+      for (const object of this.objects) {
+         object.calculate(filter, list, camera, [ position, rotation, scale ]);
+      }
    }
    /** Computes this object's size based on itself and the given canvas context. */
    compute(context: CanvasRenderingContext2D): XVector;
@@ -580,7 +582,9 @@ class XObject extends XHost<{ tick: [] }> {
       context.globalAlpha === 0 || this.draw(context, base);
 
       if (this.objects.length > 0) {
-         for (const object of this.objects) object.render(camera, context, [ position, rotation, scale ], debug);
+         for (const object of this.objects) {
+            object.render(camera, context, [ position, rotation, scale ], debug);
+         }
       }
 
       if (debug) {
@@ -809,44 +813,44 @@ class XHitbox extends XObject {
       for (const hitbox of hitboxes) {
          if (hitbox.state.dimensions === void 0) {
             continue;
-         } else {
+         } else if ((this.size.x === 0 || this.size.y === 0) && (hitbox.size.x === 0 || hitbox.size.y === 0)) {
             // zero exclusion - if both hitboxes have a volume of zero, treat them as single lines
-            if ((this.size.x === 0 || this.size.y === 0) && (hitbox.size.x === 0 || hitbox.size.y === 0)) {
-               const [ min2, max2 ] = hitbox.region();
-               if (X.math.intersection(min1, max1, min2, max2)) {
-                  hits.push(hitbox);
-               }
-            } else {
+            const [ min2, max2 ] = hitbox.region();
+            if (X.math.intersection(min1, max1, min2, max2)) {
+               hits.push(hitbox);
+            }
+         } else {
+            const [ min2, max2 ] = hitbox.region();
+            if (min1.x < max2.x && min2.x < max1.x && min1.y < max2.y && min2.y < max1.y) {
                // aabb minmax exclusion - if the aabb formed by the min and max of both boxes collide, continue
-               const [ min2, max2 ] = hitbox.region();
-               if (min1.x < max2.x && min2.x < max1.x && min1.y < max2.y && min2.y < max1.y) {
+               const vertices1 = this.vertices().map(vertex => new XVector(vertex).round(1000));
+               const vertices2 = hitbox.vertices().map(vertex => new XVector(vertex).round(1000));
+               if (
+                  (vertices1[0].x === vertices1[1].x || vertices1[0].y === vertices1[1].y) &&
+                  (vertices2[0].x === vertices2[1].x || vertices2[0].y === vertices2[1].y)
+               ) {
                   // alignment check - if the two boxes are axis-aligned at this stage, they are colliding
-                  const vertices1 = this.vertices().map(vertex => new XVector(vertex).round(1000));
-                  const vertices2 = hitbox.vertices().map(vertex => new XVector(vertex).round(1000));
-                  if (
-                     (vertices1[0].x === vertices1[1].x || vertices1[0].y === vertices1[1].y) &&
-                     (vertices2[0].x === vertices2[1].x || vertices2[0].y === vertices2[1].y)
-                  ) {
-                     hits.push(hitbox);
-                  } else {
-                     for (const a1 of vertices1) {
-                        // point raycast - if a line drawn from box1 intersects with box2 only once, there is collision
-                        let miss = true;
-                        const a2 = new XVector(a1).add(new XVector(max2).subtract(min2).multiply(2)).value();
-                        for (const [ b1, b2 ] of [
-                           [ vertices2[0], vertices2[1] ],
-                           [ vertices2[1], vertices2[2] ],
-                           [ vertices2[2], vertices2[3] ],
-                           [ vertices2[3], vertices2[0] ]
-                        ]) {
-                           if (X.math.intersection(a1, a2, b1, b2)) {
-                              if ((miss = !miss)) break;
+                  hits.push(hitbox);
+               } else {
+                  for (const a1 of vertices1) {
+                     let miss = true;
+                     const a2 = new XVector(a1).add(new XVector(max2).subtract(min2).multiply(2)).value();
+                     for (const [ b1, b2 ] of [
+                        [ vertices2[0], vertices2[1] ],
+                        [ vertices2[1], vertices2[2] ],
+                        [ vertices2[2], vertices2[3] ],
+                        [ vertices2[3], vertices2[0] ]
+                     ]) {
+                        if (X.math.intersection(a1, a2, b1, b2)) {
+                           if ((miss = !miss)) {
+                              break;
                            }
                         }
-                        if (!miss) {
-                           hits.push(hitbox);
-                           break;
-                        }
+                     }
+                     if (!miss) {
+                        // point raycast - if a line drawn from box1 intersects with box2 only once, there is collision
+                        hits.push(hitbox);
+                        break;
                      }
                   }
                }
@@ -1212,7 +1216,9 @@ class XRenderer extends XHost<{ tick: [] }> {
       if (key in this.layers) {
          const layer = this.layers[key];
          layer.modifiers.includes('ambient') && this.refresh();
-         for (const object of objects) layer.objects.includes(object) || layer.objects.push(object);
+         for (const object of objects) {
+            layer.objects.includes(object) || layer.objects.push(object);
+         }
          X.chain(layer as { objects: XObject[] }, (parent, next) => {
             parent.objects.sort((object1, object2) => object1.priority.value - object2.priority.value).forEach(next);
          });
@@ -1320,7 +1326,9 @@ class XRenderer extends XHost<{ tick: [] }> {
                scale * (center.y + -(modifiers.includes('static') ? center.y : camera.y)) +
                   (this.shake.value ? scale * this.shake.value * (Math.random() - 0.5) : 0)
             );
-            for (const object of objects) object.render(camera, context, X.transform, this.debug);
+            for (const object of objects) {
+               object.render(camera, context, X.transform, this.debug);
+            }
          }
       }
    }
@@ -1430,7 +1438,9 @@ class XText extends XObject {
    compute (context: CanvasRenderingContext2D) {
       const lines = this.content.split('\n').map(section => {
          let total = 0;
-         for (const char of section) total += context.measureText(char).width + this.spacing.x;
+         for (const char of section) {
+            total += context.measureText(char).width + this.spacing.x;
+         }
          return total;
       });
       const metrics = context.measureText(this.charset);
