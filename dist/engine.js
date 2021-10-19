@@ -685,7 +685,13 @@ class XRenderer extends XHost {
          * This renderer's state. Contains the last computed camera position, rendering interval timer handle, last known
          * container height, last computed scale, and last known container width.
          */
-        this.state = { camera: { x: NaN, y: NaN }, handle: void 0, height: 0, scale: 1, width: 0 };
+        this.state = {
+            camera: { x: NaN, y: NaN },
+            handle: void 0,
+            height: 0,
+            scale: 1,
+            width: 0
+        };
         Object.assign(container.style, {
             display: 'grid',
             gridTemplateAreas: "'top top top' 'left center right' 'bottom bottom bottom'",
@@ -848,17 +854,22 @@ class XSprite extends XObject {
          * the current step value.
          */
         this.state = { index: 0, active: false, step: 0 };
-        (({ crop: { bottom = 0, left = 0, right = 0, top = 0 } = {}, step = 0, steps = 1, frames = [] } = {}) => {
+        (({ auto = false, crop: { bottom = 0, left = 0, right = 0, top = 0 } = {}, step = 0, steps = 1, frames = [] } = {}) => {
             this.crop = { bottom, left, right, top };
             this.frames = frames;
             this.step = step;
             this.steps = steps;
+            auto && this.enable();
         })(properties);
     }
     compute() {
         const texture = this.frames[this.state.index];
         if (texture) {
-            return new XVector(texture.value.width, texture.value.height);
+            const x = Math.round((this.crop.left < 0 ? texture.value.width : 0) + this.crop.left);
+            const y = Math.round((this.crop.top < 0 ? texture.value.height : 0) + this.crop.top);
+            const w = Math.round((this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right) - x;
+            const h = Math.round((this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom) - y;
+            return new XVector(w, h);
         }
         else {
             return new XVector(0, 0);
@@ -1149,12 +1160,12 @@ class XVector {
 }
 const X = {
     /** Gets an `AudioBuffer` from the given source URL. */
-    buffer(source) {
-        if (source in X.cache.buffers) {
-            return X.cache.buffers[source];
+    audio(source) {
+        if (source in X.cache.audios) {
+            return X.cache.audios[source];
         }
         else {
-            return (X.cache.buffers[source] = new Promise(resolve => {
+            return (X.cache.audios[source] = new Promise(resolve => {
                 const request = Object.assign(new XMLHttpRequest(), { responseType: 'arraybuffer' });
                 request.addEventListener('load', () => new AudioContext().decodeAudioData(request.response, resolve));
                 request.open('GET', source, true);
@@ -1162,31 +1173,32 @@ const X = {
             }));
         }
     },
-    bufferAsset(
-    /** The buffer's source. */
+    /** Returns an asset for a given audio source. */
+    audioAsset(
+    /** The audio's source. */
     source, { 
     /**
-     * The extra duration in which to keep this asset's source buffer in memory after this asset and all of its
-     * siblings (other assets which share this asset's source buffer) are unloaded.
+     * The extra duration in which to keep this asset's source audio in memory after this asset and all of its
+     * siblings (other assets which share this asset's source audio) are unloaded.
      */
     cache = 0, 
-    /** The data modifier to apply to the buffer. */
+    /** The data modifier to apply to the audio. */
     transformer = void 0, 
-    /** The trim to apply to the buffer. */
+    /** The trim to apply to the audio. */
     trim: { start = 0, stop = 0 } = {} } = {}) {
         const asset = new XAsset({
             async loader() {
-                const assets = X.cache.bufferAssets[source] || (X.cache.bufferAssets[source] = []);
+                const assets = X.cache.audioAssets[source] || (X.cache.audioAssets[source] = []);
                 assets.includes(asset) || assets.push(asset);
-                const buffer = await X.buffer(source);
+                const audio = await X.audio(source);
                 if (start || stop || transformer) {
-                    const c = buffer.numberOfChannels;
-                    const b = Math.round(buffer.sampleRate * ((start < 0 ? buffer.duration : 0) + start));
-                    const l = Math.round(buffer.sampleRate * ((stop < 0 ? 0 : buffer.duration) - stop)) - b;
+                    const c = audio.numberOfChannels;
+                    const b = Math.round(audio.sampleRate * ((start < 0 ? audio.duration : 0) + start));
+                    const l = Math.round(audio.sampleRate * ((stop < 0 ? 0 : audio.duration) - stop)) - b;
                     const index = new XVector(-1);
-                    const clone = new AudioBuffer({ length: l, numberOfChannels: c, sampleRate: buffer.sampleRate });
+                    const clone = new AudioBuffer({ length: l, numberOfChannels: c, sampleRate: audio.sampleRate });
                     while (++index.y < c) {
-                        const data = buffer.getChannelData(index.y).slice(b, b + l);
+                        const data = audio.getChannelData(index.y).slice(b, b + l);
                         if (transformer) {
                             const total = { x: c, y: l };
                             while (++index.x < l) {
@@ -1199,16 +1211,16 @@ const X = {
                     return clone;
                 }
                 else {
-                    return buffer;
+                    return audio;
                 }
             },
             source,
             async unloader() {
-                const assets = X.cache.bufferAssets[source] || (X.cache.bufferAssets[source] = []);
+                const assets = X.cache.audioAssets[source] || (X.cache.audioAssets[source] = []);
                 X.pause(cache).then(() => {
                     assets.includes(asset) && assets.splice(assets.indexOf(asset), 1);
                     if (assets.length === 0) {
-                        delete X.cache.buffers[source];
+                        delete X.cache.audios[source];
                     }
                 });
             }
@@ -1218,9 +1230,13 @@ const X = {
     /** A cache for various types of resources. */
     cache: {
         /** Stores promises for all audio requests. */
-        buffers: {},
-        /** All loaded assets attached to any given cached buffer. */
-        bufferAssets: {},
+        audios: {},
+        /** All loaded assets attached to any given cached audio. */
+        audioAssets: {},
+        /** Stores promises for all data requests. */
+        datas: {},
+        /** All loaded assets attached to any given cached data. */
+        dataAssets: {},
         /** Stores promises for all image requests. */
         images: {},
         /** All loaded assets attached to any given cached image. */
@@ -1236,6 +1252,51 @@ const X = {
     /** Sets the given canvas to the specified size and generates a new `CanvasRenderingContext2D` from it. */
     context(canvas, width = 1, height = 1) {
         return Object.assign(Object.assign(canvas, { width, height }).getContext('2d'), { imageSmoothingEnabled: false });
+    },
+    /** Gets an `XBasic` from the given source URL. */
+    data(source) {
+        if (source in X.cache.datas) {
+            return X.cache.datas[source];
+        }
+        else {
+            return (X.cache.datas[source] = fetch(source).then(value => value.json()));
+        }
+    },
+    /** Returns an asset for a given data source. */
+    dataAsset(
+    /** The data's source. */
+    source, { 
+    /**
+     * The extra duration in which to keep this asset's source data in memory after this asset and all of its
+     * siblings (other assets which share this asset's source data) are unloaded.
+     */
+    cache = 0, 
+    /** The pixel shader to apply to the image. */
+    modifier = void 0 } = {}) {
+        const asset = new XAsset({
+            async loader() {
+                const assets = X.cache.dataAssets[source] || (X.cache.dataAssets[source] = []);
+                assets.includes(asset) || assets.push(asset);
+                const data = await X.data(source);
+                if (modifier) {
+                    return modifier(data);
+                }
+                else {
+                    return data;
+                }
+            },
+            source,
+            async unloader() {
+                const assets = X.cache.dataAssets[source] || (X.cache.dataAssets[source] = []);
+                X.pause(cache).then(() => {
+                    assets.includes(asset) && assets.splice(assets.indexOf(asset), 1);
+                    if (assets.length === 0) {
+                        delete X.cache.datas[source];
+                    }
+                });
+            }
+        });
+        return asset;
     },
     /** Gets an `HTMLImageElement` from the given source URL. */
     image(source) {
@@ -1255,6 +1316,7 @@ const X = {
             }));
         }
     },
+    /** Returns an asset for a given image source. */
     imageAsset(
     /** The image's source. */
     source, { 
@@ -1312,6 +1374,18 @@ const X = {
         });
         return asset;
     },
+    /** Returns an inventory. */
+    inventory(...assets) {
+        return new XAsset({
+            async loader() {
+                return await Promise.all(assets.map(asset => asset.load())).then(() => assets);
+            },
+            source: assets.map(asset => asset.source).join('//'),
+            async unloader() {
+                await Promise.all(assets.map(asset => asset.unload()));
+            }
+        });
+    },
     /** Various math-related methods used throughout the engine. */
     math: {
         /** Calculates the value of a position on an polynomial bezier curve. */
@@ -1368,6 +1442,8 @@ const X = {
     },
     /** Returns an audio daemon for generating audio player instances. */
     daemon(audio, { 
+    /** The AudioContext to use for this daemon. */
+    context = void 0, 
     /** The base gain of this player. */
     gain = 1, 
     /** Whether or not this player's instances should loop by default. */
@@ -1378,10 +1454,11 @@ const X = {
     router = ((context, input) => input.connect(context.destination)) } = {}) {
         const daemon = {
             audio,
+            context,
             gain,
-            instance() {
+            instance(offset = 0) {
                 // initialize values
-                const context = new AudioContext();
+                const context = daemon.context || new AudioContext();
                 const gain = context.createGain();
                 const source = context.createBufferSource();
                 // set defaults
@@ -1392,7 +1469,7 @@ const X = {
                 // establish connections
                 daemon.router(context, gain);
                 source.connect(gain);
-                source.start();
+                source.start(0, offset);
                 // return controller
                 return {
                     context,

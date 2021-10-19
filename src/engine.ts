@@ -23,6 +23,13 @@ type X2 = {
    y: number;
 };
 
+/** The raw properties of an XAtlas object. */
+type XAtlasProperties = XProperties<XAtlas, 'menu'> &
+   ({
+      /** The navigators associated with this atlas. */
+      navigators?: XKeyed<XNavigator> | void;
+   } | void);
+
 /** An audio asset. */
 type XAudio = XAsset<AudioBuffer>;
 
@@ -39,12 +46,17 @@ type XColor = [number, number, number, number];
 type XDaemon = {
    /** The audio source to use. */
    audio: XAudio;
+   /** The audio context to use for this daemon. */
+   context: AudioContext | void;
    /** Controls the master volume of the audio being played. */
    gain: number;
    /** Whether or not to loop audio back to the start when it ends. */
    loop: boolean;
-   /** Initializes a new audio instance with the daemon's current values and starts it from the beginning. */
-   instance(): XInstance;
+   /**
+    * Initializes a new audio instance with the daemon's current values and starts it from the beginning. If an offset
+    * value is specified, the audio will instead start at the given offset in seconds.
+    */
+   instance(offset?: number): XInstance;
    /** A list of all initialized instances. */
    instances: XInstance[];
    /**
@@ -56,6 +68,9 @@ type XDaemon = {
    router: XRouter;
 };
 
+/** A data asset. */
+type XData<A extends XBasic = XBasic> = XAsset<A>;
+
 /** Excludes nullish values from the given type. */
 type XDefined<A> = Exclude<A, null | undefined | void>;
 
@@ -66,7 +81,7 @@ type XHitboxProperties = XObjectProperties & XProperties<XHitbox, 'size'>;
 type XImage = XAsset<HTMLImageElement | ImageBitmap>;
 
 /** The raw properties of an XInput object. */
-type XInputProperties = { target?: HTMLElement; codes?: (string | number)[] };
+type XInputProperties = { target?: HTMLElement; codes?: (string | number)[] } | void;
 
 /** An audio instance. */
 type XInstance = {
@@ -80,9 +95,12 @@ type XInstance = {
    gain: AudioParam;
    /** The rate parameter of this instance. */
    rate: AudioParam;
-   /** Stops the instance's audio and throws away the buffer. */
+   /** Stops the instance's audio and throws away the audio. */
    stop(): void;
 };
+
+/** An inventory of multiple assets, treated as a single asset. */
+type XInventory<A extends XAsset[] = XAsset[]> = XAsset<A>;
 
 /** Specifies an object whose values are of the given type. Can also specify the type of the object's keys. */
 type XKeyed<A = any, B extends string = any> = { [x in B]: A };
@@ -92,6 +110,43 @@ type XHandler<A extends any[] = any> = ((...data: A) => any) | { listener: (...d
 
 /** A valid XNavigator key. A string type refers to a navigator, a null type refers to no navigator, and a void type refers to the current navigator. */
 type XNavigatorKey = string | null | undefined | void;
+
+/** The raw properties of an XNavigator object. */
+type XNavigatorProperties = XProperties<XNavigator, 'objects' | 'position'> &
+   (
+      | {
+           [x in 'flip' | 'grid' | 'next' | 'prev']?: XNavigator[x] | void;
+        }
+      | void
+   );
+
+/** The raw properties of an XObject object. XObject object? Golly, that's not confusing at all! */
+type XObjectProperties = XProperties<
+   XObject,
+   | 'alpha'
+   | 'anchor'
+   | 'blend'
+   | 'fill'
+   | 'line'
+   | 'metadata'
+   | 'objects'
+   | 'parallax'
+   | 'position'
+   | 'priority'
+   | 'rotation'
+   | 'scale'
+   | 'shadow'
+   | 'stroke'
+   | 'text'
+>;
+
+/** The raw properties of an XPath object. */
+type XPathProperties = XObjectProperties &
+   XProperties<XPath, 'size'> &
+   ({
+      /** The path tracer to use for this object. */
+      tracer?: XTracer | void;
+   } | void);
 
 /** Extracts a "primitive" clone of the given type. */
 type XPrimitive<A> =
@@ -135,11 +190,28 @@ type XRectangleProperties = XObjectProperties & XProperties<XRectangle, 'size'>;
 /** The type of an XRenderer's layer. */
 type XRendererLayerModifier = 'ambient' | 'cumulative' | 'static';
 
+/** The raw properties of an XRenderer object. */
+type XRendererProperties = XProperties<
+   XRenderer,
+   'alpha' | 'camera' | 'container' | 'debug' | 'framerate' | 'region' | 'shake' | 'size'
+> &
+   ({
+      /** Whether or not this renderer should be automatically started upon construction. */
+      auto?: boolean | void;
+      /** The layers associated with this renderer. */
+      layers?: XKeyed<XRendererLayerModifier[]> | void;
+   } | void);
+
 /** A function ideally used to route audio from the given source node to the given context's destination. */
 type XRouter = (context: AudioContext, input: GainNode) => void;
 
 /** The raw properties of an XSprite object. */
-type XSpriteProperties = XObjectProperties & XProperties<XSprite, 'crop' | 'frames' | 'step' | 'steps'>;
+type XSpriteProperties = XObjectProperties &
+   XProperties<XSprite, 'crop' | 'frames' | 'step' | 'steps'> &
+   ({
+      /** Whether or not this sprite should be automatically enabled upon construction. */
+      auto?: boolean | void;
+   } | void);
 
 /** The raw properties of an XText object. */
 type XTextProperties = XObjectProperties & XProperties<XText, 'charset' | 'content' | 'spacing'>;
@@ -152,55 +224,6 @@ type XTracer = (context: CanvasRenderingContext2D, x: number, y: number) => void
 
 /** An array of three values, specifying the POSITION, ROTATION, and SCALE of a canvas transform in that order. */
 type XTransform = [XVector, XNumber, XVector];
-
-/** The raw properties of an XAtlas object. */
-type XAtlasProperties = XProperties<XAtlas, 'menu'> & {
-   /** The navigators associated with this atlas. */
-   navigators?: XKeyed<XNavigator> | void;
-};
-
-/** The raw properties of an XNavigator object. */
-type XNavigatorProperties = XProperties<XNavigator, 'objects' | 'position'> & {
-   [x in 'flip' | 'grid' | 'next' | 'prev']?: XNavigator[x] | void;
-};
-
-/** The raw properties of an XObject object. XObject object? Golly, that's not confusing at all! */
-type XObjectProperties = XProperties<
-   XObject,
-   | 'alpha'
-   | 'anchor'
-   | 'blend'
-   | 'fill'
-   | 'line'
-   | 'metadata'
-   | 'objects'
-   | 'parallax'
-   | 'position'
-   | 'priority'
-   | 'rotation'
-   | 'scale'
-   | 'shadow'
-   | 'stroke'
-   | 'text'
->;
-
-/** The raw properties of an XPath object. */
-type XPathProperties = XObjectProperties &
-   XProperties<XPath, 'size'> & {
-      /** The path tracer to use for this object. */
-      tracer?: XTracer | void;
-   };
-
-/** The raw properties of an XRenderer object. */
-type XRendererProperties = XProperties<
-   XRenderer,
-   'alpha' | 'camera' | 'container' | 'debug' | 'framerate' | 'region' | 'shake' | 'size'
-> & {
-   /** Whether or not this renderer should be automatically started upon construction. */
-   auto?: boolean | void;
-   /** The layers associated with this renderer. */
-   layers?: XKeyed<XRendererLayerModifier[]> | void;
-};
 
 /** An event host. The type parameter `A` defines which events this host should fire and listen for. */
 class XHost<A extends XKeyed<any[]> = {}> {
@@ -1155,7 +1178,13 @@ class XRenderer extends XHost<{ tick: [] }> {
     * This renderer's state. Contains the last computed camera position, rendering interval timer handle, last known
     * container height, last computed scale, and last known container width.
     */
-   state = { camera: { x: NaN, y: NaN }, handle: void 0 as number | void, height: 0, scale: 1, width: 0 };
+   state = {
+      camera: { x: NaN, y: NaN },
+      handle: void 0 as ReturnType<typeof setTimeout> | void,
+      height: 0,
+      scale: 1,
+      width: 0
+   };
    constructor ({
       alpha = 1,
       auto = false,
@@ -1352,6 +1381,7 @@ class XSprite extends XObject {
    constructor (properties: XSpriteProperties = {}) {
       super(properties);
       (({
+         auto = false,
          crop: { bottom = 0, left = 0, right = 0, top = 0 } = {},
          step = 0,
          steps = 1,
@@ -1361,12 +1391,17 @@ class XSprite extends XObject {
          this.frames = frames;
          this.step = step;
          this.steps = steps;
+         auto && this.enable();
       })(properties);
    }
    compute () {
       const texture = this.frames[this.state.index];
       if (texture) {
-         return new XVector(texture.value.width, texture.value.height);
+         const x = Math.round((this.crop.left < 0 ? texture.value.width : 0) + this.crop.left);
+         const y = Math.round((this.crop.top < 0 ? texture.value.height : 0) + this.crop.top);
+         const w = Math.round((this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right) - x;
+         const h = Math.round((this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom) - y;
+         return new XVector(w, h);
       } else {
          return new XVector(0, 0);
       }
@@ -1705,11 +1740,11 @@ class XVector {
 
 const X = {
    /** Gets an `AudioBuffer` from the given source URL. */
-   buffer (source: string) {
-      if (source in X.cache.buffers) {
-         return X.cache.buffers[source];
+   audio (source: string) {
+      if (source in X.cache.audios) {
+         return X.cache.audios[source];
       } else {
-         return (X.cache.buffers[source] = new Promise<AudioBuffer>(resolve => {
+         return (X.cache.audios[source] = new Promise<AudioBuffer>(resolve => {
             const request = Object.assign(new XMLHttpRequest(), { responseType: 'arraybuffer' });
             request.addEventListener('load', () => new AudioContext().decodeAudioData(request.response, resolve));
             request.open('GET', source, true);
@@ -1717,34 +1752,35 @@ const X = {
          }));
       }
    },
-   bufferAsset (
-      /** The buffer's source. */
+   /** Returns an asset for a given audio source. */
+   audioAsset (
+      /** The audio's source. */
       source: string,
       {
          /**
-          * The extra duration in which to keep this asset's source buffer in memory after this asset and all of its
-          * siblings (other assets which share this asset's source buffer) are unloaded.
+          * The extra duration in which to keep this asset's source audio in memory after this asset and all of its
+          * siblings (other assets which share this asset's source audio) are unloaded.
           */
          cache = 0,
-         /** The data modifier to apply to the buffer. */
+         /** The data modifier to apply to the audio. */
          transformer = void 0 as ((value: number, index: XVector, total: X2) => number) | void,
-         /** The trim to apply to the buffer. */
+         /** The trim to apply to the audio. */
          trim: { start = 0, stop = 0 } = {}
       } = {}
    ): XAudio {
-      const asset = new XAsset<AudioBuffer>({
+      const asset = new XAsset({
          async loader () {
-            const assets = X.cache.bufferAssets[source] || (X.cache.bufferAssets[source] = []);
+            const assets = X.cache.audioAssets[source] || (X.cache.audioAssets[source] = []);
             assets.includes(asset) || assets.push(asset);
-            const buffer = await X.buffer(source);
+            const audio = await X.audio(source);
             if (start || stop || transformer) {
-               const c = buffer.numberOfChannels;
-               const b = Math.round(buffer.sampleRate * ((start < 0 ? buffer.duration : 0) + start));
-               const l = Math.round(buffer.sampleRate * ((stop < 0 ? 0 : buffer.duration) - stop)) - b;
+               const c = audio.numberOfChannels;
+               const b = Math.round(audio.sampleRate * ((start < 0 ? audio.duration : 0) + start));
+               const l = Math.round(audio.sampleRate * ((stop < 0 ? 0 : audio.duration) - stop)) - b;
                const index = new XVector(-1);
-               const clone = new AudioBuffer({ length: l, numberOfChannels: c, sampleRate: buffer.sampleRate });
+               const clone = new AudioBuffer({ length: l, numberOfChannels: c, sampleRate: audio.sampleRate });
                while (++index.y < c) {
-                  const data = buffer.getChannelData(index.y).slice(b, b + l);
+                  const data = audio.getChannelData(index.y).slice(b, b + l);
                   if (transformer) {
                      const total = { x: c, y: l };
                      while (++index.x < l) {
@@ -1756,16 +1792,16 @@ const X = {
                }
                return clone;
             } else {
-               return buffer;
+               return audio;
             }
          },
          source,
          async unloader () {
-            const assets = X.cache.bufferAssets[source] || (X.cache.bufferAssets[source] = []);
+            const assets = X.cache.audioAssets[source] || (X.cache.audioAssets[source] = []);
             X.pause(cache).then(() => {
                assets.includes(asset) && assets.splice(assets.indexOf(asset), 1);
                if (assets.length === 0) {
-                  delete X.cache.buffers[source];
+                  delete X.cache.audios[source];
                }
             });
          }
@@ -1775,9 +1811,13 @@ const X = {
    /** A cache for various types of resources. */
    cache: {
       /** Stores promises for all audio requests. */
-      buffers: {} as XKeyed<Promise<AudioBuffer>>,
-      /** All loaded assets attached to any given cached buffer. */
-      bufferAssets: {} as XKeyed<XAudio[]>,
+      audios: {} as XKeyed<Promise<AudioBuffer>>,
+      /** All loaded assets attached to any given cached audio. */
+      audioAssets: {} as XKeyed<XAudio[]>,
+      /** Stores promises for all data requests. */
+      datas: {} as XKeyed<Promise<XBasic>>,
+      /** All loaded assets attached to any given cached data. */
+      dataAssets: {} as XKeyed<XData[]>,
       /** Stores promises for all image requests. */
       images: {} as XKeyed<Promise<HTMLImageElement>>,
       /** All loaded assets attached to any given cached image. */
@@ -1793,6 +1833,52 @@ const X = {
    /** Sets the given canvas to the specified size and generates a new `CanvasRenderingContext2D` from it. */
    context (canvas: HTMLCanvasElement, width = 1, height = 1) {
       return Object.assign(Object.assign(canvas, { width, height }).getContext('2d'), { imageSmoothingEnabled: false });
+   },
+   /** Gets an `XBasic` from the given source URL. */
+   data (source: string) {
+      if (source in X.cache.datas) {
+         return X.cache.datas[source];
+      } else {
+         return (X.cache.datas[source] = fetch(source).then(value => value.json() as Promise<XBasic>));
+      }
+   },
+   /** Returns an asset for a given data source. */
+   dataAsset<A extends XBasic = XBasic> (
+      /** The data's source. */
+      source: string,
+      {
+         /**
+          * The extra duration in which to keep this asset's source data in memory after this asset and all of its
+          * siblings (other assets which share this asset's source data) are unloaded.
+          */
+         cache = 0,
+         /** The pixel shader to apply to the image. */
+         modifier = void 0 as ((data: XBasic) => A) | void
+      } = {}
+   ): XData<A> {
+      const asset = new XAsset<A>({
+         async loader () {
+            const assets = X.cache.dataAssets[source] || (X.cache.dataAssets[source] = []);
+            assets.includes(asset) || assets.push(asset);
+            const data = await X.data(source);
+            if (modifier) {
+               return modifier(data);
+            } else {
+               return data as A;
+            }
+         },
+         source,
+         async unloader () {
+            const assets = X.cache.dataAssets[source] || (X.cache.dataAssets[source] = []);
+            X.pause(cache).then(() => {
+               assets.includes(asset) && assets.splice(assets.indexOf(asset), 1);
+               if (assets.length === 0) {
+                  delete X.cache.datas[source];
+               }
+            });
+         }
+      });
+      return asset;
    },
    /** Gets an `HTMLImageElement` from the given source URL. */
    image (source: string) {
@@ -1811,6 +1897,7 @@ const X = {
          }));
       }
    },
+   /** Returns an asset for a given image source. */
    imageAsset (
       /** The image's source. */
       source: string,
@@ -1824,7 +1911,7 @@ const X = {
          shader = void 0 as ((color: XColor, index: X2, total: X2) => XColor) | void
       } = {}
    ): XImage {
-      const asset = new XAsset<HTMLImageElement | ImageBitmap>({
+      const asset = new XAsset({
          async loader () {
             const assets = X.cache.imageAssets[source] || (X.cache.imageAssets[source] = []);
             assets.includes(asset) || assets.push(asset);
@@ -1868,6 +1955,18 @@ const X = {
          }
       });
       return asset;
+   },
+   /** Returns an inventory. */
+   inventory<A extends XAsset[]> (...assets: A): XInventory<A> {
+      return new XAsset({
+         async loader () {
+            return await Promise.all(assets.map(asset => asset.load())).then(() => assets);
+         },
+         source: assets.map(asset => asset.source).join('//'),
+         async unloader () {
+            await Promise.all(assets.map(asset => asset.unload()));
+         }
+      });
    },
    /** Various math-related methods used throughout the engine. */
    math: {
@@ -1929,6 +2028,8 @@ const X = {
    daemon (
       audio: XAudio,
       {
+         /** The AudioContext to use for this daemon. */
+         context = void 0,
          /** The base gain of this player. */
          gain = 1,
          /** Whether or not this player's instances should loop by default. */
@@ -1941,10 +2042,11 @@ const X = {
    ) {
       const daemon: XDaemon = {
          audio,
+         context,
          gain,
-         instance () {
+         instance (offset = 0) {
             // initialize values
-            const context = new AudioContext();
+            const context = daemon.context || new AudioContext();
             const gain = context.createGain();
             const source = context.createBufferSource();
 
@@ -1957,7 +2059,7 @@ const X = {
             // establish connections
             daemon.router(context, gain);
             source.connect(gain);
-            source.start();
+            source.start(0, offset);
 
             // return controller
             return {
