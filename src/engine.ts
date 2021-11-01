@@ -24,11 +24,10 @@ type X2 = {
 };
 
 /** The raw properties of an XAtlas object. */
-type XAtlasProperties = XProperties<XAtlas, 'menu'> &
-   ({
-      /** The navigators associated with this atlas. */
-      navigators?: XKeyed<XNavigator> | void;
-   } | void);
+type XAtlasProperties<A extends string = string> = {
+   /** The navigators associated with this atlas. */
+   navigators?: XKeyed<XNavigator<A>, A> | void;
+} | void;
 
 /** An audio asset. */
 type XAudio = XAsset<AudioBuffer>;
@@ -47,7 +46,7 @@ type XDaemon = {
    /** The audio source to use. */
    audio: XAudio;
    /** The audio context to use for this daemon. */
-   context: AudioContext | void;
+   context: AudioContext;
    /** Controls the master volume of the audio being played. */
    gain: number;
    /** Whether or not to loop audio back to the start when it ends. */
@@ -109,13 +108,13 @@ type XKeyed<A = any, B extends string = any> = { [x in B]: A };
 type XHandler<A extends any[] = any> = ((...data: A) => any) | { listener: (...data: A) => any; priority: number };
 
 /** A valid XNavigator key. A string type refers to a navigator, a null type refers to no navigator, and a void type refers to the current navigator. */
-type XNavigatorKey = string | null | undefined | void;
+type XNavigatorKey<A extends string = string> = A | null | undefined | void;
 
 /** The raw properties of an XNavigator object. */
-type XNavigatorProperties = XProperties<XNavigator, 'objects' | 'position'> &
+type XNavigatorProperties<A extends string = string> = XProperties<XNavigator<A>, 'objects' | 'position'> &
    (
       | {
-           [x in 'flip' | 'grid' | 'next' | 'prev']?: XNavigator[x] | void;
+           [x in 'flip' | 'grid' | 'next' | 'prev']?: XNavigator<A>[x] | void;
         }
       | void
    );
@@ -233,7 +232,9 @@ class XHost<A extends XKeyed<any[]> = {}> {
    fire<B extends keyof A> (name: B, ...data: A[B]) {
       const list = this.events[name];
       if (list) {
-         return list.map(handler => (typeof handler === 'function' ? handler : handler.listener)(...data));
+         return [ ...list.values() ].map(handler => {
+            return (typeof handler === 'function' ? handler : handler.listener)(...data);
+         });
       } else {
          return [];
       }
@@ -270,15 +271,11 @@ class XHost<A extends XKeyed<any[]> = {}> {
       } else {
          const list = this.events[name] || (this.events[name] = []);
          list!.push(a2);
-         list!
-            .sort(
-               (handler1, handler2) =>
-                  (typeof handler1 === 'function' ? 0 : handler1.priority) -
-                  (typeof handler2 === 'function' ? 0 : handler2.priority)
-            )
-            .forEach((value, index) => {
-               list![index] = value;
-            });
+         list!.sort(
+            (handler1, handler2) =>
+               (typeof handler1 === 'function' ? 0 : handler1.priority) -
+               (typeof handler2 === 'function' ? 0 : handler2.priority)
+         );
          return this;
       }
    }
@@ -508,7 +505,7 @@ class XObject extends XHost<{ tick: [] }> {
       const position = transform[0].add(this.position).add(this.parallax.multiply(camera));
       const rotation = transform[1].add(this.rotation);
       const scale = transform[2].multiply(this.scale);
-      if (this instanceof XHitbox && (typeof filter === 'function' ? filter(this) : filter)) {
+      if (this instanceof XHitbox && X.provide(filter, this)) {
          list.push(this);
          const size = this.size.multiply(scale);
          const half = size.divide(2);
@@ -706,25 +703,22 @@ class XAsset<A = any> extends XHost<{ load: []; unload: [] }> {
  * The XAtlas class defines a system in which several XNavigator objects are associated with each other. When two
  * navigators share an atlas, those navigators can be traversed between.
  */
-class XAtlas {
-   /** The menu of this navigator, which refers to the navigator to switch to when using `.navigate('menu')` */
-   menu: XNavigatorKey;
+class XAtlas<A extends string = string> {
    /** The navigators associated with this atlas. */
-   navigators: XKeyed<XNavigator>;
+   navigators: XKeyed<XNavigator<A>, A>;
    /** This navigator's state. Contains the currently open navigator. */
-   state = { navigator: null as XNavigatorKey };
-   constructor ({ menu = null, navigators = {} }: XAtlasProperties = {}) {
-      this.menu = menu;
+   state = { navigator: null as XNavigatorKey<A> };
+   constructor ({ navigators = {} as XKeyed<XNavigator<A>, A> }: XAtlasProperties<A> = {}) {
       this.navigators = navigators;
    }
    /** Attaches navigators to a specific layer on a renderer. */
-   attach (renderer: XRenderer, layer: string, ...navigators: string[]) {
+   attach (renderer: XRenderer, layer: string, ...navigators: A[]) {
       for (const navigator of navigators) {
          navigator in this.navigators && this.navigators[navigator].attach(renderer, layer);
       }
    }
    /** Detaches navigators from a specific layer on a renderer. */
-   detach (renderer: XRenderer, layer: string, ...navigators: string[]) {
+   detach (renderer: XRenderer, layer: string, ...navigators: A[]) {
       for (const navigator of navigators) {
          navigator in this.navigators && this.navigators[navigator].detach(renderer, layer);
       }
@@ -738,8 +732,8 @@ class XAtlas {
       const navigator = this.navigator();
       if (navigator) {
          const origin = navigator.selection();
-         const row = typeof navigator.grid === 'function' ? navigator.grid(navigator, this) : navigator.grid;
-         const flip = typeof navigator.flip === 'function' ? navigator.flip(navigator, this) : navigator.flip;
+         const row = X.provide(navigator.grid, navigator, this);
+         const flip = X.provide(navigator.flip, navigator, this);
          navigator.position.x = new XNumber(navigator.position.x).clamp(0, row.length - 1).value;
          navigator.position.x += flip ? y : x;
          if (row.length - 1 < navigator.position.x) {
@@ -755,27 +749,21 @@ class XAtlas {
          } else if (navigator.position.y < 0) {
             navigator.position.y = column.length - 1;
          }
-         origin === navigator.selection() || navigator.fire('move', this);
+         origin === navigator.selection() || navigator.fire('move', this, navigator);
       }
    }
    /**
-    * This function accepts one of three values, those being `'menu'`, `'next'`, and `'prev'`. If `'menu'` is
-    * specified and this atlas's `menu` property is non-void, the atlas will switch to the navigator associated with the
-    * aforementioned `menu` property. If `'next'` or `'prev'` is specified and this atlas has a navigator open, the
-    * respective `next` or `prev` property on said open navigator is resolved and the navigator associated with the
+    * This function accepts one of two values, those being `'next'` and `'prev'`. If this atlas has a navigator open,
+    * the respective `next` or `prev` property on said open navigator is resolved and the navigator associated with the
     * resolved value is switched to, given it's associated with this atlas.
     */
-   navigate (action: 'menu' | 'next' | 'prev') {
+   navigate (action: 'next' | 'prev') {
       switch (action) {
-         case 'menu':
-            this.switch(this.menu);
-            break;
          case 'next':
          case 'prev':
             const navigator = this.navigator();
             if (navigator) {
-               const provider = navigator[action];
-               this.switch(typeof provider === 'function' ? provider(navigator, this) : provider);
+               this.switch(X.provide(navigator[action], navigator, this) as XNavigatorKey<A>);
             } else {
                this.switch(null);
             }
@@ -785,9 +773,9 @@ class XAtlas {
     * Directly switch to a navigator associated with this atlas. If `null` is specified, the current navigator, if any,
     * will be closed. If `void` is specified, then nothing will happen.
     */
-   switch (name: XNavigatorKey) {
+   switch (name: XNavigatorKey<A>) {
       if (name !== void 0) {
-         let next: XNavigator | null = null;
+         let next: XNavigator<A> | null = null;
          if (typeof name === 'string') {
             if (name in this.navigators) {
                next = this.navigators[name];
@@ -966,23 +954,23 @@ class XInput extends XHost<XKeyed<[string | number], 'down' | 'up'>> {
  * The XNavigator class defines a system in which a grid can specify available options to navigate through. This class
  * doesn't do much without an associated atlas to control it.
  */
-class XNavigator extends XHost<
-   XKeyed<[XAtlas, XNavigatorKey, XNavigator | void], 'from' | 'to'> & XKeyed<[XAtlas], 'move' | 'tick'>
+class XNavigator<A extends string = string> extends XHost<
+   XKeyed<[XAtlas<A>, XNavigatorKey<A>, XNavigator<A> | void], 'from' | 'to'> & { move: [XAtlas<A>, XNavigator<A>] }
 > {
-   flip: XProvider<boolean, [XNavigator, XAtlas]>;
-   grid: XProvider<XBasic[][], [XNavigator, XAtlas | void]>;
-   next: XProvider<XNavigatorKey, [XNavigator, XAtlas]>;
+   flip: XProvider<boolean, [XNavigator<A>, XAtlas<A>]>;
+   grid: XProvider<XBasic[][], [XNavigator<A>, XAtlas<A> | void]>;
+   next: XProvider<XNavigatorKey<A>, [XNavigator<A>, XAtlas<A>]>;
    objects: XObject[];
    position: X2;
-   prev: XProvider<XNavigatorKey, [XNavigator, XAtlas]>;
+   prev: XProvider<XNavigatorKey<A>, [XNavigator<A>, XAtlas<A>]>;
    constructor ({
       flip = false,
       grid = [],
-      next = '',
+      next = void 0,
       objects = [],
       position: { x = 0, y = 0 } = {},
-      prev = ''
-   }: XNavigatorProperties = {}) {
+      prev = void 0
+   }: XNavigatorProperties<A> = {}) {
       super();
       this.flip = flip;
       this.grid = grid;
@@ -1001,7 +989,7 @@ class XNavigator extends XHost<
    }
    /** Returns the value in this navigator's grid at its current position. */
    selection () {
-      return ((typeof this.grid === 'function' ? this.grid(this) : this.grid)[this.position.x] || [])[this.position.y];
+      return (X.provide(this.grid, this)[this.position.x] || [])[this.position.y];
    }
 }
 
@@ -1287,8 +1275,37 @@ class XRenderer extends XHost<{ tick: [] }> {
          }
       }
    }
-   /** Gets the actual on-screen position of a position in the scene. */
-   resolve (position: X2) {
+   /** Reads pixel data from the canvas within a specified range. */
+   read (key: string, min: X2, max = new XVector(min).add(1 / this.state.scale)) {
+      const resmin = this.resolve(key, min);
+      const resmax = this.resolve(key, max);
+      const w = Math.floor(resmax.x - resmin.x);
+      const data = this.layers[key].context.getImageData(
+         Math.floor(resmin.x),
+         Math.floor(resmin.y),
+         w,
+         Math.floor(resmax.y - resmin.y)
+      ).data;
+      const pixels = data.length / 4;
+      const output = [ [] ] as XColor[][];
+      let index = 0;
+      while (index < pixels) {
+         if (output[output.length - 1].push([ ...data.slice(index, index + 4) ] as XColor) === w && ++index < pixels) {
+            output.push([]);
+         }
+      }
+      return output;
+   }
+   /** Resolves the given position to its corresponding pixel position. */
+   resolve (key: string, position: X2) {
+      const transform = this.layers[key].context.getTransform();
+      return {
+         x: position.x * this.state.scale + transform.e,
+         y: position.y * this.state.scale + transform.f
+      };
+   }
+   /** Restricts the given position to within the camera's scope. */
+   restrict (position: X2) {
       return this.size
          .divide(2)
          .subtract(this.camera.clamp(...this.region))
@@ -1391,7 +1408,7 @@ class XSprite extends XObject {
          this.frames = frames;
          this.step = step;
          this.steps = steps;
-         auto && this.enable();
+         auto && (this.state.active = true);
       })(properties);
    }
    compute () {
@@ -2020,6 +2037,12 @@ const X = {
          }
       });
    },
+   provide<A extends XProvider<unknown, unknown[]>> (
+      provider: A,
+      ...args: A extends XProvider<any, infer B> ? B : never
+   ): A extends XProvider<infer B, any[]> ? B : never {
+      return typeof provider === 'function' ? provider(...args) : provider;
+   },
    /** Returns a promise that will resolve after the specified duration in milliseconds. */
    pause (duration = 0) {
       return new Promise<void>(resolve => setTimeout(() => resolve(), duration));
@@ -2029,7 +2052,7 @@ const X = {
       audio: XAudio,
       {
          /** The AudioContext to use for this daemon. */
-         context = void 0,
+         context = new AudioContext(),
          /** The base gain of this player. */
          gain = 1,
          /** Whether or not this player's instances should loop by default. */
@@ -2046,7 +2069,7 @@ const X = {
          gain,
          instance (offset = 0) {
             // initialize values
-            const context = daemon.context || new AudioContext();
+            const context = daemon.context;
             const gain = context.createGain();
             const source = context.createBufferSource();
 
