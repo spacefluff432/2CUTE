@@ -20,7 +20,9 @@ class XHost {
     fire(name, ...data) {
         const list = this.events[name];
         if (list) {
-            return list.map(handler => (typeof handler === 'function' ? handler : handler.listener)(...data));
+            return [...list.values()].map(handler => {
+                return (typeof handler === 'function' ? handler : handler.listener)(...data);
+            });
         }
         else {
             return [];
@@ -53,12 +55,8 @@ class XHost {
         else {
             const list = this.events[name] || (this.events[name] = []);
             list.push(a2);
-            list
-                .sort((handler1, handler2) => (typeof handler1 === 'function' ? 0 : handler1.priority) -
-                (typeof handler2 === 'function' ? 0 : handler2.priority))
-                .forEach((value, index) => {
-                list[index] = value;
-            });
+            list.sort((handler1, handler2) => (typeof handler1 === 'function' ? 0 : handler1.priority) -
+                (typeof handler2 === 'function' ? 0 : handler2.priority));
             return this;
         }
     }
@@ -113,7 +111,7 @@ class XObject extends XHost {
         const position = transform[0].add(this.position).add(this.parallax.multiply(camera));
         const rotation = transform[1].add(this.rotation);
         const scale = transform[2].multiply(this.scale);
-        if (this instanceof XHitbox && (typeof filter === 'function' ? filter(this) : filter)) {
+        if (this instanceof XHitbox && X.provide(filter, this)) {
             list.push(this);
             const size = this.size.multiply(scale);
             const half = size.divide(2);
@@ -280,10 +278,9 @@ class XAsset extends XHost {
  * navigators share an atlas, those navigators can be traversed between.
  */
 class XAtlas {
-    constructor({ menu = null, navigators = {} } = {}) {
+    constructor({ navigators = {} } = {}) {
         /** This navigator's state. Contains the currently open navigator. */
         this.state = { navigator: null };
-        this.menu = menu;
         this.navigators = navigators;
     }
     /** Attaches navigators to a specific layer on a renderer. */
@@ -307,8 +304,8 @@ class XAtlas {
         const navigator = this.navigator();
         if (navigator) {
             const origin = navigator.selection();
-            const row = typeof navigator.grid === 'function' ? navigator.grid(navigator, this) : navigator.grid;
-            const flip = typeof navigator.flip === 'function' ? navigator.flip(navigator, this) : navigator.flip;
+            const row = X.provide(navigator.grid, navigator, this);
+            const flip = X.provide(navigator.flip, navigator, this);
             navigator.position.x = new XNumber(navigator.position.x).clamp(0, row.length - 1).value;
             navigator.position.x += flip ? y : x;
             if (row.length - 1 < navigator.position.x) {
@@ -326,27 +323,21 @@ class XAtlas {
             else if (navigator.position.y < 0) {
                 navigator.position.y = column.length - 1;
             }
-            origin === navigator.selection() || navigator.fire('move', this);
+            origin === navigator.selection() || navigator.fire('move', this, navigator);
         }
     }
     /**
-     * This function accepts one of three values, those being `'menu'`, `'next'`, and `'prev'`. If `'menu'` is
-     * specified and this atlas's `menu` property is non-void, the atlas will switch to the navigator associated with the
-     * aforementioned `menu` property. If `'next'` or `'prev'` is specified and this atlas has a navigator open, the
-     * respective `next` or `prev` property on said open navigator is resolved and the navigator associated with the
+     * This function accepts one of two values, those being `'next'` and `'prev'`. If this atlas has a navigator open,
+     * the respective `next` or `prev` property on said open navigator is resolved and the navigator associated with the
      * resolved value is switched to, given it's associated with this atlas.
      */
     navigate(action) {
         switch (action) {
-            case 'menu':
-                this.switch(this.menu);
-                break;
             case 'next':
             case 'prev':
                 const navigator = this.navigator();
                 if (navigator) {
-                    const provider = navigator[action];
-                    this.switch(typeof provider === 'function' ? provider(navigator, this) : provider);
+                    this.switch(X.provide(navigator[action], navigator, this));
                 }
                 else {
                     this.switch(null);
@@ -535,7 +526,7 @@ class XInput extends XHost {
  * doesn't do much without an associated atlas to control it.
  */
 class XNavigator extends XHost {
-    constructor({ flip = false, grid = [], next = '', objects = [], position: { x = 0, y = 0 } = {}, prev = '' } = {}) {
+    constructor({ flip = false, grid = [], next = void 0, objects = [], position: { x = 0, y = 0 } = {}, prev = void 0 } = {}) {
         super();
         this.flip = flip;
         this.grid = grid;
@@ -554,7 +545,7 @@ class XNavigator extends XHost {
     }
     /** Returns the value in this navigator's grid at its current position. */
     selection() {
-        return ((typeof this.grid === 'function' ? this.grid(this) : this.grid)[this.position.x] || [])[this.position.y];
+        return (X.provide(this.grid, this)[this.position.x] || [])[this.position.y];
     }
 }
 /** An object representing a numeric value. */
@@ -776,8 +767,32 @@ class XRenderer extends XHost {
             }
         }
     }
-    /** Gets the actual on-screen position of a position in the scene. */
-    resolve(position) {
+    /** Reads pixel data from the canvas within a specified range. */
+    read(key, min, max = new XVector(min).add(1 / this.state.scale)) {
+        const resmin = this.resolve(key, min);
+        const resmax = this.resolve(key, max);
+        const w = Math.floor(resmax.x - resmin.x);
+        const data = this.layers[key].context.getImageData(Math.floor(resmin.x), Math.floor(resmin.y), w, Math.floor(resmax.y - resmin.y)).data;
+        const pixels = data.length / 4;
+        const output = [[]];
+        let index = 0;
+        while (index < pixels) {
+            if (output[output.length - 1].push([...data.slice(index, index + 4)]) === w && ++index < pixels) {
+                output.push([]);
+            }
+        }
+        return output;
+    }
+    /** Resolves the given position to its corresponding pixel position. */
+    resolve(key, position) {
+        const transform = this.layers[key].context.getTransform();
+        return {
+            x: position.x * this.state.scale + transform.e,
+            y: position.y * this.state.scale + transform.f
+        };
+    }
+    /** Restricts the given position to within the camera's scope. */
+    restrict(position) {
         return this.size
             .divide(2)
             .subtract(this.camera.clamp(...this.region))
@@ -859,7 +874,7 @@ class XSprite extends XObject {
             this.frames = frames;
             this.step = step;
             this.steps = steps;
-            auto && this.enable();
+            auto && (this.state.active = true);
         })(properties);
     }
     compute() {
@@ -954,8 +969,10 @@ class XText extends XObject {
             shadowOffsetY: context.shadowOffsetY,
             strokeStyle: context.strokeStyle
         };
+        const phase = Date.now() / 1000;
         const offset = { x: 0, y: 0 };
         const random = { x: 0, y: 0 };
+        const swirl = { p: 0, r: 0, s: 0 };
         const metrics = context.measureText(this.charset);
         const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
         while (index < this.content.length) {
@@ -1013,8 +1030,8 @@ class XText extends XObject {
                         break;
                     case 'offset':
                         const [offsetX, offsetY] = value.split(',').map(value => +value);
-                        offset.x += offsetX || 0;
-                        offset.y += offsetY || 0;
+                        offset.x = offsetX || 0;
+                        offset.y = offsetY || 0;
                         break;
                     case 'random':
                         const [randomX, randomY] = value.split(',').map(value => +value);
@@ -1024,11 +1041,23 @@ class XText extends XObject {
                     case 'stroke':
                         context.strokeStyle = value;
                         break;
+                    case 'swirl':
+                        // period, radius, speed (rotations per second)
+                        const [swirlR, swirlS, swirlP] = value.split(',').map(value => +value);
+                        swirl.r = swirlR || 0;
+                        swirl.s = swirlS || 0;
+                        swirl.p = swirlP || 0;
+                        break;
                 }
             }
             else {
-                const x = base.x + offset.x + random.x * (Math.random() - 0.5);
-                const y = base.y + offset.y + random.y * (Math.random() - 0.5) + height;
+                let x = base.x + offset.x + random.x * (Math.random() - 0.5);
+                let y = base.y + offset.y + random.y * (Math.random() - 0.5) + height;
+                if (swirl.s > 0 && swirl.r > 0) {
+                    const endpoint = new XVector(x, y).endpoint(((phase * 360 * swirl.s) % 360) + index * (360 / swirl.p), swirl.r);
+                    x = endpoint.x;
+                    y = endpoint.y;
+                }
                 context.fillText(char, x, y);
                 context.strokeText(char, x, y);
                 offset.x += context.measureText(char).width + this.spacing.x;
@@ -1093,7 +1122,7 @@ class XVector {
     }
     /** Calculates the distance between this object's position and another position. */
     distance(vector) {
-        return Math.sqrt(Math.pow(vector.x - this.x, 2) + Math.pow(vector.y - this.y, 2));
+        return Math.sqrt((vector.x - this.x) ** 2 + (vector.y - this.y) ** 2);
     }
     divide(a1, y = a1) {
         if (typeof a1 === 'number') {
@@ -1436,6 +1465,9 @@ const X = {
             }
         });
     },
+    provide(provider, ...args) {
+        return typeof provider === 'function' ? provider(...args) : provider;
+    },
     /** Returns a promise that will resolve after the specified duration in milliseconds. */
     pause(duration = 0) {
         return new Promise(resolve => setTimeout(() => resolve(), duration));
@@ -1443,7 +1475,7 @@ const X = {
     /** Returns an audio daemon for generating audio player instances. */
     daemon(audio, { 
     /** The AudioContext to use for this daemon. */
-    context = void 0, 
+    context = new AudioContext(), 
     /** The base gain of this player. */
     gain = 1, 
     /** Whether or not this player's instances should loop by default. */
@@ -1458,7 +1490,7 @@ const X = {
             gain,
             instance(offset = 0) {
                 // initialize values
-                const context = daemon.context || new AudioContext();
+                const context = daemon.context;
                 const gain = context.createGain();
                 const source = context.createBufferSource();
                 // set defaults
