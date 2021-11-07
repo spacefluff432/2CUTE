@@ -186,19 +186,34 @@ type XRegion = [X2, X2];
 /** The raw properties of an XRectangle object. */
 type XRectangleProperties = XObjectProperties & XProperties<XRectangle, 'size'>;
 
+/** An XRenderer layer. */
+type XRendererLayer = {
+   /** The canvas associated with this layer. */
+   canvas: HTMLCanvasElement;
+   /**
+    * The canvas context associated with this layer. Updates when the renderer's size changes or its container
+    * element is resized.
+    */
+   context: CanvasRenderingContext2D;
+   /** The rendering modifiers for this layer. */
+   modifiers: XRendererLayerModifier[];
+   /** All objects currently being rendered onto this layer. */
+   objects: XObject[];
+};
+
 /** The type of an XRenderer's layer. */
 type XRendererLayerModifier = 'ambient' | 'cumulative' | 'static';
 
 /** The raw properties of an XRenderer object. */
-type XRendererProperties = XProperties<
-   XRenderer,
+type XRendererProperties<A extends string = string> = XProperties<
+   XRenderer<A>,
    'alpha' | 'camera' | 'container' | 'debug' | 'framerate' | 'region' | 'shake' | 'size'
 > &
    ({
       /** Whether or not this renderer should be automatically started upon construction. */
       auto?: boolean | void;
       /** The layers associated with this renderer. */
-      layers?: XKeyed<XRendererLayerModifier[]> | void;
+      layers?: Partial<XKeyed<XRendererLayerModifier[], A>> | void;
    } | void);
 
 /** A function ideally used to route audio from the given source node to the given context's destination. */
@@ -712,13 +727,13 @@ class XAtlas<A extends string = string> {
       this.navigators = navigators;
    }
    /** Attaches navigators to a specific layer on a renderer. */
-   attach (renderer: XRenderer, layer: string, ...navigators: A[]) {
+   attach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never, ...navigators: A[]) {
       for (const navigator of navigators) {
          navigator in this.navigators && this.navigators[navigator].attach(renderer, layer);
       }
    }
    /** Detaches navigators from a specific layer on a renderer. */
-   detach (renderer: XRenderer, layer: string, ...navigators: A[]) {
+   detach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never, ...navigators: A[]) {
       for (const navigator of navigators) {
          navigator in this.navigators && this.navigators[navigator].detach(renderer, layer);
       }
@@ -980,11 +995,11 @@ class XNavigator<A extends string = string> extends XHost<
       this.prev = prev;
    }
    /** Attaches this navigator's objects to a specific layer on the given renderer. */
-   attach (renderer: XRenderer, layer: string) {
+   attach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never) {
       renderer.attach(layer, ...this.objects);
    }
    /** Detaches this navigator's objects from a specific layer on the given renderer. */
-   detach (renderer: XRenderer, layer: string) {
+   detach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never) {
       renderer.detach(layer, ...this.objects);
    }
    /** Returns the value in this navigator's grid at its current position. */
@@ -1124,7 +1139,7 @@ class XRectangle extends XObject {
  * The business end of the Storyteller engine, where objects are rendered to canvases and all is made right with the
  * world. Jokes aside, this class is responsible for canvas and context management.
  */
-class XRenderer extends XHost<{ tick: [] }> {
+class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
    /** The global transparency value all rendered objects should inherit. */
    alpha: XNumber;
    /** This renderer's camera position. */
@@ -1136,19 +1151,7 @@ class XRenderer extends XHost<{ tick: [] }> {
    /** The renderer's framerate. A value of 30-60 is recommended. */
    framerate: number;
    /** The renderer's layer map. Each layer has an associated canvas, canvas context, mode, and object list. */
-   layers: XKeyed<{
-      /** The canvas associated with this layer. */
-      canvas: HTMLCanvasElement;
-      /**
-       * The canvas context associated with this layer. Updates when the renderer's size changes or its container
-       * element is resized.
-       */
-      context: CanvasRenderingContext2D;
-      /** The rendering modifiers for this layer. */
-      modifiers: XRendererLayerModifier[];
-      /** All objects currently being rendered onto this layer. */
-      objects: XObject[];
-   }>;
+   layers: XKeyed<XRendererLayer, A>;
    /** The minimum and maximum camera position for this renderer. */
    region: XRegion;
    /**
@@ -1187,7 +1190,7 @@ class XRenderer extends XHost<{ tick: [] }> {
       ] = [],
       shake = 0,
       size: { x: size_x = 320, y: size_y = 240 } = {}
-   }: XRendererProperties = {}) {
+   }: XRendererProperties<A> = {}) {
       super();
       Object.assign(container.style, {
          display: 'grid',
@@ -1215,11 +1218,11 @@ class XRenderer extends XHost<{ tick: [] }> {
                   canvas,
                   context: X.context(canvas),
                   modifiers: value,
-                  objects: []
+                  objects: [] as XObject[]
                }
             ];
          })
-      );
+      ) as XKeyed<XRendererLayer, A>;
       this.region = [
          { x: min_x, y: min_y },
          { x: max_x, y: max_y }
@@ -1229,7 +1232,7 @@ class XRenderer extends XHost<{ tick: [] }> {
       auto && this.start();
    }
    /** Attaches objects to a specific layer on this renderer. */
-   attach (key: string, ...objects: XObject[]) {
+   attach (key: A, ...objects: XObject[]) {
       if (key in this.layers) {
          const layer = this.layers[key];
          layer.modifiers.includes('ambient') && this.refresh();
@@ -1255,7 +1258,7 @@ class XRenderer extends XHost<{ tick: [] }> {
       return list;
    }
    /** Completely clears the given layer, detaching all of its objects. */
-   clear (key: string) {
+   clear (key: A) {
       if (key in this.layers) {
          const layer = this.layers[key];
          layer.modifiers.includes('ambient') && this.refresh();
@@ -1263,7 +1266,7 @@ class XRenderer extends XHost<{ tick: [] }> {
       }
    }
    /** Detaches objects from a specific layer on this renderer. */
-   detach (key: string, ...objects: XObject[]) {
+   detach (key: A, ...objects: XObject[]) {
       if (key in this.layers) {
          const layer = this.layers[key];
          layer.modifiers.includes('ambient') && this.refresh();
@@ -1276,7 +1279,7 @@ class XRenderer extends XHost<{ tick: [] }> {
       }
    }
    /** Reads pixel data from the canvas within a specified range. */
-   read (key: string, min: X2, max = new XVector(min).add(1 / this.state.scale)) {
+   read (key: A, min: X2, max = new XVector(min).add(1 / this.state.scale)) {
       const resmin = this.resolve(key, min);
       const resmax = this.resolve(key, max);
       const w = Math.floor(resmax.x - resmin.x);
@@ -1297,7 +1300,7 @@ class XRenderer extends XHost<{ tick: [] }> {
       return output;
    }
    /** Resolves the given position to its corresponding pixel position. */
-   resolve (key: string, position: X2) {
+   resolve (key: A, position: X2) {
       const transform = this.layers[key].context.getTransform();
       return {
          x: position.x * this.state.scale + transform.e,
@@ -1516,8 +1519,10 @@ class XText extends XObject {
          shadowOffsetY: context.shadowOffsetY,
          strokeStyle: context.strokeStyle
       };
+      const phase = Date.now() / 1000;
       const offset = { x: 0, y: 0 };
       const random = { x: 0, y: 0 };
+      const swirl = { p: 0, r: 0, s: 0 };
       const metrics = context.measureText(this.charset);
       const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
       while (index < this.content.length) {
@@ -1574,8 +1579,8 @@ class XText extends XObject {
                   break;
                case 'offset':
                   const [ offsetX, offsetY ] = value.split(',').map(value => +value);
-                  offset.x += offsetX || 0;
-                  offset.y += offsetY || 0;
+                  offset.x = offsetX || 0;
+                  offset.y = offsetY || 0;
                   break;
                case 'random':
                   const [ randomX, randomY ] = value.split(',').map(value => +value);
@@ -1585,10 +1590,25 @@ class XText extends XObject {
                case 'stroke':
                   context.strokeStyle = value;
                   break;
+               case 'swirl':
+                  // period, radius, speed (rotations per second)
+                  const [ swirlR, swirlS, swirlP ] = value.split(',').map(value => +value);
+                  swirl.r = swirlR || 0;
+                  swirl.s = swirlS || 0;
+                  swirl.p = swirlP || 0;
+                  break;
             }
          } else {
-            const x = base.x + offset.x + random.x * (Math.random() - 0.5);
-            const y = base.y + offset.y + random.y * (Math.random() - 0.5) + height;
+            let x = base.x + offset.x + random.x * (Math.random() - 0.5);
+            let y = base.y + offset.y + random.y * (Math.random() - 0.5) + height;
+            if (swirl.s > 0 && swirl.r > 0) {
+               const endpoint = new XVector(x, y).endpoint(
+                  ((phase * 360 * swirl.s) % 360) + index * (360 / swirl.p),
+                  swirl.r
+               );
+               x = endpoint.x;
+               y = endpoint.y;
+            }
             context.fillText(char, x, y);
             context.strokeText(char, x, y);
             offset.x += context.measureText(char).width + this.spacing.x;
@@ -1678,7 +1698,7 @@ class XVector {
    }
    /** Calculates the distance between this object's position and another position. */
    distance (vector: X2) {
-      return Math.sqrt(Math.pow(vector.x - this.x, 2) + Math.pow(vector.y - this.y, 2));
+      return Math.sqrt((vector.x - this.x) ** 2 + (vector.y - this.y) ** 2);
    }
    /** Divides this object's position by another position and returns a new `XVector` object with said position. */
    divide(x: number, y: number): XVector;
