@@ -202,7 +202,7 @@ type XRendererLayer = {
 };
 
 /** The type of an XRenderer's layer. */
-type XRendererLayerModifier = 'ambient' | 'cumulative' | 'static';
+type XRendererLayerModifier = 'ambient' | 'cumulative' | 'static' | 'vertical';
 
 /** The raw properties of an XRenderer object. */
 type XRendererProperties<A extends string = string> = XProperties<
@@ -611,6 +611,7 @@ class XObject extends XHost<{ tick: [] }> {
 
       context.translate(position.x, position.y);
       context.rotate(rads);
+      const matrix = context.getTransform();
       context.scale(this.scale.x, this.scale.y);
       context.translate(-position.x, -position.y);
 
@@ -630,7 +631,7 @@ class XObject extends XHost<{ tick: [] }> {
       }
 
       context.translate(position.x, position.y);
-      context.scale(1 / this.scale.x, 1 / this.scale.y);
+      context.setTransform(matrix);
       context.rotate(-rads);
       context.translate(-position.x, -position.y);
 
@@ -1375,6 +1376,12 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
                scale * (center.y + -(modifiers.includes('static') ? center.y : camera.y)) +
                   (this.shake.value ? scale * this.shake.value * (Math.random() - 0.5) : 0)
             );
+            if (modifiers.includes('vertical')) {
+               objects.sort(
+                  (object1, object2) =>
+                     (object1.priority.value || object1.position.y) - (object2.priority.value || object2.position.y)
+               );
+            }
             for (const object of objects) {
                object.render(camera, context, X.transform, this.debug);
             }

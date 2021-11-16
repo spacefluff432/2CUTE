@@ -193,6 +193,7 @@ class XObject extends XHost {
         const rads = (Math.PI / 180) * this.rotation.value;
         context.translate(position.x, position.y);
         context.rotate(rads);
+        const matrix = context.getTransform();
         context.scale(this.scale.x, this.scale.y);
         context.translate(-position.x, -position.y);
         context.globalAlpha === 0 || this.draw(context, base);
@@ -208,7 +209,7 @@ class XObject extends XHost {
             context.strokeStyle = previous;
         }
         context.translate(position.x, position.y);
-        context.scale(1 / this.scale.x, 1 / this.scale.y);
+        context.setTransform(matrix);
         context.rotate(-rads);
         context.translate(-position.x, -position.y);
         if (debug && this instanceof XHitbox) {
@@ -853,6 +854,9 @@ class XRenderer extends XHost {
                 context.setTransform(scale, 0, 0, scale, scale * (center.x + -(modifiers.includes('static') ? center.x : camera.x)) +
                     (this.shake.value ? scale * this.shake.value * (Math.random() - 0.5) : 0), scale * (center.y + -(modifiers.includes('static') ? center.y : camera.y)) +
                     (this.shake.value ? scale * this.shake.value * (Math.random() - 0.5) : 0));
+                if (modifiers.includes('vertical')) {
+                    objects.sort((object1, object2) => (object1.priority.value || object1.position.y) - (object2.priority.value || object2.position.y));
+                }
                 for (const object of objects) {
                     object.render(camera, context, X.transform, this.debug);
                 }
