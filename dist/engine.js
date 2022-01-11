@@ -124,16 +124,16 @@ class XObject extends XHost {
                 const corner4 = corner3.endpoint(180, size.x);
                 this.state.vertices[0] = position
                     .endpoint(position.direction(base) + offset, position.distance(base))
-                    .round(1e3);
+                    .round(1e6);
                 this.state.vertices[1] = position
                     .endpoint(position.direction(corner2) + offset, position.distance(corner2))
-                    .round(1e3);
+                    .round(1e6);
                 this.state.vertices[2] = position
                     .endpoint(position.direction(corner3) + offset, position.distance(corner3))
-                    .round(1e3);
+                    .round(1e6);
                 this.state.vertices[3] = position
                     .endpoint(position.direction(corner4) + offset, position.distance(corner4))
-                    .round(1e3);
+                    .round(1e6);
                 this.state.dimensions = dimensions;
             }
         }
@@ -208,15 +208,9 @@ class XObject extends XHost {
             context.strokeRect(base.x, base.y, size.x, size.y);
             context.strokeStyle = previous;
         }
-        context.translate(position.x, position.y);
-        context.setTransform(matrix);
-        context.rotate(-rads);
-        context.translate(-position.x, -position.y);
         if (debug && this instanceof XHitbox) {
             // rainbow hitboxes! :D
-            context.strokeStyle = `hsla(${(Date.now() % 1000) * 0.25}, 100%, 50%, 0.5)`;
-            context.save();
-            context.resetTransform();
+            context.strokeStyle = `hsla(${(X.time % 1e3) * 0.25}, 100%, 50%, 0.5)`;
             try {
                 const vertices = this.vertices();
                 for (const [b1, b2] of [
@@ -235,8 +229,11 @@ class XObject extends XHost {
             catch (error) {
                 //
             }
-            context.restore();
         }
+        context.translate(position.x, position.y);
+        context.setTransform(matrix);
+        context.rotate(-rads);
+        context.translate(-position.x, -position.y);
         Object.assign(context, state);
     }
 }
@@ -387,7 +384,7 @@ class XHitbox extends XObject {
     }
     /**
      * Detects collision between this hitbox and others.
-     * @author bokke1010, harrix432
+     * @author bokke1010, spacefluff432
      */
     detect(renderer, ...hitboxes) {
         renderer.calculate(hitbox => hitbox === this);
@@ -408,8 +405,8 @@ class XHitbox extends XObject {
                 const [min2, max2] = hitbox.region();
                 if (min1.x < max2.x && min2.x < max1.x && min1.y < max2.y && min2.y < max1.y) {
                     // aabb minmax exclusion - if the aabb formed by the min and max of both boxes collide, continue
-                    const vertices1 = this.vertices().map(vertex => new XVector(vertex).round(1000));
-                    const vertices2 = hitbox.vertices().map(vertex => new XVector(vertex).round(1000));
+                    const vertices1 = this.vertices().map(vertex => new XVector(vertex).round(1e6));
+                    const vertices2 = hitbox.vertices().map(vertex => new XVector(vertex).round(1e6));
                     if ((vertices1[0].x === vertices1[1].x || vertices1[0].y === vertices1[1].y) &&
                         (vertices2[0].x === vertices2[1].x || vertices2[0].y === vertices2[1].y)) {
                         // alignment check - if the two boxes are axis-aligned at this stage, they are colliding
@@ -488,17 +485,19 @@ class XHitbox extends XObject {
  * represented by their key name in string form.
  */
 class XInput extends XHost {
-    constructor({ target = window, codes = [] } = {}) {
+    constructor({ codes = [], target = window, transformer } = {}) {
         super();
         /** This input's state. Contains the currently active inputs. */
         this.state = { codes: new Set() };
         target.addEventListener('keyup', ({ key }) => {
+            transformer && (key = transformer(key));
             if (codes.includes(key) && this.state.codes.has(key)) {
                 this.state.codes.delete(key);
                 this.fire('up', key);
             }
         });
         target.addEventListener('keydown', ({ key }) => {
+            transformer && (key = transformer(key));
             if (codes.includes(key) && !this.state.codes.has(key)) {
                 this.state.codes.add(key);
                 this.fire('down', key);
@@ -591,20 +590,26 @@ class XNumber {
     /** Alter the internal value of this numeric over a specified duration. */
     modulate(duration, ...points) {
         return new Promise(resolve => {
-            let index = 0;
             const value = this.value;
-            clearInterval(X.cache.modulationTasks.get(this));
-            X.cache.modulationTasks.set(this, setInterval(() => {
-                if (index < duration) {
-                    this.value = X.math.bezier(index / duration, value, ...points);
-                    index += 20;
-                }
-                else {
-                    this.value = X.math.bezier(1, value, ...points);
-                    clearInterval(X.cache.modulationTasks.get(this));
-                    resolve();
-                }
-            }, 20));
+            X.cache.modulationTasks.get(this)?.cancel();
+            X.cache.modulationTasks.set(this, (() => {
+                let active = true;
+                X.chain(0, async (elapsed, next) => {
+                    if (active) {
+                        if (elapsed < duration) {
+                            this.value = X.math.bezier(elapsed / duration, value, ...points);
+                            await X.timer.on('tick');
+                            await next(elapsed + 5);
+                        }
+                        else {
+                            this.value = X.math.bezier(1, value, ...points);
+                            X.cache.modulationTasks.get(this)?.cancel();
+                            resolve();
+                        }
+                    }
+                });
+                return { cancel: () => (active = false) };
+            })());
         });
     }
     /** Multiplies this object's value by another value and returns a new `XNumber` object with said value. */
@@ -618,7 +623,7 @@ class XNumber {
     }
     /** Returns an `XNumber` object with the rounded value of this object's value. */
     round() {
-        return Math.round(this.value);
+        return new XNumber(Math.round(this.value));
     }
     /** Subtracts another value from this object's value and returns a new `XNumber` object with said value. */
     subtract(value = 0) {
@@ -644,9 +649,12 @@ class XPath extends XObject {
     }
     draw(context, base) {
         context.beginPath();
-        this.tracer(context, base.x, base.y);
-        context.fill();
-        context.stroke();
+        this.tracer(context, () => {
+            context.fillStyle === 'transparent' || context.fill();
+            context.strokeStyle === 'transparent' || context.stroke();
+            context.closePath();
+            context.beginPath();
+        }, base.value());
         context.closePath();
     }
 }
@@ -662,8 +670,8 @@ class XRectangle extends XObject {
         return this.size;
     }
     draw(context, base) {
-        context.fillRect(base.x, base.y, this.size.x, this.size.y);
-        context.strokeRect(base.x, base.y, this.size.x, this.size.y);
+        context.fillStyle === 'transparent' || context.fillRect(base.x, base.y, this.size.x, this.size.y);
+        context.strokeStyle === 'transparent' || context.strokeRect(base.x, base.y, this.size.x, this.size.y);
     }
 }
 /**
@@ -679,7 +687,7 @@ class XRenderer extends XHost {
          */
         this.state = {
             camera: { x: NaN, y: NaN },
-            handle: void 0,
+            active: false,
             height: 0,
             scale: 1,
             width: 0
@@ -768,6 +776,17 @@ class XRenderer extends XHost {
             }
         }
     }
+    /** Pass each object in a layer (or all layers) to a handler, and return an array of the outputs. */
+    iterate(handler = (object) => object, key) {
+        if (typeof key === 'string') {
+            return X.chain(this.layers[key].objects, (objects, loop) => {
+                return objects.flatMap(object => [handler(object), ...loop(object.objects)]);
+            });
+        }
+        else {
+            return Object.keys(this.layers).flatMap(key => this.iterate(handler, key));
+        }
+    }
     /** Reads pixel data from the canvas within a specified range. */
     read(key, min, max = new XVector(min).add(1 / this.state.scale)) {
         const resmin = this.resolve(key, min);
@@ -799,14 +818,18 @@ class XRenderer extends XHost {
             .subtract(this.camera.clamp(...this.region))
             .add(position);
     }
-    /** Starts the rendering loop and stops any previously active loop if applicable. */
+    /** Starts the rendering loop. */
     start() {
-        this.stop();
-        this.state.handle = setInterval(() => this.render(), 1e3 / this.framerate);
-    }
-    /** Stops the rendering loop if one is active. */
-    stop() {
-        typeof this.state.handle === 'number' && (this.state.handle = clearInterval(this.state.handle));
+        let active = true;
+        X.chain(void 0, (none, next) => {
+            X.pause(1e3 / this.framerate).then(() => {
+                if (active) {
+                    next();
+                    this.render();
+                }
+            });
+        });
+        return { cancel: () => (active = false) };
     }
     /** Forces an update to all ambient rendering layers. */
     refresh() {
@@ -884,10 +907,10 @@ class XSprite extends XObject {
     compute() {
         const texture = this.frames[this.state.index];
         if (texture) {
-            const x = Math.round((this.crop.left < 0 ? texture.value.width : 0) + this.crop.left);
-            const y = Math.round((this.crop.top < 0 ? texture.value.height : 0) + this.crop.top);
-            const w = Math.round((this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right) - x;
-            const h = Math.round((this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom) - y;
+            const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
+            const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
+            const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
+            const h = (this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom - y;
             return new XVector(w, h);
         }
         else {
@@ -901,11 +924,11 @@ class XSprite extends XObject {
     }
     draw(context, base) {
         const texture = this.frames[this.state.index];
-        if (texture) {
-            const x = Math.round((this.crop.left < 0 ? texture.value.width : 0) + this.crop.left);
-            const y = Math.round((this.crop.top < 0 ? texture.value.height : 0) + this.crop.top);
-            const w = Math.round((this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right) - x;
-            const h = Math.round((this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom) - y;
+        if (texture && texture.state.value) {
+            const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
+            const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
+            const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
+            const h = (this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom - y;
             context.drawImage(texture.value, x, y, w, h, base.x, base.y, w, h);
         }
         if (this.steps <= ++this.state.step) {
@@ -922,7 +945,7 @@ class XSprite extends XObject {
     }
     /** Loads this sprite's frames. */
     async load() {
-        await Promise.all(this.frames.map(asset => asset.load()));
+        await Promise.all(this.frames.map(asset => asset && asset.load()));
     }
     /** Resets the sprite's animation to its default state. */
     reset() {
@@ -931,7 +954,7 @@ class XSprite extends XObject {
     }
     /** Unloads this sprite's frames. */
     async unload() {
-        await Promise.all(this.frames.map(asset => asset.unload()));
+        await Promise.all(this.frames.map(asset => asset && asset.unload()));
     }
 }
 /** A rendered object specifically designed to draw text on a canvas. */
@@ -948,11 +971,11 @@ class XText extends XObject {
         const lines = this.content.split('\n').map(section => {
             let total = 0;
             for (const char of section) {
-                total += context.measureText(char).width + this.spacing.x;
+                total += X.metrics(context, char).width + this.spacing.x;
             }
             return total;
         });
-        const metrics = context.measureText(this.charset);
+        const metrics = X.metrics(context, this.charset);
         const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
         return new XVector(Math.max(...lines), height + (height + this.spacing.y) * (lines.length - 1));
     }
@@ -973,11 +996,11 @@ class XText extends XObject {
             shadowOffsetY: context.shadowOffsetY,
             strokeStyle: context.strokeStyle
         };
-        const phase = Date.now() / 1000;
+        const phase = X.time / 1e3;
         const offset = { x: 0, y: 0 };
         const random = { x: 0, y: 0 };
         const swirl = { p: 0, r: 0, s: 0 };
-        const metrics = context.measureText(this.charset);
+        const metrics = X.metrics(context, this.charset);
         const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
         while (index < this.content.length) {
             const char = this.content[index++];
@@ -998,6 +1021,9 @@ class XText extends XObject {
                         break;
                     case 'fill':
                         context.fillStyle = value;
+                        break;
+                    case 'font':
+                        context.font = value;
                         break;
                     case 'line.cap':
                         context.lineCap = value;
@@ -1055,42 +1081,25 @@ class XText extends XObject {
                 }
             }
             else {
-                let x = base.x + offset.x + random.x * (Math.random() - 0.5);
-                let y = base.y + offset.y + random.y * (Math.random() - 0.5) + height;
+                let x = base.x + offset.x;
+                let y = base.y + offset.y + height;
+                if (random.x > 0) {
+                    x += random.x * (Math.random() - 0.5);
+                }
+                if (random.y > 0) {
+                    y += random.y * (Math.random() - 0.5);
+                }
                 if (swirl.s > 0 && swirl.r > 0) {
                     const endpoint = new XVector(x, y).endpoint(((phase * 360 * swirl.s) % 360) + index * (360 / swirl.p), swirl.r);
                     x = endpoint.x;
                     y = endpoint.y;
                 }
-                context.fillText(char, x, y);
-                context.strokeText(char, x, y);
-                offset.x += context.measureText(char).width + this.spacing.x;
+                context.fillStyle === 'transparent' || context.fillText(char, x, y);
+                context.strokeStyle === 'transparent' || context.strokeText(char, x, y);
+                offset.x += X.metrics(context, char).width + this.spacing.x;
             }
         }
         Object.assign(context, state);
-    }
-}
-class XTile extends XSprite {
-    constructor(properties = {}) {
-        super(properties);
-        (({ offset: { x: offset_x = 0, y: offset_y = 0 } = {}, size: { x: size_x = 0, y: size_y = 0 } = {} } = {}) => {
-            this.offset = new XVector(offset_x, offset_y);
-            this.size = new XVector(size_x, size_y);
-        })(properties);
-    }
-    compute() {
-        return this.size;
-    }
-    draw(context, base) {
-        const texture = this.frames[this.state.index];
-        texture &&
-            context.drawImage(texture.value, this.offset.x, this.offset.y, this.size.x, this.size.y, base.x, base.y, this.size.x, this.size.y);
-        if (this.steps <= ++this.state.step) {
-            this.state.step = 0;
-            if (this.state.active && this.frames.length <= ++this.state.index) {
-                this.state.index = 0;
-            }
-        }
     }
 }
 /** An object representing a two-dimensional positional value. */
@@ -1147,23 +1156,29 @@ class XVector {
     /** Alter the internal value of this positional over a specified duration. */
     modulate(duration, ...points) {
         return new Promise(resolve => {
-            let index = 0;
             const x = this.x;
             const y = this.y;
-            clearInterval(X.cache.modulationTasks.get(this));
-            X.cache.modulationTasks.set(this, setInterval(() => {
-                if (index < duration) {
-                    this.x = X.math.bezier(index / duration, x, ...points.map(point => point.x));
-                    this.y = X.math.bezier(index / duration, y, ...points.map(point => point.y));
-                    index += 20;
-                }
-                else {
-                    this.x = X.math.bezier(1, x, ...points.map(point => point.x));
-                    this.y = X.math.bezier(1, y, ...points.map(point => point.y));
-                    clearInterval(X.cache.modulationTasks.get(this));
-                    resolve();
-                }
-            }, 20));
+            X.cache.modulationTasks.get(this)?.cancel();
+            X.cache.modulationTasks.set(this, (() => {
+                let active = true;
+                X.chain(0, async (elapsed, next) => {
+                    if (active) {
+                        if (elapsed < duration) {
+                            this.x = X.math.bezier(elapsed / duration, x, ...points.map(point => point.x));
+                            this.y = X.math.bezier(elapsed / duration, y, ...points.map(point => point.y));
+                            await X.timer.on('tick');
+                            await next(elapsed + 5);
+                        }
+                        else {
+                            this.x = X.math.bezier(1, x, ...points.map(point => point.x));
+                            this.y = X.math.bezier(1, y, ...points.map(point => point.y));
+                            X.cache.modulationTasks.get(this)?.cancel();
+                            resolve();
+                        }
+                    }
+                });
+                return { cancel: () => (active = false) };
+            })());
         });
     }
     multiply(a1, y = a1) {
@@ -1274,6 +1289,8 @@ const X = {
         images: {},
         /** All loaded assets attached to any given cached image. */
         imageAssets: {},
+        /** Computed text metrics. */
+        textMetrics: {},
         /** Stores all active modulation tasks for any `AudioParam`, `XNumber`, or `XVector` objects. */
         modulationTasks: new Map()
     },
@@ -1284,7 +1301,67 @@ const X = {
     },
     /** Sets the given canvas to the specified size and generates a new `CanvasRenderingContext2D` from it. */
     context(canvas, width = 1, height = 1) {
-        return Object.assign(Object.assign(canvas, { width, height }).getContext('2d'), { imageSmoothingEnabled: false });
+        return Object.assign(Object.assign(canvas, { width, height }).getContext('2d'), {
+            fillStyle: 'transparent',
+            imageSmoothingEnabled: false,
+            strokeStyle: 'transparent'
+        });
+    },
+    /** Returns an audio daemon for generating audio player instances. */
+    daemon(audio, { 
+    /** The AudioContext to use for this daemon. */
+    context = new AudioContext(), 
+    /** The base gain of this player. */
+    gain = 1, 
+    /** Whether or not this player's instances should loop by default. */
+    loop = false, 
+    /** The base playback rate of this player. */
+    rate = 1, 
+    /** The audio router to use for this object. */
+    router = ((context, input) => input.connect(context.destination)) } = {}) {
+        const daemon = {
+            audio,
+            context,
+            gain,
+            instance(offset = 0) {
+                // initialize values
+                const context = daemon.context;
+                const gain = context.createGain();
+                const source = context.createBufferSource();
+                // set defaults
+                gain.gain.value = daemon.gain;
+                source.buffer = daemon.audio.value;
+                source.loop = daemon.loop;
+                source.playbackRate.value = daemon.rate;
+                // establish connections
+                daemon.router(context, gain);
+                source.connect(gain);
+                source.start(0, offset);
+                // return controller
+                return {
+                    context,
+                    daemon,
+                    gain: gain.gain,
+                    get loop() {
+                        return source.loop;
+                    },
+                    set loop(value) {
+                        source.loop = value;
+                    },
+                    rate: source.playbackRate,
+                    stop() {
+                        source.stop();
+                        source.disconnect();
+                        source.buffer = null;
+                    }
+                };
+            },
+            instances: [],
+            loop,
+            rate,
+            router
+        };
+        return daemon;
     },
     /** Gets an `XBasic` from the given source URL. */
     data(source) {
@@ -1441,6 +1518,15 @@ const X = {
             return Math.sin(((value + 0.5) * 2 - 1) * Math.PI) / 2 + 0.5;
         }
     },
+    metrics(context, content) {
+        const key = `${context.font} ${context.textAlign} ${context.textBaseline} ${content}`;
+        if (key in X.cache.textMetrics) {
+            return X.cache.textMetrics[key];
+        }
+        else {
+            return (X.cache.textMetrics[key] = context.measureText(content));
+        }
+    },
     /** Parses JS objects previously stringified with `X.stringify()` */
     parse(text) {
         return JSON.parse(text, (key, value) => {
@@ -1474,63 +1560,17 @@ const X = {
     },
     /** Returns a promise that will resolve after the specified duration in milliseconds. */
     pause(duration = 0) {
-        return new Promise(resolve => setTimeout(() => resolve(), duration));
-    },
-    /** Returns an audio daemon for generating audio player instances. */
-    daemon(audio, { 
-    /** The AudioContext to use for this daemon. */
-    context = new AudioContext(), 
-    /** The base gain of this player. */
-    gain = 1, 
-    /** Whether or not this player's instances should loop by default. */
-    loop = false, 
-    /** The base playback rate of this player. */
-    rate = 1, 
-    /** The audio router to use for this object. */
-    router = ((context, input) => input.connect(context.destination)) } = {}) {
-        const daemon = {
-            audio,
-            context,
-            gain,
-            instance(offset = 0) {
-                // initialize values
-                const context = daemon.context;
-                const gain = context.createGain();
-                const source = context.createBufferSource();
-                // set defaults
-                gain.gain.value = daemon.gain;
-                source.buffer = daemon.audio.value;
-                source.loop = daemon.loop;
-                source.playbackRate.value = daemon.rate;
-                // establish connections
-                daemon.router(context, gain);
-                source.connect(gain);
-                source.start(0, offset);
-                // return controller
-                return {
-                    context,
-                    daemon,
-                    gain: gain.gain,
-                    get loop() {
-                        return source.loop;
-                    },
-                    set loop(value) {
-                        source.loop = value;
-                    },
-                    rate: source.playbackRate,
-                    stop() {
-                        source.stop();
-                        source.disconnect();
-                        source.buffer = null;
-                    }
-                };
-            },
-            instances: [],
-            loop,
-            rate,
-            router
-        };
-        return daemon;
+        if (duration === Infinity) {
+            return new Promise(resolve => { });
+        }
+        else {
+            return X.chain(0, async (elapsed, next) => {
+                if (elapsed < duration) {
+                    await X.timer.on('tick');
+                    await next(elapsed + 5);
+                }
+            });
+        }
     },
     /** Converts JS objects to JSON with support for functions, undefined values, infinity, and nan values. */
     stringify(value) {
@@ -1556,6 +1596,10 @@ const X = {
             }
         });
     },
+    /** The global time. */
+    time: 0,
+    /** The global timer. */
+    timer: new XHost(),
     /** The inital transform used in rendering and vertex calculations. */
     transform: [new XVector(), new XNumber(), new XVector(1)]
 };
@@ -1564,4 +1608,8 @@ Object.assign(AudioParam.prototype, {
         return XNumber.prototype.modulate.call(this, duration, ...points);
     }
 });
+setInterval(() => {
+    X.time += 5;
+    X.timer.fire('tick');
+}, 5);
 //# sourceMappingURL=engine.js.map

@@ -80,7 +80,11 @@ type XHitboxProperties = XObjectProperties & XProperties<XHitbox, 'size'>;
 type XImage = XAsset<HTMLImageElement | ImageBitmap>;
 
 /** The raw properties of an XInput object. */
-type XInputProperties = { target?: HTMLElement; codes?: (string | number)[] } | void;
+type XInputProperties = {
+   codes?: (string | number)[];
+   target?: HTMLElement;
+   transformer?: (key: string) => string;
+} | void;
 
 /** An audio instance. */
 type XInstance = {
@@ -221,20 +225,18 @@ type XRouter = (context: AudioContext, input: GainNode) => void;
 
 /** The raw properties of an XSprite object. */
 type XSpriteProperties = XObjectProperties &
-   XProperties<XSprite, 'crop' | 'frames' | 'step' | 'steps'> &
+   XProperties<XSprite, 'crop' | 'step' | 'steps'> &
    ({
       /** Whether or not this sprite should be automatically enabled upon construction. */
       auto?: boolean | void;
+      frames?: (XImage | null)[];
    } | void);
 
 /** The raw properties of an XText object. */
 type XTextProperties = XObjectProperties & XProperties<XText, 'charset' | 'content' | 'spacing'>;
 
-/** The raw properties of an XTile object. */
-type XTileProperties = XSpriteProperties & XProperties<XTile, 'offset' | 'size'>;
-
 /** A function ideally used to trace a path on a canvas. */
-type XTracer = (context: CanvasRenderingContext2D, x: number, y: number) => void;
+type XTracer = (context: CanvasRenderingContext2D, draw: () => void, base: X2) => void;
 
 /** An array of three values, specifying the POSITION, ROTATION, and SCALE of a canvas transform in that order. */
 type XTransform = [XVector, XNumber, XVector];
@@ -533,16 +535,16 @@ class XObject extends XHost<{ tick: [] }> {
             const corner4 = corner3.endpoint(180, size.x);
             this.state.vertices[0] = position
                .endpoint(position.direction(base) + offset, position.distance(base))
-               .round(1e3);
+               .round(1e6);
             this.state.vertices[1] = position
                .endpoint(position.direction(corner2) + offset, position.distance(corner2))
-               .round(1e3);
+               .round(1e6);
             this.state.vertices[2] = position
                .endpoint(position.direction(corner3) + offset, position.distance(corner3))
-               .round(1e3);
+               .round(1e6);
             this.state.vertices[3] = position
                .endpoint(position.direction(corner4) + offset, position.distance(corner4))
-               .round(1e3);
+               .round(1e6);
             this.state.dimensions = dimensions;
          }
       }
@@ -630,17 +632,9 @@ class XObject extends XHost<{ tick: [] }> {
          context.strokeStyle = previous;
       }
 
-      context.translate(position.x, position.y);
-      context.setTransform(matrix);
-      context.rotate(-rads);
-      context.translate(-position.x, -position.y);
-
       if (debug && this instanceof XHitbox) {
          // rainbow hitboxes! :D
-         context.strokeStyle = `hsla(${(Date.now() % 1000) * 0.25}, 100%, 50%, 0.5)`;
-
-         context.save();
-         context.resetTransform();
+         context.strokeStyle = `hsla(${(X.time % 1e3) * 0.25}, 100%, 50%, 0.5)`;
 
          try {
             const vertices = this.vertices();
@@ -659,9 +653,12 @@ class XObject extends XHost<{ tick: [] }> {
          } catch (error) {
             //
          }
-
-         context.restore();
       }
+
+      context.translate(position.x, position.y);
+      context.setTransform(matrix);
+      context.rotate(-rads);
+      context.translate(-position.x, -position.y);
 
       Object.assign(context, state);
    }
@@ -831,7 +828,7 @@ class XHitbox extends XObject {
    }
    /**
     * Detects collision between this hitbox and others.
-    * @author bokke1010, harrix432
+    * @author bokke1010, spacefluff432
     */
    detect (renderer: XRenderer, ...hitboxes: XHitbox[]) {
       renderer.calculate(hitbox => hitbox === this);
@@ -850,8 +847,8 @@ class XHitbox extends XObject {
             const [ min2, max2 ] = hitbox.region();
             if (min1.x < max2.x && min2.x < max1.x && min1.y < max2.y && min2.y < max1.y) {
                // aabb minmax exclusion - if the aabb formed by the min and max of both boxes collide, continue
-               const vertices1 = this.vertices().map(vertex => new XVector(vertex).round(1000));
-               const vertices2 = hitbox.vertices().map(vertex => new XVector(vertex).round(1000));
+               const vertices1 = this.vertices().map(vertex => new XVector(vertex).round(1e6));
+               const vertices2 = hitbox.vertices().map(vertex => new XVector(vertex).round(1e6));
                if (
                   (vertices1[0].x === vertices1[1].x || vertices1[0].y === vertices1[1].y) &&
                   (vertices2[0].x === vertices2[1].x || vertices2[0].y === vertices2[1].y)
@@ -933,15 +930,17 @@ class XHitbox extends XObject {
 class XInput extends XHost<XKeyed<[string | number], 'down' | 'up'>> {
    /** This input's state. Contains the currently active inputs. */
    state = { codes: new Set<string | number>() };
-   constructor ({ target = window as any, codes = [] }: XInputProperties = {}) {
+   constructor ({ codes = [], target = window as any, transformer }: XInputProperties = {}) {
       super();
       target.addEventListener('keyup', ({ key }) => {
+         transformer && (key = transformer(key));
          if (codes.includes(key) && this.state.codes.has(key)) {
             this.state.codes.delete(key);
             this.fire('up', key);
          }
       });
       target.addEventListener('keydown', ({ key }) => {
+         transformer && (key = transformer(key));
          if (codes.includes(key) && !this.state.codes.has(key)) {
             this.state.codes.add(key);
             this.fire('down', key);
@@ -1052,21 +1051,27 @@ class XNumber {
    /** Alter the internal value of this numeric over a specified duration. */
    modulate (duration: number, ...points: number[]) {
       return new Promise<void>(resolve => {
-         let index = 0;
          const value = this.value;
-         clearInterval(X.cache.modulationTasks.get(this));
+         X.cache.modulationTasks.get(this)?.cancel();
          X.cache.modulationTasks.set(
             this,
-            setInterval(() => {
-               if (index < duration) {
-                  this.value = X.math.bezier(index / duration, value, ...points);
-                  index += 20;
-               } else {
-                  this.value = X.math.bezier(1, value, ...points);
-                  clearInterval(X.cache.modulationTasks.get(this));
-                  resolve();
-               }
-            }, 20) as any
+            (() => {
+               let active = true;
+               X.chain<number, Promise<void>>(0, async (elapsed, next) => {
+                  if (active) {
+                     if (elapsed < duration) {
+                        this.value = X.math.bezier(elapsed / duration, value, ...points);
+                        await X.timer.on('tick');
+                        await next(elapsed + 5);
+                     } else {
+                        this.value = X.math.bezier(1, value, ...points);
+                        X.cache.modulationTasks.get(this)?.cancel();
+                        resolve();
+                     }
+                  }
+               });
+               return { cancel: () => (active = false) };
+            })()
          );
       });
    }
@@ -1080,7 +1085,7 @@ class XNumber {
    }
    /** Returns an `XNumber` object with the rounded value of this object's value. */
    round () {
-      return Math.round(this.value);
+      return new XNumber(Math.round(this.value));
    }
    /** Subtracts another value from this object's value and returns a new `XNumber` object with said value. */
    subtract (value: number | XNumber = 0): XNumber {
@@ -1110,9 +1115,16 @@ class XPath extends XObject {
    }
    draw (context: CanvasRenderingContext2D, base: XVector) {
       context.beginPath();
-      this.tracer(context, base.x, base.y);
-      context.fill();
-      context.stroke();
+      this.tracer(
+         context,
+         () => {
+            context.fillStyle === 'transparent' || context.fill();
+            context.strokeStyle === 'transparent' || context.stroke();
+            context.closePath();
+            context.beginPath();
+         },
+         base.value()
+      );
       context.closePath();
    }
 }
@@ -1131,8 +1143,8 @@ class XRectangle extends XObject {
       return this.size;
    }
    draw (context: CanvasRenderingContext2D, base: XVector) {
-      context.fillRect(base.x, base.y, this.size.x, this.size.y);
-      context.strokeRect(base.x, base.y, this.size.x, this.size.y);
+      context.fillStyle === 'transparent' || context.fillRect(base.x, base.y, this.size.x, this.size.y);
+      context.strokeStyle === 'transparent' || context.strokeRect(base.x, base.y, this.size.x, this.size.y);
    }
 }
 
@@ -1172,7 +1184,7 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
     */
    state = {
       camera: { x: NaN, y: NaN },
-      handle: void 0 as ReturnType<typeof setTimeout> | void,
+      active: false,
       height: 0,
       scale: 1,
       width: 0
@@ -1279,6 +1291,16 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
          }
       }
    }
+   /** Pass each object in a layer (or all layers) to a handler, and return an array of the outputs. */
+   iterate<B extends any = XObject> (handler = (object: XObject) => object as B, key?: A): B[] {
+      if (typeof key === 'string') {
+         return X.chain<XObject[], B[]>(this.layers[key].objects, (objects, loop) => {
+            return objects.flatMap(object => [ handler(object), ...loop(object.objects) ]);
+         });
+      } else {
+         return Object.keys(this.layers).flatMap(key => this.iterate(handler, key as A));
+      }
+   }
    /** Reads pixel data from the canvas within a specified range. */
    read (key: A, min: X2, max = new XVector(min).add(1 / this.state.scale)) {
       const resmin = this.resolve(key, min);
@@ -1315,14 +1337,18 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
          .subtract(this.camera.clamp(...this.region))
          .add(position);
    }
-   /** Starts the rendering loop and stops any previously active loop if applicable. */
+   /** Starts the rendering loop. */
    start () {
-      this.stop();
-      this.state.handle = setInterval(() => this.render(), 1e3 / this.framerate);
-   }
-   /** Stops the rendering loop if one is active. */
-   stop () {
-      typeof this.state.handle === 'number' && (this.state.handle = clearInterval(this.state.handle));
+      let active = true;
+      X.chain<void, void>(void 0, (none, next) => {
+         X.pause(1e3 / this.framerate).then(() => {
+            if (active) {
+               next();
+               this.render();
+            }
+         });
+      });
+      return { cancel: () => (active = false) };
    }
    /** Forces an update to all ambient rendering layers. */
    refresh () {
@@ -1395,7 +1421,7 @@ class XSprite extends XObject {
    /** The crop to use when rendering the image. */
    crop: XKeyed<number, 'bottom' | 'left' | 'right' | 'top'>;
    /** The underlying frames of this sprite. */
-   frames: XImage[];
+   frames: (XImage | null)[];
    /** The default step value. */
    step: number;
    /** The number of steps per frame. */
@@ -1424,10 +1450,10 @@ class XSprite extends XObject {
    compute () {
       const texture = this.frames[this.state.index];
       if (texture) {
-         const x = Math.round((this.crop.left < 0 ? texture.value.width : 0) + this.crop.left);
-         const y = Math.round((this.crop.top < 0 ? texture.value.height : 0) + this.crop.top);
-         const w = Math.round((this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right) - x;
-         const h = Math.round((this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom) - y;
+         const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
+         const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
+         const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
+         const h = (this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom - y;
          return new XVector(w, h);
       } else {
          return new XVector(0, 0);
@@ -1440,11 +1466,11 @@ class XSprite extends XObject {
    }
    draw (context: CanvasRenderingContext2D, base: XVector) {
       const texture = this.frames[this.state.index];
-      if (texture) {
-         const x = Math.round((this.crop.left < 0 ? texture.value.width : 0) + this.crop.left);
-         const y = Math.round((this.crop.top < 0 ? texture.value.height : 0) + this.crop.top);
-         const w = Math.round((this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right) - x;
-         const h = Math.round((this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom) - y;
+      if (texture && texture.state.value) {
+         const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
+         const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
+         const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
+         const h = (this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom - y;
          context.drawImage(texture.value, x, y, w, h, base.x, base.y, w, h);
       }
       if (this.steps <= ++this.state.step) {
@@ -1461,7 +1487,7 @@ class XSprite extends XObject {
    }
    /** Loads this sprite's frames. */
    async load () {
-      await Promise.all(this.frames.map(asset => asset.load()));
+      await Promise.all(this.frames.map(asset => asset && asset.load()));
    }
    /** Resets the sprite's animation to its default state. */
    reset () {
@@ -1470,7 +1496,7 @@ class XSprite extends XObject {
    }
    /** Unloads this sprite's frames. */
    async unload () {
-      await Promise.all(this.frames.map(asset => asset.unload()));
+      await Promise.all(this.frames.map(asset => asset && asset.unload()));
    }
 }
 
@@ -1480,7 +1506,7 @@ class XText extends XObject {
    charset: string;
    /**
     * The text content to draw. For a detailed guide on how to make the most out of this, please raise an issue telling
-    * me (harrix432) to get off my horny ass and make one.
+    * me to get off my butt and make one.
     */
    content: string;
    /** The vertical and horizontal spacing of the rendered text. */
@@ -1501,11 +1527,11 @@ class XText extends XObject {
       const lines = this.content.split('\n').map(section => {
          let total = 0;
          for (const char of section) {
-            total += context.measureText(char).width + this.spacing.x;
+            total += X.metrics(context, char).width + this.spacing.x;
          }
          return total;
       });
-      const metrics = context.measureText(this.charset);
+      const metrics = X.metrics(context, this.charset);
       const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
       return new XVector(Math.max(...lines), height + (height + this.spacing.y) * (lines.length - 1));
    }
@@ -1526,11 +1552,11 @@ class XText extends XObject {
          shadowOffsetY: context.shadowOffsetY,
          strokeStyle: context.strokeStyle
       };
-      const phase = Date.now() / 1000;
+      const phase = X.time / 1e3;
       const offset = { x: 0, y: 0 };
       const random = { x: 0, y: 0 };
       const swirl = { p: 0, r: 0, s: 0 };
-      const metrics = context.measureText(this.charset);
+      const metrics = X.metrics(context, this.charset);
       const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
       while (index < this.content.length) {
          const char = this.content[index++];
@@ -1550,6 +1576,9 @@ class XText extends XObject {
                   break;
                case 'fill':
                   context.fillStyle = value;
+                  break;
+               case 'font':
+                  context.font = value;
                   break;
                case 'line.cap':
                   context.lineCap = value as CanvasLineCap;
@@ -1606,8 +1635,14 @@ class XText extends XObject {
                   break;
             }
          } else {
-            let x = base.x + offset.x + random.x * (Math.random() - 0.5);
-            let y = base.y + offset.y + random.y * (Math.random() - 0.5) + height;
+            let x = base.x + offset.x;
+            let y = base.y + offset.y + height;
+            if (random.x > 0) {
+               x += random.x * (Math.random() - 0.5);
+            }
+            if (random.y > 0) {
+               y += random.y * (Math.random() - 0.5);
+            }
             if (swirl.s > 0 && swirl.r > 0) {
                const endpoint = new XVector(x, y).endpoint(
                   ((phase * 360 * swirl.s) % 360) + index * (360 / swirl.p),
@@ -1616,51 +1651,12 @@ class XText extends XObject {
                x = endpoint.x;
                y = endpoint.y;
             }
-            context.fillText(char, x, y);
-            context.strokeText(char, x, y);
-            offset.x += context.measureText(char).width + this.spacing.x;
+            context.fillStyle === 'transparent' || context.fillText(char, x, y);
+            context.strokeStyle === 'transparent' || context.strokeText(char, x, y);
+            offset.x += X.metrics(context, char).width + this.spacing.x;
          }
       }
       Object.assign(context, state);
-   }
-}
-
-class XTile extends XSprite {
-   offset: XVector;
-   size: XVector;
-   constructor (properties: XTileProperties = {}) {
-      super(properties);
-      (({
-         offset: { x: offset_x = 0, y: offset_y = 0 } = {},
-         size: { x: size_x = 0, y: size_y = 0 } = {}
-      }: XTileProperties = {}) => {
-         this.offset = new XVector(offset_x, offset_y);
-         this.size = new XVector(size_x, size_y);
-      })(properties);
-   }
-   compute () {
-      return this.size;
-   }
-   draw (context: CanvasRenderingContext2D, base: XVector) {
-      const texture = this.frames[this.state.index];
-      texture &&
-         context.drawImage(
-            texture.value,
-            this.offset.x,
-            this.offset.y,
-            this.size.x,
-            this.size.y,
-            base.x,
-            base.y,
-            this.size.x,
-            this.size.y
-         );
-      if (this.steps <= ++this.state.step) {
-         this.state.step = 0;
-         if (this.state.active && this.frames.length <= ++this.state.index) {
-            this.state.index = 0;
-         }
-      }
    }
 }
 
@@ -1731,24 +1727,30 @@ class XVector {
    /** Alter the internal value of this positional over a specified duration. */
    modulate (duration: number, ...points: X2[]) {
       return new Promise<void>(resolve => {
-         let index = 0;
          const x = this.x;
          const y = this.y;
-         clearInterval(X.cache.modulationTasks.get(this));
+         X.cache.modulationTasks.get(this)?.cancel();
          X.cache.modulationTasks.set(
             this,
-            setInterval(() => {
-               if (index < duration) {
-                  this.x = X.math.bezier(index / duration, x, ...points.map(point => point.x));
-                  this.y = X.math.bezier(index / duration, y, ...points.map(point => point.y));
-                  index += 20;
-               } else {
-                  this.x = X.math.bezier(1, x, ...points.map(point => point.x));
-                  this.y = X.math.bezier(1, y, ...points.map(point => point.y));
-                  clearInterval(X.cache.modulationTasks.get(this));
-                  resolve();
-               }
-            }, 20) as any
+            (() => {
+               let active = true;
+               X.chain<number, Promise<void>>(0, async (elapsed, next) => {
+                  if (active) {
+                     if (elapsed < duration) {
+                        this.x = X.math.bezier(elapsed / duration, x, ...points.map(point => point.x));
+                        this.y = X.math.bezier(elapsed / duration, y, ...points.map(point => point.y));
+                        await X.timer.on('tick');
+                        await next(elapsed + 5);
+                     } else {
+                        this.x = X.math.bezier(1, x, ...points.map(point => point.x));
+                        this.y = X.math.bezier(1, y, ...points.map(point => point.y));
+                        X.cache.modulationTasks.get(this)?.cancel();
+                        resolve();
+                     }
+                  }
+               });
+               return { cancel: () => (active = false) };
+            })()
          );
       });
    }
@@ -1866,8 +1868,10 @@ const X = {
       images: {} as XKeyed<Promise<HTMLImageElement>>,
       /** All loaded assets attached to any given cached image. */
       imageAssets: {} as XKeyed<XImage[]>,
+      /** Computed text metrics. */
+      textMetrics: {} as XKeyed<TextMetrics>,
       /** Stores all active modulation tasks for any `AudioParam`, `XNumber`, or `XVector` objects. */
-      modulationTasks: new Map<AudioParam | XNumber | XVector, number>()
+      modulationTasks: new Map<AudioParam | XNumber | XVector, { cancel: () => void }>()
    },
    /** A recursive operator function. */
    chain<A, B> (input: A, handler: (input: A, loop: (input: A) => B) => B) {
@@ -1876,7 +1880,74 @@ const X = {
    },
    /** Sets the given canvas to the specified size and generates a new `CanvasRenderingContext2D` from it. */
    context (canvas: HTMLCanvasElement, width = 1, height = 1) {
-      return Object.assign(Object.assign(canvas, { width, height }).getContext('2d'), { imageSmoothingEnabled: false });
+      return Object.assign(Object.assign(canvas, { width, height }).getContext('2d'), {
+         fillStyle: 'transparent',
+         imageSmoothingEnabled: false,
+         strokeStyle: 'transparent'
+      });
+   },
+   /** Returns an audio daemon for generating audio player instances. */
+   daemon (
+      audio: XAudio,
+      {
+         /** The AudioContext to use for this daemon. */
+         context = new AudioContext(),
+         /** The base gain of this player. */
+         gain = 1,
+         /** Whether or not this player's instances should loop by default. */
+         loop = false,
+         /** The base playback rate of this player. */
+         rate = 1,
+         /** The audio router to use for this object. */
+         router = ((context: AudioContext, input: GainNode) => input.connect(context.destination)) as XRouter
+      } = {}
+   ) {
+      const daemon: XDaemon = {
+         audio,
+         context,
+         gain,
+         instance (offset = 0) {
+            // initialize values
+            const context = daemon.context;
+            const gain = context.createGain();
+            const source = context.createBufferSource();
+
+            // set defaults
+            gain.gain.value = daemon.gain;
+            source.buffer = daemon.audio.value;
+            source.loop = daemon.loop;
+            source.playbackRate.value = daemon.rate;
+
+            // establish connections
+            daemon.router(context, gain);
+            source.connect(gain);
+            source.start(0, offset);
+
+            // return controller
+            return {
+               context,
+               daemon,
+               gain: gain.gain,
+               get loop () {
+                  return source.loop;
+               },
+               set loop (value) {
+                  source.loop = value;
+               },
+               rate: source.playbackRate,
+               stop () {
+                  source.stop();
+                  source.disconnect();
+                  source.buffer = null;
+               }
+            };
+         },
+         instances: [] as XInstance[],
+         loop,
+         rate,
+         router
+      };
+      return daemon;
    },
    /** Gets an `XBasic` from the given source URL. */
    data (source: string) {
@@ -2039,6 +2110,14 @@ const X = {
          return Math.sin(((value + 0.5) * 2 - 1) * Math.PI) / 2 + 0.5;
       }
    },
+   metrics (context: CanvasRenderingContext2D, content: string) {
+      const key = `${context.font} ${context.textAlign} ${context.textBaseline} ${content}`;
+      if (key in X.cache.textMetrics) {
+         return X.cache.textMetrics[key];
+      } else {
+         return (X.cache.textMetrics[key] = context.measureText(content));
+      }
+   },
    /** Parses JS objects previously stringified with `X.stringify()` */
    parse (text: string) {
       return JSON.parse(text, (key, value) => {
@@ -2072,70 +2151,16 @@ const X = {
    },
    /** Returns a promise that will resolve after the specified duration in milliseconds. */
    pause (duration = 0) {
-      return new Promise<void>(resolve => setTimeout(() => resolve(), duration));
-   },
-   /** Returns an audio daemon for generating audio player instances. */
-   daemon (
-      audio: XAudio,
-      {
-         /** The AudioContext to use for this daemon. */
-         context = new AudioContext(),
-         /** The base gain of this player. */
-         gain = 1,
-         /** Whether or not this player's instances should loop by default. */
-         loop = false,
-         /** The base playback rate of this player. */
-         rate = 1,
-         /** The audio router to use for this object. */
-         router = ((context: AudioContext, input: GainNode) => input.connect(context.destination)) as XRouter
-      } = {}
-   ) {
-      const daemon: XDaemon = {
-         audio,
-         context,
-         gain,
-         instance (offset = 0) {
-            // initialize values
-            const context = daemon.context;
-            const gain = context.createGain();
-            const source = context.createBufferSource();
-
-            // set defaults
-            gain.gain.value = daemon.gain;
-            source.buffer = daemon.audio.value;
-            source.loop = daemon.loop;
-            source.playbackRate.value = daemon.rate;
-
-            // establish connections
-            daemon.router(context, gain);
-            source.connect(gain);
-            source.start(0, offset);
-
-            // return controller
-            return {
-               context,
-               daemon,
-               gain: gain.gain,
-               get loop () {
-                  return source.loop;
-               },
-               set loop (value) {
-                  source.loop = value;
-               },
-               rate: source.playbackRate,
-               stop () {
-                  source.stop();
-                  source.disconnect();
-                  source.buffer = null;
-               }
-            };
-         },
-         instances: [] as XInstance[],
-         loop,
-         rate,
-         router
-      };
-      return daemon;
+      if (duration === Infinity) {
+         return new Promise<void>(resolve => {});
+      } else {
+         return X.chain<number, Promise<void>>(0, async (elapsed, next) => {
+            if (elapsed < duration) {
+               await X.timer.on('tick');
+               await next(elapsed + 5);
+            }
+         });
+      }
    },
    /** Converts JS objects to JSON with support for functions, undefined values, infinity, and nan values. */
    stringify (value: any) {
@@ -2161,6 +2186,10 @@ const X = {
          }
       });
    },
+   /** The global time. */
+   time: 0,
+   /** The global timer. */
+   timer: new XHost<{ tick: [] }>(),
    /** The inital transform used in rendering and vertex calculations. */
    transform: [ new XVector(), new XNumber(), new XVector(1) ] as XTransform
 };
@@ -2170,3 +2199,8 @@ Object.assign(AudioParam.prototype, {
       return XNumber.prototype.modulate.call(this, duration, ...points);
    }
 });
+
+setInterval(() => {
+   X.time += 5;
+   X.timer.fire('tick');
+}, 5);
