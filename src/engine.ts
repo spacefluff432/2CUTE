@@ -9,121 +9,72 @@
 //   ########   ########   ##   ###   ########                                                          //
 //                                                                                                      //
 //// needs more optimizating /////////////////////////////////////////////////////////////////////////////
+declare const PIXI: typeof import('pixi.js-legacy');
 
 interface AudioParam {
-   /** Alter the internal value of this numeric over a specified duration. */
    modulate(duration: number, ...points: number[]): Promise<void>;
 }
 
-/** A two-dimensional position. */
-type X2 = {
-   /** The X value of the position. */
-   x: number;
-   /** The Y value of the position. */
-   y: number;
-};
+type PBaseTexture = import('pixi.js-legacy').BaseTexture<PResource, PIAutoDetectOptions>;
+type PBitmapFont = import('pixi.js-legacy').BitmapFont;
+type PCanvasRenderer = import('pixi.js-legacy').CanvasRenderer;
+type PIAutoDetectOptions = import('pixi.js-legacy').IAutoDetectOptions;
+type PPrepare = import('pixi.js-legacy').Prepare;
+type PRenderer = import('pixi.js-legacy').Renderer;
+type PRectangle = import('pixi.js-legacy').Rectangle;
+type PResource = import('pixi.js-legacy').Resource;
+type PTextMetrics = import('pixi.js-legacy').TextMetrics;
+type PTextStyle = import('pixi.js-legacy').TextStyle;
+type PTexture = import('pixi.js-legacy').Texture<PResource>;
 
-/** The raw properties of an XAtlas object. */
-type XAtlasProperties<A extends string = string> = {
-   /** The navigators associated with this atlas. */
-   navigators?: XKeyed<XNavigator<A>, A> | void;
-} | void;
+type X2 = { x: number; y: number };
 
-/** An audio asset. */
+type XAtlasProperties<A extends string = string> = { navigators?: XKeyed<XNavigator<A>, A> | void } | void;
 type XAudio = XAsset<AudioBuffer>;
-
-/** A JSON-serializable object. */
 type XBasic = { [k: string]: XBasic } | XBasic[] | string | number | boolean | null | undefined | void;
-
-/** A cardinal direction. */
 type XCardinal = 'down' | 'left' | 'right' | 'up';
-
-/** An array of four values, specifying the RED, GREEN, BLUE, and ALPHA values of a color in that order. */
 type XColor = [number, number, number, number];
 
-/** An audio daemon, supplier of audio instances. */
 type XDaemon = {
-   /** The audio source to use. */
    audio: XAudio;
-   /** The audio context to use for this daemon. */
    context: AudioContext;
-   /** Controls the master volume of the audio being played. */
    gain: number;
-   /** Whether or not to loop audio back to the start when it ends. */
    loop: boolean;
-   /**
-    * Initializes a new audio instance with the daemon's current values and starts it from the beginning. If an offset
-    * value is specified, the audio will instead start at the given offset in seconds.
-    */
-   instance(offset?: number): XInstance;
-   /** A list of all initialized instances. */
+   instance(offset?: number, store?: boolean): XInstance;
    instances: XInstance[];
-   /**
-    * Controls the speed and pitch of the audio being played. A value of `1` will result in no alterations to the
-    * source audio, a value of `2` will half the speed and increase the pitch by an octive, etc.
-    */
    rate: number;
-   /** The audio router to use for this object. */
    router: XRouter;
 };
 
-/** A data asset. */
 type XData<A extends XBasic = XBasic> = XAsset<A>;
-
-/** Excludes nullish values from the given type. */
 type XDefined<A> = Exclude<A, null | undefined | void>;
-
-/** The raw properties of an XHitbox object. */
+type XFactor = [number, number];
+type XHandler<A extends any[] = any> = ((...data: A) => any) | { listener: (...data: A) => any; priority: number };
 type XHitboxProperties = XObjectProperties & XProperties<XHitbox, 'size'>;
+type XImage = XAsset<PBaseTexture>;
 
-/** An image asset. */
-type XImage = XAsset<HTMLImageElement | ImageBitmap>;
-
-/** The raw properties of an XInput object. */
 type XInputProperties = {
    codes?: (string | number)[];
    target?: HTMLElement;
    transformer?: (key: string) => string;
 } | void;
 
-/** An audio instance. */
 type XInstance = {
-   /** The context used by this instance. */
    context: AudioContext;
-   /** The daemon which generated this instance. */
    daemon: XDaemon;
-   /** The loop parameter of this instance. */
    loop: boolean;
-   /** The gain parameter of this instance. */
    gain: AudioParam;
-   /** The rate parameter of this instance. */
    rate: AudioParam;
-   /** Stops the instance's audio and throws away the audio. */
    stop(): void;
 };
 
-/** An inventory of multiple assets, treated as a single asset. */
 type XInventory<A extends XAsset[] = XAsset[]> = XAsset<A>;
-
-/** Specifies an object whose values are of the given type. Can also specify the type of the object's keys. */
 type XKeyed<A = any, B extends string = any> = { [x in B]: A };
-
-/** An event handler. Can either be a listener (uses `0` as its priority) or a listener and a custom priority value. */
-type XHandler<A extends any[] = any> = ((...data: A) => any) | { listener: (...data: A) => any; priority: number };
-
-/** A valid XNavigator key. A string type refers to a navigator, a null type refers to no navigator, and a void type refers to the current navigator. */
 type XNavigatorKey<A extends string = string> = A | null | undefined | void;
 
-/** The raw properties of an XNavigator object. */
 type XNavigatorProperties<A extends string = string> = XProperties<XNavigator<A>, 'objects' | 'position'> &
-   (
-      | {
-           [x in 'flip' | 'grid' | 'next' | 'prev']?: XNavigator<A>[x] | void;
-        }
-      | void
-   );
+   ({ [x in 'flip' | 'grid' | 'next' | 'prev']?: XNavigator<A>[x] | void } | void);
 
-/** The raw properties of an XObject object. XObject object? Golly, that's not confusing at all! */
 type XObjectProperties = XProperties<
    XObject,
    | 'alpha'
@@ -146,109 +97,89 @@ type XObjectProperties = XProperties<
    | 'velocity'
 >;
 
-/** The raw properties of an XPath object. */
-type XPathProperties = XObjectProperties &
-   XProperties<XPath, 'size'> &
-   ({
-      /** The path tracer to use for this object. */
-      tracer?: XTracer | void;
-   } | void);
+type XPathProperties = XObjectProperties & XProperties<XPath, 'size'> & ({ tracer?: XTracer | void } | void);
 
-/** Extracts a "primitive" clone of the given type. */
-type XPrimitive<A> =
-   // actual primitives
-   A extends string | number | boolean | null | undefined
-      ? A | void
-      : A extends XAudio
-      ? XAudio | void
-      : A extends AudioParam | XNumber
-      ? number | void
-      : A extends HTMLElement
-      ? HTMLElement
-      : A extends XImage[]
-      ? XImage[] | void
-      : A extends XObject[]
-      ? (XObject | XObjectProperties)[] | void
-      : A extends XSprite
-      ? XSprite | XSpriteProperties | void
-      : A extends XVector
-      ? { x?: number | void; y?: number | void } | void
-      : A extends Map<infer B, infer C>
-      ? XPrimitive<{ [x in B & string]?: C }> | void
-      : A extends (infer B)[] | Set<infer B>
-      ? XPrimitive<B>[] | void
-      : A extends XKeyed
-      ? Partial<{ [x in keyof A]?: XPrimitive<A[x]> }> | void
-      : never;
+type XPrimitive<A> = A extends string | number | boolean | null | undefined
+   ? A | void
+   : A extends XAudio
+   ? XAudio | void
+   : A extends AudioParam | XNumber
+   ? number | void
+   : A extends HTMLElement
+   ? HTMLElement
+   : A extends XImage[]
+   ? XImage[] | void
+   : A extends XObject[]
+   ? (XObject | XObjectProperties)[] | void
+   : A extends XSprite
+   ? XSprite | XSpriteProperties | void
+   : A extends XVector
+   ? { x?: number | void; y?: number | void } | void
+   : A extends Map<infer B, infer C>
+   ? XPrimitive<{ [x in B & string]?: C }> | void
+   : A extends (infer B)[] | Set<infer B>
+   ? XPrimitive<B>[] | void
+   : A extends XKeyed
+   ? Partial<{ [x in keyof A]?: XPrimitive<A[x]> }> | void
+   : never;
 
-/** Transforms a subset of class properties into a raw and flexible input format. */
 type XProperties<A extends XKeyed, B extends keyof A> = XPrimitive<{ [x in B]: A[x] }>;
-
-/** Expands a type to include both itself and a "provider function" which returns itself. Can also specify which arguments this "provider function" accepts. */
-type XProvider<A, B extends any[] = []> = A | ((...args: B) => A);
-
-/** A two-dimensional region, constrained by a minimum and maximum position. */
+type XProvider<A, B extends any[] = []> = A | ((...args: B) => XProvider<A>);
 type XRegion = [X2, X2];
-
-/** The raw properties of an XRectangle object. */
 type XRectangleProperties = XObjectProperties & XProperties<XRectangle, 'size'>;
 
-/** An XRenderer layer. */
 type XRendererLayer = {
-   /** The canvas associated with this layer. */
    canvas: HTMLCanvasElement;
-   /**
-    * The canvas context associated with this layer. Updates when the renderer's size changes or its container
-    * element is resized.
-    */
-   context: CanvasRenderingContext2D;
-   /** The rendering modifiers for this layer. */
    modifiers: XRendererLayerModifier[];
-   /** All objects currently being rendered onto this layer. */
    objects: XObject[];
+   renderer: PRenderer | PCanvasRenderer | PCanvasRenderer;
 };
 
-/** The type of an XRenderer's layer. */
-type XRendererLayerModifier = 'ambient' | 'cumulative' | 'static' | 'vertical';
+type XRendererLayerModifier = 'ambient' | 'static' | 'vertical';
 
-/** The raw properties of an XRenderer object. */
 type XRendererProperties<A extends string = string> = XProperties<
    XRenderer<A>,
-   'alpha' | 'camera' | 'container' | 'debug' | 'framerate' | 'region' | 'shake' | 'size' | 'zoom'
+   'alpha' | 'camera' | 'container' | 'debug' | 'framerate' | 'region' | 'shake' | 'size' | 'quality' | 'zoom'
 > &
-   ({
-      /** Whether or not this renderer should be automatically started upon construction. */
-      auto?: boolean | void;
-      /** The layers associated with this renderer. */
-      layers?: Partial<XKeyed<XRendererLayerModifier[], A>> | void;
-   } | void);
+   ({ auto?: boolean | void; layers?: Partial<XKeyed<XRendererLayerModifier[], A>> | void } | void);
 
-/** A function ideally used to route audio from the given source node to the given context's destination. */
 type XRouter = (context: AudioContext, input: GainNode) => void;
 
-/** The raw properties of an XSprite object. */
 type XSpriteProperties = XObjectProperties &
    XProperties<XSprite, 'crop' | 'step' | 'steps'> &
-   ({
-      /** Whether or not this sprite should be automatically enabled upon construction. */
-      auto?: boolean | void;
-      frames?: (XImage | null)[];
-   } | void);
+   ({ auto?: boolean | void; frames?: (XImage | null)[] } | void);
 
-/** The raw properties of an XText object. */
+type XStyle = {
+   globalAlpha: number;
+   globalCompositeOperation: GlobalCompositeOperation;
+   fillStyle: string;
+   lineCap: CanvasLineCap;
+   lineDashOffset: number;
+   lineJoin: CanvasLineJoin;
+   miterLimit: number;
+   lineWidth: number;
+   shadowBlur: number;
+   shadowColor: string;
+   shadowOffsetX: number;
+   shadowOffsetY: number;
+   strokeStyle: string;
+   textAlign: CanvasTextAlign;
+   textBaseline: CanvasTextBaseline;
+   direction: CanvasDirection;
+   font: string;
+};
+
 type XTextProperties = XObjectProperties & XProperties<XText, 'cache' | 'charset' | 'content' | 'spacing'>;
+type XTracer = (
+   renderer: PRenderer | PCanvasRenderer,
+   transform: XTransform,
+   [ quality, zoom ]: XFactor,
+   style: XStyle
+) => void;
+type XTransform = [XVector, number, XVector];
 
-/** A function ideally used to trace a path on a canvas. */
-type XTracer = (context: CanvasRenderingContext2D, draw: () => void, base: X2) => void;
-
-/** An array of three values, specifying the POSITION, ROTATION, and SCALE of a canvas transform in that order. */
-type XTransform = [XVector, XNumber, XVector];
-
-/** An event host. The type parameter `A` defines which events this host should fire and listen for. */
 class XHost<A extends XKeyed<any[]> = {}> {
-   /** This host's internal listener storage map. */
    events: { [B in keyof A]?: XHandler<A[B]>[] } = {};
-   /** Fires an event. */
    fire<B extends keyof A> (name: B, ...data: A[B]) {
       const list = this.events[name];
       if (list) {
@@ -259,7 +190,6 @@ class XHost<A extends XKeyed<any[]> = {}> {
          return [];
       }
    }
-   /** Removes an event listener from this host. */
    off<B extends keyof A> (name: B, handler: XHandler<A[B]>) {
       const list = this.events[name];
       if (list) {
@@ -270,11 +200,8 @@ class XHost<A extends XKeyed<any[]> = {}> {
       }
       return this;
    }
-   /** Listens for an event and returns a promise that will resolve when the event is next fired. */
    on<B extends keyof A>(name: B): Promise<A[B]>;
-   /** Listens for an event at a given priority and returns a promise that will resolve when the event is next fired. */
    on<B extends keyof A>(name: B, priority: number): Promise<A[B]>;
-   /** Listens for an event and calls the given listener whenever the event is fired. */
    on<B extends keyof A>(name: B, listener: XHandler<A[B]>): this;
    on<B extends keyof A> (name: B, a2: number | XHandler<A[B]> = 0) {
       if (typeof a2 === 'number') {
@@ -299,186 +226,50 @@ class XHost<A extends XKeyed<any[]> = {}> {
          return this;
       }
    }
-   /** Accepts a provider function whose return value is then registered as a listener for a given event. */
    wrapOn<B extends keyof A> (name: B, provider: (host: this) => XHandler<A[B]>) {
       return this.on(name, provider(this));
    }
-   /** Accepts a provider function whose return value is then unregistered as a listener for a given event. */
-   wrapOff<B extends keyof A> (name: B, provider: (host: this) => XHandler<A[B]>) {
-      return this.off(name, provider(this));
-   }
 }
 
-/** A rendered object. */
 class XObject extends XHost<{ tick: [] }> {
-   /** The transparency value of this object. Carries over into all child objects. */
    alpha: XNumber;
-   /**
-    * The positional anchor of this object, which determines the origin point for the object's rotation as well as how
-    * this object's final position is computed from its base position.
-    * @example
-    * // if unspecified, an anchor of (-1, -1) is used by default.
-    * // this anchor value will result in the object's dimensions extending down and to the right from its base position.
-    * new XObject({});
-    *
-    * // an anchor of (0, 0) will center the object's dimensions around its base position.
-    * new XObject({ anchor: { x: 0, y: 0 } });
-    *
-    * // an anchor of (1, 1) will result in the object's dimensions extending up and to the left from its base position.
-    * new XObject({ anchor: { x: 1, y: 1 } });
-    *
-    * // the X and Y of an anchor can be independently controlled.
-    * // in the following example, the object will be top-aligned and horizontally centered.
-    * new XObject({ anchor: { x 0, y: -1 } })
-    *
-    * // the X and Y of an anchor can also extend beyond 1 and -1, if necessary.
-    * // in the following example, the object will be placed a fair distance down and to the left from it's base position.
-    * new XObject({ anchor: { x: -5, y: -5 } });
-    */
    anchor: XVector;
-   /** The composite mode used for this object. Will inherit from parent if undefined. */
-   blend:
-      | 'color'
-      | 'color-burn'
-      | 'color-dodge'
-      | 'copy'
-      | 'darken'
-      | 'destination-atop'
-      | 'destination-in'
-      | 'destination-out'
-      | 'destination-over'
-      | 'difference'
-      | 'exclusion'
-      | 'hard-light'
-      | 'hue'
-      | 'lighten'
-      | 'lighter'
-      | 'luminosity'
-      | 'multiply'
-      | 'overlay'
-      | 'saturation'
-      | 'screen'
-      | 'soft-light'
-      | 'source-atop'
-      | 'source-in'
-      | 'source-out'
-      | 'source-over'
-      | 'xor'
-      | void;
-   /** The canvas fill style for this object. Will inherit from parent if undefined. */
+   blend: GlobalCompositeOperation | void;
    fill: string | void;
-   /** The friction value of this object, which divides the object's velocity each tick. */
    friction: XNumber;
-   /** The gravitational force to apply to this object. */
    gravity: {
-      /** The direction of gravity's pull. */
       angle: XNumber;
-      /** The amount of force gravity should apply. */
       extent: XNumber;
    };
-   /** Canvas context properties specific to line drawing. */
    line: {
-      /**
-       * Controls the value of `lineCap` used when drawing this object. Will inherit from parent if undefined.
-       * @see https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/lineCap
-       */
       cap: CanvasLineCap | void;
-      /**
-       * Controls the value of `lineDashOffset` used when drawing this object. Will inherit from parent if undefined.
-       * @see https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/lineDashOffset
-       */
       dash: XNumber | void;
-      /**
-       * Controls the value of `lineJoin` used when drawing this object. Will inherit from parent if undefined.
-       * @see https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/lineJoin
-       */
       join: CanvasLineJoin | void;
-      /**
-       * Controls the value of `miterLimit` used when drawing this object. Will inherit from parent if undefined.
-       * @see https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/miterLimit
-       */
       miter: XNumber | void;
-      /**
-       * Controls the value of `lineWidth` used when drawing this object. Will inherit from parent if undefined.
-       * @see https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/lineWidth
-       */
       width: XNumber | void;
    };
-   /** Arbitrary metadata associated with this object. */
    metadata: XKeyed<XBasic>;
-   /** A list of this object's children. */
    objects: XObject[];
-   /**
-    * The parallax of this object, which determines the amount of distance to add or remove from this object's base
-    * position based on the renderer's camera position. Negative values subtract distance per pixel, while positive
-    * values add distance per pixel. A value of (-1, -1) will "cancel out" camera movement, and a value of (1, 1) will
-    * cause the object to move twice as fast as the camera moves. The X and Y values can be individually controlled. In
-    * addition, the parallax value specified here will impact the base position of all child objects.
-    */
    parallax: XVector;
-   /** The base position of this object. */
    position: XVector;
-   /** The priority value of this object. Higher priority objects are rendered atop lower priority objects. */
    priority: XNumber;
-   /** The rotation value of this object, which spins the object around it's anchor point. */
    rotation: XNumber;
-   /**
-    * The scale of this object. A value of (1, 1) will result in no scaling, a value of (2, 2) will double the size,
-    * etc. Negative values will cause the object to appear inverted.
-    */
    scale: XVector;
-   /** Canvas context properties specific to shadow drawing. */
    shadow: {
-      /**
-       * Controls the value of `shadowBlur` used when drawing this object. Will inherit from parent if undefined.
-       * @see https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/shadowBlur
-       */
       blur: XNumber | void;
-      /**
-       * Controls the value of `shadowColor` used when drawing this object. Will inherit from parent if undefined.
-       * @see https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/shadowColor
-       */
       color: string | void;
-      /** Controls the values of `shadowOffsetX` and `shadowOffsetY` used when drawing this object. */
       offset: {
-         /**
-          * Controls the value of `shadowOffsetX` used when drawing this object. Will inherit from parent if undefined.
-          * @see https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/shadowOffsetX
-          */
          x: XNumber | void;
-         /**
-          * Controls the value of `shadowOffsetY` used when drawing this object. Will inherit from parent if undefined.
-          * @see https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/shadowOffsetY
-          */
          y: XNumber | void;
       };
    };
-   /** The canvas stroke style for this object. Will inherit from parent if undefined. */
    stroke: string | void;
-   /** Canvas context properties specific to text drawing. */
    text: {
-      /**
-       * Controls the value of `textAlign` used when drawing this object. Will inherit from parent if undefined.
-       * @see https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/textAlign
-       */
       align?: CanvasTextAlign | void;
-      /**
-       * Controls the value of `textBaseline` used when drawing this object. Will inherit from parent if undefined.
-       * @see https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/textBaseline
-       */
       baseline?: CanvasTextBaseline | void;
-      /**
-       * Controls the value of `textDirection` used when drawing this object. Will inherit from parent if undefined.
-       * @see https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/textDirection
-       */
       direction?: CanvasDirection | void;
-      /**
-       * Controls the value of `font` used when drawing this object. Will inherit from parent if undefined.
-       * @see https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/font
-       */
       font?: string | void;
    };
-   /** The object's velocity, impacted by gravity. */
    velocity: XVector;
    constructor ({
       alpha = 1,
@@ -536,174 +327,80 @@ class XObject extends XHost<{ tick: [] }> {
       this.text = { align, baseline, direction, font };
       this.velocity = new XVector(velocity_x, velocity_y);
    }
-   /**
-    * If this object is a hitbox and matches the given filter, its vertices are calculated and it is added to the input
-    * list. The `calculate` method is then called on this object's children, and the process repeats until the entire
-    * object tree has been iterated over and filtered into the list. The list is then returned.
-    */
-   calculate (filter: XProvider<boolean, [XHitbox]>, list: XHitbox[], camera: X2, transform: XTransform) {
-      const position = transform[0].add(this.position).add(this.parallax.multiply(camera));
-      const rotation = transform[1].add(this.rotation);
-      const scale = transform[2].multiply(this.scale);
-      if (this instanceof XHitbox && X.provide(filter, this)) {
-         list.push(this);
-         const size = this.size.multiply(scale);
-         const half = size.divide(2);
-         const base = position.subtract(half.add(half.multiply(this.anchor)));
-         const dimensions = `${base.x}:${base.y}:${position.x}:${position.y}:${rotation.value}:${size.x}:${size.y}`;
-         if (dimensions !== this.state.dimensions) {
-            const offset = rotation.value + 180;
-            const corner2 = base.endpoint(0, size.x);
-            const corner3 = corner2.endpoint(90, size.y);
-            const corner4 = corner3.endpoint(180, size.x);
-            this.state.vertices[0] = position.endpoint(position.angle(base) + offset, position.extent(base)).round(1e6);
-            this.state.vertices[1] = position
-               .endpoint(position.angle(corner2) + offset, position.extent(corner2))
-               .round(1e6);
-            this.state.vertices[2] = position
-               .endpoint(position.angle(corner3) + offset, position.extent(corner3))
-               .round(1e6);
-            this.state.vertices[3] = position
-               .endpoint(position.angle(corner4) + offset, position.extent(corner4))
-               .round(1e6);
-            this.state.dimensions = dimensions;
-         }
-      }
-      for (const object of this.objects) {
-         object.calculate(filter, list, camera, [ position, rotation, scale ]);
-      }
-   }
-   /** Computes this object's size based on itself and the given canvas context. */
-   compute(context: CanvasRenderingContext2D): XVector;
+   compute(renderer: PRenderer | PCanvasRenderer): XVector;
    compute () {
       return X.zero;
    }
-   /** Draws this object to the given canvas context. */
-   draw(context: CanvasRenderingContext2D, base: XVector): void;
+   draw(
+      renderer: PRenderer | PCanvasRenderer,
+      transform: XTransform,
+      [ quality, zoom ]: XFactor,
+      style: XStyle,
+      debug: boolean
+   ): void;
    draw () {}
-   /** Renders this object to a context with the given camera position and transform values. */
-   render (camera: X2, context: CanvasRenderingContext2D, transform: XTransform, debug: boolean) {
+   render (
+      renderer: PRenderer | PCanvasRenderer,
+      camera: X2,
+      transform: XTransform,
+      [ quality, zoom ]: XFactor,
+      style: XStyle,
+      debug: boolean
+   ) {
       if (this.gravity.extent.value !== 0) {
-         Object.assign(this.velocity, this.velocity.endpoint(this.gravity.angle, this.gravity.extent).value());
+         Object.assign(
+            this.velocity,
+            this.velocity.endpoint(this.gravity.angle.value, this.gravity.extent.value).value()
+         );
       }
       if (this.friction.value !== 1) {
-         Object.assign(this.velocity, this.velocity.divide(this.friction).value());
+         Object.assign(this.velocity, this.velocity.divide(this.friction.value).value());
       }
       if (this.velocity.x !== 0 || this.velocity.y !== 0) {
          Object.assign(this.position, this.position.add(this.velocity));
       }
       this.fire('tick');
-
-      const state = {
-         direction: context.direction,
-         font: context.font,
-         fillStyle: context.fillStyle,
-         globalAlpha: context.globalAlpha,
-         globalCompositeOperation: context.globalCompositeOperation,
-         lineCap: context.lineCap,
-         lineDashOffset: context.lineDashOffset,
-         lineJoin: context.lineJoin,
-         lineWidth: context.lineWidth,
-         miterLimit: context.miterLimit,
-         shadowBlur: context.shadowBlur,
-         shadowColor: context.shadowColor,
-         shadowOffsetX: context.shadowOffsetX,
-         shadowOffsetY: context.shadowOffsetY,
-         strokeStyle: context.strokeStyle,
-         textAlign: context.textAlign,
-         textBaseline: context.textBaseline
-      };
-
-      this.alpha && (context.globalAlpha *= this.alpha.clamp(0, 1).value);
-      this.blend && (context.globalCompositeOperation = this.blend);
-      this.fill && (context.fillStyle = this.fill);
-      this.line.cap && (context.lineCap = this.line.cap);
-      this.line.dash && (context.lineDashOffset = this.line.dash.value);
-      this.line.join && (context.lineJoin = this.line.join);
-      this.line.miter && (context.miterLimit = this.line.miter.value);
-      this.line.width && (context.lineWidth = this.line.width.value);
-      this.shadow.blur && (context.shadowBlur = this.shadow.blur.value);
-      this.shadow.color && (context.shadowColor = this.shadow.color);
-      this.shadow.offset.x && (context.shadowOffsetX = this.shadow.offset.x.value);
-      this.shadow.offset.y && (context.shadowOffsetY = this.shadow.offset.y.value);
-      this.stroke && (context.strokeStyle = this.stroke);
-      this.text.align && (context.textAlign = this.text.align);
-      this.text.baseline && (context.textBaseline = this.text.baseline);
-      this.text.direction && (context.direction = this.text.direction);
-      this.text.font && (context.font = this.text.font);
-
-      const position = transform[0].add(this.position).add(this.parallax.multiply(camera));
-      const rotation = transform[1].add(this.rotation);
-      const scale = transform[2].multiply(this.scale);
-
-      const size = this.compute(context);
-      const half = size.divide(2);
-      const base = position.subtract(half.add(half.multiply(this.anchor)));
-      const rads = (Math.PI / 180) * this.rotation.value;
-
-      context.translate(position.x, position.y);
-      context.rotate(rads);
-      const matrix = context.getTransform();
-      context.scale(this.scale.x, this.scale.y);
-      context.translate(-position.x, -position.y);
-
-      context.globalAlpha === 0 || this.draw(context, base);
-
-      if (this.objects.length > 0) {
-         for (const object of this.objects) {
-            object.render(camera, context, [ position, rotation, scale ], debug);
-         }
-      }
-
-      if (debug) {
-         const previous = context.strokeStyle;
-         context.strokeStyle = '#fff8';
-         context.strokeRect(base.x, base.y, size.x, size.y);
-         context.strokeStyle = previous;
-      }
-
-      if (debug && this instanceof XHitbox) {
-         // rainbow hitboxes! :D
-         context.strokeStyle = `hsla(${(X.time % 1e3) * 0.25}, 100%, 50%, 0.5)`;
-
-         try {
-            const vertices = this.vertices();
-            for (const [ b1, b2 ] of [
-               [ vertices[0], vertices[1] ],
-               [ vertices[1], vertices[2] ],
-               [ vertices[2], vertices[3] ],
-               [ vertices[3], vertices[0] ]
-            ]) {
-               context.beginPath();
-               context.moveTo(b1.x, b1.y);
-               context.lineTo(b2.x, b2.y);
-               context.stroke();
-               context.closePath();
+      const subalpha = style.globalAlpha * Math.min(Math.max(this.alpha.value, 0), 1);
+      if (subalpha > 0 || this.objects.length > 0) {
+         const subtransform: XTransform = [
+            transform[0].add(this.position).add(this.parallax.multiply(camera)).shift(transform[1], 0, transform[0]),
+            transform[1] + this.rotation.value,
+            transform[2].multiply(this.scale)
+         ];
+         const substyle = {
+            globalAlpha: subalpha,
+            globalCompositeOperation: this.blend ?? style.globalCompositeOperation,
+            fillStyle: this.fill ?? style.fillStyle,
+            lineCap: this.line.cap ?? style.lineCap,
+            lineDashOffset: this.line.dash?.value ?? style.lineDashOffset,
+            lineJoin: this.line.join ?? style.lineJoin,
+            miterLimit: this.line.miter?.value ?? style.miterLimit,
+            lineWidth: this.line.width?.value ?? style.lineWidth,
+            shadowBlur: this.shadow.blur?.value ?? style.shadowBlur,
+            shadowColor: this.shadow.color ?? style.shadowColor,
+            shadowOffsetX: this.shadow.offset.x?.value ?? style.shadowOffsetX,
+            shadowOffsetY: this.shadow.offset.y?.value ?? style.shadowOffsetY,
+            strokeStyle: this.stroke ?? style.strokeStyle,
+            textAlign: this.text.align ?? style.textAlign,
+            textBaseline: this.text.baseline ?? style.textBaseline,
+            direction: this.text.direction ?? style.direction,
+            font: this.text.font ?? style.font
+         };
+         subalpha === 0 || this.draw(renderer, subtransform, [ quality, zoom ], substyle, debug);
+         if (this.objects.length > 0) {
+            for (const object of this.objects) {
+               object.render(renderer, camera, subtransform, [ quality, zoom ], substyle, debug);
             }
-         } catch (error) {
-            //
          }
       }
-
-      context.translate(position.x, position.y);
-      context.setTransform(matrix);
-      context.rotate(-rads);
-      context.translate(-position.x, -position.y);
-
-      Object.assign(context, state);
    }
 }
 
-/** An asset, either loaded or not. */
 class XAsset<A = any> extends XHost<{ load: []; unload: [] }> {
-   /** The asset's loading function. */
    loader: () => Promise<A>;
-   /** The asset's source URL. */
    source: string;
    state = { value: void 0 as A | void };
-   /** The asset's unloading function. */
    unloader: () => Promise<void>;
-   /** A getter for the asset's internal value. Throws an error if the asset is not current loaded. */
    get value () {
       const value = this.state.value;
       if (value === void 0) {
@@ -726,14 +423,12 @@ class XAsset<A = any> extends XHost<{ load: []; unload: [] }> {
       this.source = source;
       this.unloader = unloader;
    }
-   /** Loads the asset. */
    async load (force?: boolean) {
       if (force || this.state.value === void 0) {
          this.state.value = await this.loader();
          this.fire('load');
       }
    }
-   /** Unloads the asset. */
    async unload (force?: boolean) {
       if (force || this.state.value !== void 0) {
          this.state.value = await this.unloader();
@@ -742,42 +437,32 @@ class XAsset<A = any> extends XHost<{ load: []; unload: [] }> {
    }
 }
 
-/**
- * The XAtlas class defines a system in which several XNavigator objects are associated with each other. When two
- * navigators share an atlas, those navigators can be traversed between.
- */
 class XAtlas<A extends string = string> {
-   /** The navigators associated with this atlas. */
    navigators: XKeyed<XNavigator<A>, A>;
-   /** This navigator's state. Contains the currently open navigator. */
    state = { navigator: null as XNavigatorKey<A> };
    constructor ({ navigators = {} as XKeyed<XNavigator<A>, A> }: XAtlasProperties<A> = {}) {
       this.navigators = navigators;
    }
-   /** Attaches navigators to a specific layer on a renderer. */
    attach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never, ...navigators: A[]) {
       for (const navigator of navigators) {
          navigator in this.navigators && this.navigators[navigator].attach(renderer, layer);
       }
    }
-   /** Detaches navigators from a specific layer on a renderer. */
    detach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never, ...navigators: A[]) {
       for (const navigator of navigators) {
          navigator in this.navigators && this.navigators[navigator].detach(renderer, layer);
       }
    }
-   /** Returns the current navigator. */
    navigator () {
       return this.state.navigator ? this.navigators[this.state.navigator] : void 0;
    }
-   /** Alters the position of this atlas's current navigator, if any. */
    seek ({ x = 0, y = 0 }: XPrimitive<X2> = {}) {
       const navigator = this.navigator();
       if (navigator) {
          const origin = navigator.selection();
          const row = X.provide(navigator.grid, navigator, this);
          const flip = X.provide(navigator.flip, navigator, this);
-         navigator.position.x = new XNumber(navigator.position.x).clamp(0, row.length - 1).value;
+         navigator.position.x = Math.min(Math.max(navigator.position.x, 0), row.length - 1);
          navigator.position.x += flip ? y : x;
          if (row.length - 1 < navigator.position.x) {
             navigator.position.x = 0;
@@ -785,7 +470,7 @@ class XAtlas<A extends string = string> {
             navigator.position.x = row.length - 1;
          }
          const column = row[navigator.position.x] || [];
-         navigator.position.y = new XNumber(navigator.position.y).clamp(0, column.length - 1).value;
+         navigator.position.y = Math.min(Math.max(navigator.position.y, 0), column.length - 1);
          navigator.position.y += flip ? x : y;
          if (column.length - 1 < navigator.position.y) {
             navigator.position.y = 0;
@@ -795,11 +480,6 @@ class XAtlas<A extends string = string> {
          origin === navigator.selection() || navigator.fire('move', this, navigator);
       }
    }
-   /**
-    * This function accepts one of two values, those being `'next'` and `'prev'`. If this atlas has a navigator open,
-    * the respective `next` or `prev` property on said open navigator is resolved and the navigator associated with the
-    * resolved value is switched to, given it's associated with this atlas.
-    */
    navigate (action: 'next' | 'prev') {
       switch (action) {
          case 'next':
@@ -812,10 +492,6 @@ class XAtlas<A extends string = string> {
             }
       }
    }
-   /**
-    * Directly switch to a navigator associated with this atlas. If `null` is specified, the current navigator, if any,
-    * will be closed. If `void` is specified, then nothing will happen.
-    */
    switch (name: XNavigatorKey<A>) {
       if (name !== void 0) {
          let next: XNavigator<A> | null = null;
@@ -834,11 +510,8 @@ class XAtlas<A extends string = string> {
    }
 }
 
-/** A hitbox object. Hitboxes have a defined size and a set of calculated vertices used for hit detection. */
 class XHitbox extends XObject {
-   /** The current size of this hitbox. */
    size: XVector;
-   /** This hitbox's state. Contains the current dimensions and computed vertices, if any. */
    state = { dimensions: void 0, vertices: [] } as
       | { dimensions: void; vertices: [] }
       | { dimensions: string; vertices: [X2, X2, X2, X2] };
@@ -848,86 +521,40 @@ class XHitbox extends XObject {
          this.size = new XVector(size_x, size_y);
       })(properties);
    }
-   /** Calculates the center of this hitbox's vertices. */
-   center () {
-      const vertices = this.vertices();
-      return new XVector(vertices[0]).subtract(vertices[2]).divide(2).add(vertices[2]);
-   }
    compute () {
       return this.size;
    }
-   /**
-    * Detects collision between this hitbox and others.
-    * @author bokke1010, spacefluff432
-    */
-   detect (renderer: XRenderer, ...hitboxes: XHitbox[]) {
-      renderer.calculate(hitbox => hitbox === this);
-      const hits: XHitbox[] = [];
-      const [ min1, max1 ] = this.region();
-      for (const hitbox of hitboxes) {
-         if (hitbox.state.dimensions === void 0) {
-            continue;
-         } else if ((this.size.x === 0 || this.size.y === 0) && (hitbox.size.x === 0 || hitbox.size.y === 0)) {
-            // zero exclusion - if both hitboxes have a volume of zero, treat them as single lines
-            const [ min2, max2 ] = hitbox.region();
-            if (X.math.intersection(min1, max1, min2, max2)) {
-               hits.push(hitbox);
-            }
-         } else {
-            const [ min2, max2 ] = hitbox.region();
-            if (min1.x < max2.x && min2.x < max1.x && min1.y < max2.y && min2.y < max1.y) {
-               // aabb minmax exclusion - if the aabb formed by the min and max of both boxes collide, continue
-               const vertices1 = this.vertices().map(vertex => new XVector(vertex).round(1e6));
-               const vertices2 = hitbox.vertices().map(vertex => new XVector(vertex).round(1e6));
-               if (
-                  (vertices1[0].x === vertices1[1].x || vertices1[0].y === vertices1[1].y) &&
-                  (vertices2[0].x === vertices2[1].x || vertices2[0].y === vertices2[1].y)
-               ) {
-                  // alignment check - if the two boxes are axis-aligned at this stage, they are colliding
-                  hits.push(hitbox);
-               } else {
-                  for (const a1 of vertices1) {
-                     let miss = true;
-                     const a2 = new XVector(a1).add(new XVector(max2).subtract(min2).multiply(2)).value();
-                     for (const [ b1, b2 ] of [
-                        [ vertices2[0], vertices2[1] ],
-                        [ vertices2[1], vertices2[2] ],
-                        [ vertices2[2], vertices2[3] ],
-                        [ vertices2[3], vertices2[0] ]
-                     ]) {
-                        if (X.math.intersection(a1, a2, b1, b2)) {
-                           if ((miss = !miss)) {
-                              break;
-                           }
-                        }
-                     }
-                     if (!miss) {
-                        // point raycast - if a line drawn from box1 intersects with box2 only once, there is collision
-                        hits.push(hitbox);
-                        break;
-                     }
-                  }
-               }
-            }
+   draw (
+      renderer: PRenderer | PCanvasRenderer,
+      [ position, rotation, scale ]: XTransform,
+      [ quality, zoom ]: XFactor,
+      style: XStyle,
+      debug: boolean
+   ) {
+      // debug
+      if (debug && this.state.dimensions !== void 0) {
+         const vertices = this.vertices();
+         const graphics = new PIXI.Graphics();
+         graphics.lineStyle({
+            alpha: 0.5,
+            color: parseInt('ffffff', 16),
+            width: 1
+         });
+         for (const [ b1, b2 ] of [
+            [ vertices[0], vertices[1] ],
+            [ vertices[1], vertices[2] ],
+            [ vertices[2], vertices[3] ],
+            [ vertices[3], vertices[0] ]
+         ]) {
+            graphics.beginFill(0, 0);
+            graphics.moveTo(b1.x, b1.y);
+            graphics.lineTo(b2.x, b2.y);
+            graphics.endFill();
          }
+         renderer.render(graphics);
       }
-      return hits;
    }
-   /** Returns the total height of this hitbox's region. */
-   height () {
-      const bounds = this.region();
-      return bounds[1].y - bounds[0].y;
-   }
-   /** Calculates the distance from this hitbox's center to any given corner. */
-   radius () {
-      const vertices = this.vertices();
-      return new XVector(vertices[0]).extent(vertices[2]) / 2;
-   }
-   /**
-    * Calculates the minimum and maximum X and Y coordinates that this hitbox intersects with, effectively creating an
-    * axis-aligned superstructure around the entirety of this hitbox.
-    */
-   region () {
+   region (): XRegion {
       const vertices = this.vertices();
       const { x: x1, y: y1 } = vertices[0];
       const { x: x2, y: y2 } = vertices[1];
@@ -936,9 +563,8 @@ class XHitbox extends XObject {
       return [
          new XVector(Math.min(x1, x2, x3, x4), Math.min(y1, y2, y3, y4)),
          new XVector(Math.max(x1, x2, x3, x4), Math.max(y1, y2, y3, y4))
-      ] as XRegion;
+      ];
    }
-   /** Returns the vertices of this hitbox. */
    vertices () {
       if (this.state.dimensions === void 0) {
          throw "This object's vertices are unresolved!";
@@ -946,19 +572,9 @@ class XHitbox extends XObject {
          return this.state.vertices as [X2, X2, X2, X2];
       }
    }
-   /** Returns the total width of this hitbox's region. */
-   width () {
-      const bounds = this.region();
-      return bounds[1].x - bounds[0].x;
-   }
 }
 
-/**
- * Handles mouse and keyboard inputs. Mouse inputs are represented as numeric values, while keyboard inputs are
- * represented by their key name in string form.
- */
 class XInput extends XHost<XKeyed<[string | number], 'down' | 'up'>> {
-   /** This input's state. Contains the currently active inputs. */
    state = { codes: new Set<string | number>() };
    constructor ({ codes = [], target = window as any, transformer }: XInputProperties = {}) {
       super();
@@ -989,16 +605,11 @@ class XInput extends XHost<XKeyed<[string | number], 'down' | 'up'>> {
          }
       });
    }
-   /** Whether or not any of this input's valid codes are in an active state. */
    active () {
       return this.state.codes.size > 0;
    }
 }
 
-/**
- * The XNavigator class defines a system in which a grid can specify available options to navigate through. This class
- * doesn't do much without an associated atlas to control it.
- */
 class XNavigator<A extends string = string> extends XHost<
    XKeyed<[XAtlas<A>, XNavigatorKey<A>, XNavigator<A> | void], 'from' | 'to'> & { move: [XAtlas<A>, XNavigator<A>] }
 > {
@@ -1024,118 +635,55 @@ class XNavigator<A extends string = string> extends XHost<
       this.position = { x, y };
       this.prev = prev;
    }
-   /** Attaches this navigator's objects to a specific layer on the given renderer. */
    attach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never) {
       renderer.attach(layer, ...this.objects);
    }
-   /** Detaches this navigator's objects from a specific layer on the given renderer. */
    detach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never) {
       renderer.detach(layer, ...this.objects);
    }
-   /** Returns the value in this navigator's grid at its current position. */
    selection () {
       return (X.provide(this.grid, this)[this.position.x] || [])[this.position.y];
    }
 }
 
-/** An object representing a numeric value. */
 class XNumber {
    value: number;
-   constructor();
-   constructor(value: number);
    constructor (value = 0) {
       this.value = value;
    }
-   /** Adds another value to this object's value and returns a new `XNumber` object with said value. */
-   add (value: number | XNumber = 0): XNumber {
-      if (typeof value === 'number') {
-         return new XNumber(this.value + value);
-      } else {
-         return this.add(value.value);
-      }
-   }
-   /** Returns an `XNumber` object with the ceilinged value of this object's value. */
-   ceil () {
-      return new XNumber(Math.ceil(this.value));
-   }
-   /** Clamps this object's value between two numbers and returns a new `XNumber` object with the result as its value. */
-   clamp (min: number, max: number) {
-      return new XNumber(Math.min(Math.max(this.value, min), max));
-   }
-   /** Returns a new `XNumber` object with the same value as this object. */
-   clone () {
-      return new XNumber(this.value);
-   }
-   /** Divides this object's value by another value and returns a new `XNumber` object with said value. */
-   divide (value: number | XNumber = 1): XNumber {
-      if (typeof value === 'number') {
-         return new XNumber(this.value / value);
-      } else {
-         return this.divide(value.value);
-      }
-   }
-   /** Returns an `XNumber` object with the floored value of this object's value. */
-   floor () {
-      return new XNumber(Math.floor(this.value));
-   }
-   /** Alter the internal value of this numeric over a specified duration. */
    modulate (duration: number, ...points: number[]) {
+      const base = X.time;
+      const value = this.value;
       return new Promise<void>(resolve => {
-         const value = this.value;
+         let active = true;
          X.cache.modulationTasks.get(this)?.cancel();
-         X.cache.modulationTasks.set(
-            this,
-            (() => {
-               let active = true;
-               X.chain<number, Promise<void>>(0, async (elapsed, next) => {
-                  if (active) {
-                     if (elapsed < duration) {
-                        this.value = X.math.bezier(elapsed / duration, value, ...points);
-                        await X.timer.on('tick');
-                        await next(elapsed + 5);
-                     } else {
-                        this.value = X.math.bezier(1, value, ...points);
-                        X.cache.modulationTasks.get(this)?.cancel();
-                        resolve();
-                     }
-                  }
-               });
-               return {
-                  cancel () {
-                     active = false;
-                  }
-               };
-            })()
-         );
+         X.cache.modulationTasks.set(this, {
+            cancel () {
+               active = false;
+            }
+         });
+         const listener = () => {
+            if (active) {
+               const elapsed = X.time - base;
+               if (elapsed < duration) {
+                  this.value = X.math.bezier(elapsed / duration, value, ...points);
+               } else {
+                  X.cache.modulationTasks.delete(this);
+                  this.value = points.length > 0 ? points[points.length - 1] : value;
+                  X.timer.off('tick', listener);
+                  resolve();
+               }
+            } else {
+               X.timer.off('tick', listener);
+            }
+         };
+         X.timer.on('tick', listener);
       });
-   }
-   /** Multiplies this object's value by another value and returns a new `XNumber` object with said value. */
-   multiply (value: number | XNumber = 1): XNumber {
-      if (typeof value === 'number') {
-         return new XNumber(this.value * value);
-      } else {
-         return this.multiply(value.value);
-      }
-   }
-   /** Returns an `XNumber` object with the rounded value of this object's value. */
-   round () {
-      return new XNumber(Math.round(this.value));
-   }
-   /** Subtracts another value from this object's value and returns a new `XNumber` object with said value. */
-   subtract (value: number | XNumber = 0): XNumber {
-      if (typeof value === 'number') {
-         return new XNumber(this.value - value);
-      } else {
-         return this.subtract(value.value);
-      }
    }
 }
 
-/** A rendered object specifically designed to trace a path on a canvas. */
 class XPath extends XObject {
-   /** The size to use for this object. */
    size: XVector;
-   /** The path tracer to use for this object. */
    tracer: XTracer;
    constructor (properties: XPathProperties = {}) {
       super(properties);
@@ -1147,25 +695,12 @@ class XPath extends XObject {
    compute () {
       return this.size;
    }
-   draw (context: CanvasRenderingContext2D, base: XVector) {
-      context.beginPath();
-      this.tracer(
-         context,
-         () => {
-            context.fillStyle === 'transparent' || context.fill();
-            context.strokeStyle === 'transparent' || context.stroke();
-            context.closePath();
-            context.beginPath();
-         },
-         base.value()
-      );
-      context.closePath();
+   draw (renderer: PRenderer | PCanvasRenderer, transform: XTransform, [ quality, zoom ]: XFactor, style: XStyle) {
+      this.tracer(renderer, transform, [ quality, zoom ], style);
    }
 }
 
-/** A rendered object specifically designed to draw a rectangle on a canvas. */
 class XRectangle extends XObject {
-   /** The size of the rectangle. */
    size: XVector;
    constructor (properties: XRectangleProperties = {}) {
       super(properties);
@@ -1176,55 +711,77 @@ class XRectangle extends XObject {
    compute () {
       return this.size;
    }
-   draw (context: CanvasRenderingContext2D, base: XVector) {
-      context.fillStyle === 'transparent' || context.fillRect(base.x, base.y, this.size.x, this.size.y);
-      context.strokeStyle === 'transparent' || context.strokeRect(base.x, base.y, this.size.x, this.size.y);
+   draw (
+      renderer: PRenderer | PCanvasRenderer,
+      [ position, rotation, scale ]: XTransform,
+      [ quality, zoom ]: XFactor,
+      style: XStyle
+   ) {
+      const fill = style.fillStyle !== 'transparent';
+      const stroke = style.strokeStyle !== 'transparent';
+      if (fill || stroke) {
+         const size = this.compute();
+         const half = size.divide(2);
+         const base = position.subtract(half.add(half.multiply(this.anchor)));
+         const rectangle = new PIXI.Graphics();
+         rectangle.pivot.set(size.x * ((this.anchor.x + 1) / 2), size.y * ((this.anchor.y + 1) / 2));
+         rectangle.position.set((base.x + rectangle.pivot.x) * quality, (base.y + rectangle.pivot.y) * quality);
+         rectangle.rotation = (Math.PI / 180) * (rotation % 360);
+         rectangle.scale.set(scale.x, scale.y);
+         rectangle.alpha = style.globalAlpha;
+         rectangle.blendMode = X.blend(style.globalCompositeOperation);
+         if (stroke) {
+            const strokeColor = X.color(style.strokeStyle);
+            if (strokeColor[3] > 0) {
+               rectangle.lineStyle({
+                  alpha: strokeColor[3],
+                  cap: { butt: PIXI.LINE_CAP.BUTT, round: PIXI.LINE_CAP.ROUND, square: PIXI.LINE_CAP.SQUARE }[
+                     style.lineCap
+                  ],
+                  color: parseInt(X.hex(strokeColor), 16),
+                  join: { bevel: PIXI.LINE_JOIN.BEVEL, miter: PIXI.LINE_JOIN.MITER, round: PIXI.LINE_JOIN.ROUND }[
+                     style.lineJoin
+                  ],
+                  miterLimit: style.miterLimit,
+                  width: style.lineWidth
+               });
+            }
+         }
+         if (fill) {
+            const fillColor = X.color(style.fillStyle);
+            if (fillColor[3] > 0) {
+               rectangle.beginFill(parseInt(X.hex(fillColor), 16), fillColor[3]);
+            } else {
+               rectangle.beginFill(0, 0);
+            }
+         }
+         renderer.render(rectangle.drawRect(0, 0, size.x, size.y).endFill());
+      }
    }
 }
 
-/**
- * The business end of the Storyteller engine, where objects are rendered to canvases and all is made right with the
- * world. Jokes aside, this class is responsible for canvas and context management.
- */
 class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
-   /** The global transparency value all rendered objects should inherit. */
    alpha: XNumber;
-   /** This renderer's camera position. */
    camera: XVector;
-   /** The HTML element to insert this renderer's canvases into. */
    container: HTMLElement;
-   /** Whether or not the debug overlay should be visible. */
    debug: boolean;
-   /** The renderer's framerate. A value of 30-60 is recommended. */
    framerate: number;
-   /** The renderer's layer map. Each layer has an associated canvas, canvas context, mode, and object list. */
    layers: XKeyed<XRendererLayer, A>;
-   /** The minimum and maximum camera position for this renderer. */
    region: XRegion;
-   /**
-    * A screen-shake multiplier. Increasing this value will increase the amount of "shake" added to the renderer.
-    * Setting this value to zero disables the shake effect all together.
-    */
    shake: XNumber;
-   /**
-    * The base size of this renderer, which determines the number of vertical and horizontal pixels are visible
-    * on-screen at any given time. In addition, when canvases are inserted into the container element, they are scaled
-    * to fit within the container while maintaining the aspect ratio implied by this size.
-    */
    size: XVector;
-   /**
-    * This renderer's state. Contains the last computed camera position, rendering interval timer handle, last known
-    * container height, last computed scale, last known container width, and last known zoom level.
-    */
    state = {
       camera: { x: NaN, y: NaN },
       active: false,
-      height: 0,
+      rendererX: NaN,
+      rendererY: NaN,
       scale: 1,
-      width: 0,
+      windowX: NaN,
+      windowY: NaN,
+      quality: NaN,
       zoom: NaN
    };
-   /** Controls the renderer's zoom levels on the X and Y axes. */
+   quality: XNumber;
    zoom: XNumber;
    constructor ({
       alpha = 1,
@@ -1240,6 +797,7 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
       ] = [],
       shake = 0,
       size: { x: size_x = 320, y: size_y = 240 } = {},
+      quality = 1,
       zoom = 1
    }: XRendererProperties<A> = {}) {
       super();
@@ -1259,17 +817,21 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
             const canvas = document.createElement('canvas');
             Object.assign(canvas.style, {
                gridArea: 'center',
-               imageRendering: 'pixelated',
-               webkitFontSmoothing: 'none'
+               imageRendering: 'pixelated'
             });
             this.container.appendChild(canvas);
             return [
                key,
                {
                   canvas,
-                  context: X.context(canvas),
                   modifiers: value,
-                  objects: [] as XObject[]
+                  objects: [] as XObject[],
+                  renderer: new (GL ? PIXI.Renderer : PIXI.CanvasRenderer)({
+                     antialias: false,
+                     backgroundAlpha: 0,
+                     clearBeforeRender: false,
+                     view: canvas
+                  })
                }
             ];
          })
@@ -1280,10 +842,9 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
       ];
       this.shake = new XNumber(shake);
       this.size = new XVector(size_x, size_y);
+      this.quality = new XNumber(quality);
       this.zoom = new XNumber(zoom);
-      auto && this.start();
    }
-   /** Attaches objects to a specific layer on this renderer. */
    attach (key: A, ...objects: XObject[]) {
       if (key in this.layers) {
          const layer = this.layers[key];
@@ -1296,28 +857,56 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
          });
       }
    }
-   /**
-    * Calls the `calculate` method on all objects in this renderer with the given filter, and returns a list of all
-    * computed hitboxes.
-    */
-   calculate (filter = true as XProvider<boolean, [XHitbox]>) {
+   calculate (key: A, filter: XProvider<boolean, [XHitbox]> = true) {
       const list: XHitbox[] = [];
-      for (const key in this.layers) {
-         for (const object of this.layers[key].objects) {
-            object.calculate(filter, list, this.camera.clamp(...this.region), X.transform);
+      const camera = this.camera.clamp(...this.region);
+      X.chain(
+         [ [ new XVector(), 0, new XVector(1) ], this.layers[key].objects ] as [XTransform, XObject[]],
+         ([ transform, objects ], next) => {
+            for (const object of objects) {
+               const position = transform[0].add(object.position).add(object.parallax.multiply(camera));
+               const rotation = transform[1] + object.rotation.value;
+               const scale = transform[2].multiply(object.scale);
+               if (object instanceof XHitbox && X.provide(filter, object)) {
+                  list.push(object);
+                  const size = object.size.multiply(scale);
+                  const half = size.divide(2);
+                  const base = position.subtract(half.add(half.multiply(object.anchor)));
+                  const dimensions = `${base.x}:${base.y}:${position.x}:${position.y}:${rotation}:${size.x}:${size.y}`;
+                  if (dimensions !== object.state.dimensions) {
+                     const offset = rotation + 180;
+                     const corner2 = base.endpoint(0, size.x);
+                     const corner3 = corner2.endpoint(90, size.y);
+                     const corner4 = corner3.endpoint(180, size.x);
+                     object.state.vertices[0] = position
+                        .endpoint(position.angle(base) + offset, position.extent(base))
+                        .round(1e6);
+                     object.state.vertices[1] = position
+                        .endpoint(position.angle(corner2) + offset, position.extent(corner2))
+                        .round(1e6);
+                     object.state.vertices[2] = position
+                        .endpoint(position.angle(corner3) + offset, position.extent(corner3))
+                        .round(1e6);
+                     object.state.vertices[3] = position
+                        .endpoint(position.angle(corner4) + offset, position.extent(corner4))
+                        .round(1e6);
+                     object.state.dimensions = dimensions;
+                  }
+               }
+               next([ [ position, rotation, scale ], object.objects ]);
+            }
          }
-      }
+      );
       return list;
    }
-   /** Completely clears the given layer, detaching all of its objects. */
    clear (key: A) {
       if (key in this.layers) {
          const layer = this.layers[key];
          layer.modifiers.includes('ambient') && this.refresh();
          layer.objects.splice(0, layer.objects.length);
+         this.reset(key);
       }
    }
-   /** Detaches objects from a specific layer on this renderer. */
    detach (key: A, ...objects: XObject[]) {
       if (key in this.layers) {
          const layer = this.layers[key];
@@ -1328,9 +917,60 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
                layer.objects.splice(index, 1);
             }
          }
+         if (layer.objects.length === 0) {
+            this.reset(key);
+         }
       }
    }
-   /** Pass each object in a layer (or all layers) to a handler, and return an array of the outputs. */
+   detect (key: A | void, source: XHitbox, ...hitboxes: XHitbox[]) {
+      key && this.calculate(key, hitbox => hitbox === source);
+      const hits: XHitbox[] = [];
+      const [ min1, max1 ] = source.region();
+      for (const hitbox of hitboxes) {
+         if (hitbox.state.dimensions === void 0) {
+            continue;
+         } else if ((source.size.x === 0 || source.size.y === 0) && (hitbox.size.x === 0 || hitbox.size.y === 0)) {
+            const [ min2, max2 ] = hitbox.region();
+            if (X.math.intersection(min1, max1, min2, max2)) {
+               hits.push(hitbox);
+            }
+         } else {
+            const [ min2, max2 ] = hitbox.region();
+            if (min1.x < max2.x && min2.x < max1.x && min1.y < max2.y && min2.y < max1.y) {
+               const vertices1 = source.vertices();
+               const vertices2 = hitbox.vertices();
+               if (
+                  (vertices1[0].x === vertices1[1].x || vertices1[0].y === vertices1[1].y) &&
+                  (vertices2[0].x === vertices2[1].x || vertices2[0].y === vertices2[1].y)
+               ) {
+                  hits.push(hitbox);
+               } else {
+                  for (const a1 of vertices1) {
+                     let miss = true;
+                     const a2 = new XVector(a1).add(new XVector(max2).subtract(min2).multiply(2)).value();
+                     for (const [ b1, b2 ] of [
+                        [ vertices2[0], vertices2[1] ],
+                        [ vertices2[1], vertices2[2] ],
+                        [ vertices2[2], vertices2[3] ],
+                        [ vertices2[3], vertices2[0] ]
+                     ]) {
+                        if (X.math.intersection(a1, a2, b1, b2)) {
+                           if ((miss = !miss)) {
+                              break;
+                           }
+                        }
+                     }
+                     if (!miss) {
+                        hits.push(hitbox);
+                        break;
+                     }
+                  }
+               }
+            }
+         }
+      }
+      return hits;
+   }
    iterate<B extends any = XObject> (handler = (object: XObject) => object as B, key?: A): B[] {
       if (typeof key === 'string') {
          return X.chain<XObject[], B[]>(this.layers[key].objects, (objects, loop) => {
@@ -1340,65 +980,36 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
          return Object.keys(this.layers).flatMap(key => this.iterate(handler, key as A));
       }
    }
-   /** Reads pixel data from the canvas within a specified range. */
-   read (key: A, min: X2, max = new XVector(min).add(1 / this.state.scale)) {
-      const resmin = this.resolve(key, min);
-      const resmax = this.resolve(key, max);
-      const w = Math.floor(resmax.x - resmin.x);
-      const data = this.layers[key].context.getImageData(
-         Math.floor(resmin.x),
-         Math.floor(resmin.y),
-         w,
-         Math.floor(resmax.y - resmin.y)
-      ).data;
-      const pixels = data.length / 4;
-      const output = [ [] ] as XColor[][];
-      let index = 0;
-      while (index < pixels) {
-         if (output[output.length - 1].push([ ...data.slice(index, index + 4) ] as XColor) === w && ++index < pixels) {
-            output.push([]);
-         }
-      }
-      return output;
+   reset (key: A) {
+      const renderer = this.layers[key].renderer;
+      renderer instanceof PIXI.Renderer && renderer.reset();
+      renderer.clear();
    }
-   /** Resolves the given position to its corresponding pixel position. */
-   resolve (key: A, position: X2) {
-      const transform = this.layers[key].context.getTransform();
-      return {
-         x: position.x * this.state.scale + transform.e,
-         y: position.y * this.state.scale + transform.f
-      };
-   }
-   /** Restricts the given position to within the camera's scope. */
    restrict (position: X2) {
       return this.size
          .divide(2)
          .subtract(this.camera.clamp(...this.region))
          .add(position);
    }
-   /** Starts the rendering loop. */
    start () {
-      let active = true;
-      X.chain<void, Promise<void>>(void 0, async (none, next) => {
-         if (active) {
-            const time = performance.now();
-            this.render();
-            await X.pause(1e3 / this.framerate - (performance.now() - time));
-            next();
-         }
+      const ticker = new PIXI.Ticker();
+      ticker.add(() => {
+         this.render();
+         ticker.minFPS = this.framerate;
+         ticker.maxFPS = this.framerate;
       });
-      return { cancel: () => (active = false) };
+      ticker.start();
+      return { cancel: () => ticker.destroy() };
    }
-   /** Forces an update to all ambient rendering layers. */
    refresh () {
       this.state.camera = { x: NaN, y: NaN };
    }
-   /** Renders a single frame. */
    render () {
       this.fire('tick');
       let update = false;
+      let resize = false;
       const camera = this.camera.clamp(...this.region);
-      this.container.style.opacity = this.alpha.clamp(0, 1).value.toString();
+      this.container.style.opacity = Math.min(Math.max(this.alpha.value, 0), 1).toString();
       if (this.zoom.value !== this.state.zoom) {
          update = true;
          this.state.zoom = this.zoom.value;
@@ -1407,73 +1018,107 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
          update = true;
          this.state.camera = camera.value();
       }
-      {
-         let width = this.container.clientWidth;
-         let height = this.container.clientHeight;
-         if (width !== this.state.width || height !== this.state.height) {
-            update = true;
-            this.state.width = width;
-            this.state.height = height;
-            const ratio = this.size.x / this.size.y;
-            if (this.state.width / this.state.height > ratio) {
-               width = height * ratio;
-               this.state.scale = height / this.size.y;
+      if (this.quality.value !== this.state.quality) {
+         update = true;
+         resize = true;
+         this.state.quality = this.quality.value;
+      }
+      if (
+         innerWidth !== this.state.windowX ||
+         innerHeight !== this.state.windowY ||
+         this.size.x !== this.state.rendererX ||
+         this.size.y !== this.state.rendererY
+      ) {
+         update = true;
+         resize = true;
+         this.state.windowX = innerWidth;
+         this.state.windowY = innerHeight;
+         this.state.rendererX = this.size.x;
+         this.state.rendererY = this.size.y;
+         const ratio = this.size.x / this.size.y;
+         if (this.state.windowX / this.state.windowY > ratio) {
+            this.state.scale = innerHeight / this.size.y;
+         } else {
+            this.state.scale = innerWidth / this.size.x;
+         }
+      }
+      if (resize) {
+         const width = this.size.x * this.quality.value;
+         const height = this.size.y * this.quality.value;
+         const scale = this.state.scale / this.quality.value;
+         for (const key in this.layers) {
+            const { canvas } = this.layers[key];
+            canvas.width = width;
+            canvas.height = height;
+            canvas.style.transform = `scale(${scale})`;
+            if (scale < 1) {
+               canvas.style.transformOrigin = innerWidth > innerHeight ? '50% 0' : '0 50%';
             } else {
-               height = width / ratio;
-               this.state.scale = width / this.size.x;
-            }
-            for (const key in this.layers) {
-               const layer = this.layers[key];
-               layer.context = X.context(layer.canvas, width, height);
+               canvas.style.transformOrigin = '';
             }
          }
       }
+      const shakeX = this.shake.value ? this.shake.value * (Math.random() - 0.5) : 0;
+      const shakeY = this.shake.value ? this.shake.value * (Math.random() - 0.5) : 0;
       for (const key in this.layers) {
-         const { context, modifiers, objects } = this.layers[key];
-         if (update || !modifiers.includes('ambient')) {
-            const scale = this.state.scale;
+         const { modifiers, objects, renderer } = this.layers[key];
+         if (objects.length > 0 && (update || !modifiers.includes('ambient'))) {
             const center = this.size.divide(2);
             const statik = modifiers.includes('static');
-            context.resetTransform();
-            modifiers.includes('cumulative') || context.clearRect(0, 0, context.canvas.width, context.canvas.height);
-            context.setTransform(
-               scale * (statik ? 1 : this.zoom.value),
-               0,
-               0,
-               scale * (statik ? 1 : this.zoom.value),
-               scale * (center.x + -(statik ? center.x : camera.x * this.zoom.value)) +
-                  (this.shake.value ? scale * this.shake.value * (Math.random() - 0.5) : 0),
-               scale * (center.y + -(statik ? center.y : camera.y * this.zoom.value)) +
-                  (this.shake.value ? scale * this.shake.value * (Math.random() - 0.5) : 0)
-            );
+            this.reset(key);
             if (modifiers.includes('vertical')) {
                objects.sort(
                   (object1, object2) =>
                      (object1.priority.value || object1.position.y) - (object2.priority.value || object2.position.y)
                );
             }
+            const zoom = statik ? 1 : this.zoom.value;
+            const transform: XTransform = [
+               new XVector(
+                  center.x + -(statik ? center.x : camera.x) + shakeX,
+                  center.y + -(statik ? center.y : camera.y) + shakeY
+               ),
+               0,
+               new XVector(this.quality.value * zoom)
+            ];
             for (const object of objects) {
-               object.render(camera, context, X.transform, this.debug);
+               object.render(
+                  renderer,
+                  camera,
+                  transform,
+                  [ this.quality.value * zoom, zoom ],
+                  {
+                     globalAlpha: 1,
+                     globalCompositeOperation: 'source-over',
+                     fillStyle: 'transparent',
+                     lineCap: 'butt',
+                     lineDashOffset: 0,
+                     lineJoin: 'miter',
+                     miterLimit: 10,
+                     lineWidth: 1,
+                     shadowBlur: 0,
+                     shadowColor: 'transparent',
+                     shadowOffsetX: 0,
+                     shadowOffsetY: 0,
+                     strokeStyle: 'transparent',
+                     textAlign: 'start',
+                     textBaseline: 'alphabetic',
+                     direction: 'ltr',
+                     font: '10px monospace'
+                  },
+                  this.debug
+               );
             }
          }
       }
    }
 }
 
-/** A rendered object specifically designed to draw an image or images on a canvas. */
 class XSprite extends XObject {
-   /** The crop to use when rendering the image. */
    crop: XKeyed<number, 'bottom' | 'left' | 'right' | 'top'>;
-   /** The underlying frames of this sprite. */
    frames: (XImage | null)[];
-   /** The default step value. */
    step: number;
-   /** The number of steps per frame. */
    steps: number;
-   /**
-    * This sprite's state. Contains the index of the currently displayed frame, whether or not the sprite is active, and
-    * the current step value.
-    */
    state = { index: 0, active: false, step: 0 };
    constructor (properties: XSpriteProperties = {}) {
       super(properties);
@@ -1493,7 +1138,7 @@ class XSprite extends XObject {
    }
    compute () {
       const texture = this.frames[this.state.index];
-      if (texture) {
+      if (texture && texture.state.value) {
          const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
          const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
          const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
@@ -1503,19 +1148,68 @@ class XSprite extends XObject {
          return new XVector(0, 0);
       }
    }
-   /** Disables the sprite's animation. */
    disable () {
       this.state.active = false;
       return this;
    }
-   draw (context: CanvasRenderingContext2D, base: XVector) {
+   draw (
+      renderer: PRenderer | PCanvasRenderer,
+      [ position, rotation, scale ]: XTransform,
+      [ quality, zoom ]: XFactor,
+      style: XStyle,
+      debug: boolean
+   ) {
       const texture = this.frames[this.state.index];
       if (texture && texture.state.value) {
+         const r = (Math.PI / 180) * (rotation % 360);
+         const a = (this.anchor.x + 1) / 2;
+         const b = (this.anchor.y + 1) / 2;
          const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
          const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
          const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
          const h = (this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom - y;
-         context.drawImage(texture.value, x, y, w, h, base.x, base.y, w, h);
+         const sprite = new PIXI.Sprite(X.cache.textures.get(texture)!);
+         sprite.anchor.set((x + w * a) / texture.value.width, (y + h * b) / texture.value.height);
+         sprite.position.set(position.x * quality, position.y * quality);
+         sprite.rotation = r;
+         sprite.scale.set(scale.x, scale.y);
+         sprite.alpha = style.globalAlpha;
+         sprite.blendMode = X.blend(style.globalCompositeOperation);
+
+         // mask setup
+         const graphics = new PIXI.Graphics();
+         graphics.position.set(sprite.position.x, sprite.position.y);
+         graphics.pivot.set(w * a, h * b);
+         graphics.rotation = r;
+         graphics.scale.set(scale.x, scale.y);
+         graphics.beginFill(0xffffff, 1).drawRect(0, 0, w, h).endFill();
+         const mask = new PIXI.MaskData(graphics);
+         mask.type = rotation % 90 === 0 ? PIXI.MASK_TYPES.SCISSOR : PIXI.MASK_TYPES.STENCIL;
+         sprite.mask = mask;
+
+         // render
+         (GL && rotation % 90 === 0) || renderer.render(graphics);
+         renderer.render(sprite);
+
+         // debug
+         /*
+         if (debug) {
+            const graphics = new PIXI.Graphics();
+            graphics.position.set(sprite.position.x, sprite.position.y);
+            graphics.pivot.set(w * a, h * b);
+            graphics.scale.set(scale.x, scale.y);
+            graphics
+               .lineStyle({
+                  alpha: 0.5,
+                  color: parseInt('ffffff', 16),
+                  width: 1
+               })
+               .beginFill(0, 0)
+               .drawRect(0, 0, w, h)
+               .endFill();
+            renderer.render(graphics);
+         }
+         */
       }
       if (this.steps <= ++this.state.step) {
          this.state.step = 0;
@@ -1524,38 +1218,51 @@ class XSprite extends XObject {
          }
       }
    }
-   /** Enables the sprite's animation. */
    enable () {
       this.state.active = true;
       return this;
    }
-   /** Loads this sprite's frames. */
    async load () {
       await Promise.all(this.frames.map(asset => asset && asset.load()));
    }
-   /** Resets the sprite's animation to its default state. */
+   read (min?: X2, max?: X2) {
+      const frame = this.frames[this.state.index];
+      const colors: XColor[][] = [];
+      if (frame) {
+         const sprite = PIXI.Sprite.from(X.cache.textures.get(frame)!);
+         const originX = Math.round(min?.x ?? 0);
+         const originY = Math.round(min?.y ?? 0);
+         const sizeX = Math.round(max?.x ?? sprite.width) - originX;
+         const sizeY = Math.round(max?.y ?? sprite.height) - originY;
+         const pixels = [
+            ...new (GL ? PIXI.Extract : PIXI.CanvasExtract)(X.shader)
+               .pixels(sprite)
+               .slice((originX + originY * sprite.width) * 4)
+         ];
+         while (colors.length < sizeY) {
+            const subcolors: XColor[] = [];
+            while (subcolors.length < sizeX) {
+               subcolors.push(pixels.splice(0, 4) as XColor);
+            }
+            colors.push(subcolors);
+            pixels.splice(0, (sprite.width - sizeY) * 4);
+         }
+      }
+      return colors;
+   }
    reset () {
       Object.assign(this.state, { active: false, index: 0, step: this.step });
       return this;
    }
-   /** Unloads this sprite's frames. */
    async unload () {
       await Promise.all(this.frames.map(asset => asset && asset.unload()));
    }
 }
 
-/** A rendered object specifically designed to draw text on a canvas. */
 class XText extends XObject {
-   /** To cache or not to cache, that is the question. */
    cache: boolean;
-   /** The character set used for text height approximations. */
    charset: string;
-   /**
-    * The text content to draw. For a detailed guide on how to make the most out of this, please raise an issue telling
-    * me to get off my butt and make one.
-    */
    content: string;
-   /** The vertical and horizontal spacing of the rendered text. */
    spacing: XVector;
    constructor (properties: XTextProperties = {}) {
       super(properties);
@@ -1571,95 +1278,78 @@ class XText extends XObject {
          this.spacing = new XVector(spacing_x, spacing_y);
       })(properties);
    }
-   compute (context: CanvasRenderingContext2D) {
-      const lines = this.content.split('\n').map(section => {
-         let total = 0;
-         for (const char of section) {
-            total += X.metrics(context, char, this.cache).width + this.spacing.x;
-         }
-         return total;
-      });
-      const metrics = X.metrics(context, this.charset, this.cache);
-      const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-      return new XVector(Math.max(...lines), height + (height + this.spacing.y) * (lines.length - 1));
+   compute () {
+      return new XVector();
    }
-   draw (context: CanvasRenderingContext2D, base: XVector) {
+   draw (
+      renderer: PRenderer | PCanvasRenderer,
+      [ position, rotation, scale ]: XTransform,
+      [ quality, zoom ]: XFactor,
+      style: XStyle
+   ) {
       let index = 0;
-      const state = {
-         fillStyle: context.fillStyle,
-         globalAlpha: context.globalAlpha,
-         globalCompositeOperation: context.globalCompositeOperation,
-         lineCap: context.lineCap,
-         lineDashOffset: context.lineDashOffset,
-         lineJoin: context.lineJoin,
-         lineWidth: context.lineWidth,
-         miterLimit: context.miterLimit,
-         shadowBlur: context.shadowBlur,
-         shadowColor: context.shadowColor,
-         shadowOffsetX: context.shadowOffsetX,
-         shadowOffsetY: context.shadowOffsetY,
-         strokeStyle: context.strokeStyle
-      };
+      const state = Object.assign({}, style);
       const phase = X.time / 1e3;
       const offset = { x: 0, y: 0 };
       const random = { x: 0, y: 0 };
       const swirl = { p: 0, r: 0, s: 0 };
-      const metrics = X.metrics(context, this.charset, this.cache);
-      const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+      const [ fontSize, fontFamily ] = style.font.split(' ');
+      const shadowColor = X.color(style.shadowColor);
+      const strokeColor = X.color(style.strokeStyle);
+      const textStyle = new PIXI.TextStyle({
+         dropShadow: shadowColor[3] > 0,
+         dropShadowAlpha: shadowColor[3],
+         dropShadowAngle: X.zero.angle({ x: style.shadowOffsetX, y: style.shadowOffsetY }),
+         dropShadowBlur: style.shadowBlur,
+         dropShadowColor: `#${X.hex(shadowColor)}`,
+         dropShadowDistance: X.zero.extent({ x: style.shadowOffsetX, y: style.shadowOffsetY }),
+         fill: `#${X.hex(X.color(style.fillStyle))}`,
+         fontFamily,
+         fontSize,
+         lineJoin: style.lineJoin,
+         miterLimit: style.miterLimit,
+         stroke: `#${X.hex(strokeColor)}`,
+         strokeThickness: strokeColor[3] > 0 ? style.lineWidth : 0,
+         textBaseline: style.textBaseline
+      });
+      const metrics = X.metrics(textStyle, this.charset);
+      const lines = this.content.split('\n').map(section => {
+         let total = 0;
+         for (const char of section) {
+            total += X.metrics(textStyle, char).x + this.spacing.x;
+         }
+         return total;
+      });
+      const size = new XVector(Math.max(...lines), metrics.y + (metrics.y + this.spacing.y) * (lines.length - 1));
+      const half = size.divide(2);
+      const base = position
+         .divide(scale)
+         .multiply(quality)
+         .subtract(half.add(half.multiply(this.anchor)));
+      const container = new PIXI.Container();
+      container.rotation = (Math.PI / 180) * (rotation % 360);
+      container.scale.set(scale.x, scale.y);
       while (index < this.content.length) {
          const char = this.content[index++];
          if (char === '\n') {
             offset.x = 0;
-            offset.y += height + this.spacing.y;
+            offset.y += metrics.y + this.spacing.y;
          } else if (char === '\xa7') {
             const code = this.content.slice(index, this.content.indexOf('\xa7', index));
             const [ key, value ] = code.split(':');
             index += code.length + 1;
             switch (key) {
                case 'alpha':
-                  context.globalAlpha = state.globalAlpha * new XNumber(+value).clamp(0, 1).value;
+                  style.globalAlpha = state.globalAlpha * Math.min(Math.max(+value, 0), 1);
                   break;
                case 'blend':
-                  context.globalCompositeOperation = value as GlobalCompositeOperation;
+                  style.globalCompositeOperation = value as GlobalCompositeOperation;
                   break;
                case 'fill':
-                  context.fillStyle = value;
+                  textStyle.fill = `#${X.hex(X.color(value))}`;
                   break;
                case 'font':
-                  context.font = value;
-                  break;
-               case 'line.cap':
-                  context.lineCap = value as CanvasLineCap;
-                  break;
-               case 'line.dash':
-                  const lineDash = +value;
-                  isNaN(lineDash) || (context.lineDashOffset = lineDash);
-                  break;
-               case 'line.join':
-                  context.lineJoin = value as CanvasLineJoin;
-                  break;
-               case 'line.miter':
-                  const lineMiter = +value;
-                  isNaN(lineMiter) || (context.miterLimit = lineMiter);
-                  break;
-               case 'line.width':
-                  const lineWidth = +value;
-                  isNaN(lineWidth) || (context.lineWidth = lineWidth);
-                  break;
-               case 'shadow.blur':
-                  const shadowBlur = +value;
-                  isNaN(shadowBlur) || (context.shadowBlur = shadowBlur);
-                  break;
-               case 'shadow.color':
-                  context.shadowColor = value;
-                  break;
-               case 'shadow.offset.x':
-                  const shadowOffsetX = +value;
-                  isNaN(shadowOffsetX) || (context.shadowOffsetX = shadowOffsetX);
-                  break;
-               case 'shadow.offset.y':
-                  const shadowOffsetY = +value;
-                  isNaN(shadowOffsetY) || (context.shadowOffsetY = shadowOffsetY);
+                  style.font = value;
                   break;
                case 'offset':
                   const [ offsetX, offsetY ] = value.split(',').map(value => +value);
@@ -1672,10 +1362,11 @@ class XText extends XObject {
                   random.y = randomY || 0;
                   break;
                case 'stroke':
-                  context.strokeStyle = value;
+                  const strokeColor = X.color(value);
+                  textStyle.stroke = `#${X.hex(strokeColor)}`;
+                  textStyle.strokeThickness = strokeColor[3] > 0 ? style.lineWidth : 0;
                   break;
                case 'swirl':
-                  // period, radius, speed (rotations per second)
                   const [ swirlR, swirlS, swirlP ] = value.split(',').map(value => +value);
                   swirl.r = swirlR || 0;
                   swirl.s = swirlS || 0;
@@ -1683,8 +1374,8 @@ class XText extends XObject {
                   break;
             }
          } else {
-            let x = base.x + offset.x;
-            let y = base.y + offset.y + height;
+            let x = base.x - textStyle.strokeThickness / 2 + offset.x;
+            let y = base.y - textStyle.strokeThickness / 2 + offset.y;
             if (random.x > 0) {
                x += random.x * (Math.random() - 0.5);
             }
@@ -1699,158 +1390,134 @@ class XText extends XObject {
                x = endpoint.x;
                y = endpoint.y;
             }
-            context.fillStyle === 'transparent' || context.fillText(char, x, y);
-            context.strokeStyle === 'transparent' || context.strokeText(char, x, y);
-            offset.x += X.metrics(context, char, this.cache).width + this.spacing.x;
+            const font = X.font(textStyle, char, 40);
+            const info = font.chars[char.charCodeAt(0)];
+            if (info) {
+               const text = PIXI.Sprite.from(info.texture);
+               text.position.set(x + info.xOffset, y + info.yOffset);
+               text.alpha = style.globalAlpha;
+               text.blendMode = X.blend(style.globalCompositeOperation);
+               container.addChild(text);
+            }
+            offset.x += X.metrics(textStyle, char).x + this.spacing.x;
          }
       }
-      Object.assign(context, state);
+      renderer.render(container);
+      Object.assign(style, state);
    }
 }
 
-/** An object representing a two-dimensional positional value. */
 class XVector {
-   /** The X value of the underlying position. */
    x: number;
-   /** The Y value of the underlying position. */
    y: number;
    constructor();
-   constructor(x: number | XNumber, y: number | XNumber);
-   constructor(a1: number | XNumber | X2);
-   constructor (a1: number | XNumber | X2 = 0, y = a1 as number | XNumber) {
-      if (typeof a1 === 'number' || a1 instanceof XNumber) {
-         this.x = typeof a1 === 'number' ? a1 : a1.value;
-         this.y = typeof y === 'number' ? y : y.value;
+   constructor(a: number | X2);
+   constructor(x: number, y: number);
+   constructor (a: number | X2 = 0, b = a as number) {
+      if (typeof a === 'number') {
+         this.x = a;
+         this.y = b;
       } else {
-         (this.x = a1.x || 0), (this.y = a1.y || 0);
+         this.x = a.x || 0;
+         this.y = a.y || 0;
       }
    }
-   /** Adds another position to this object's position and returns a new `XVector` object with said position. */
-   add(x: number | XNumber, y: number | XNumber): XVector;
-   add(a1: number | XNumber | X2): XVector;
-   add (a1: number | XNumber | X2, y = a1 as number | XNumber) {
-      if (typeof a1 === 'number' || a1 instanceof XNumber) {
-         return new XVector(
-            this.x + (typeof a1 === 'number' ? a1 : a1.value),
-            this.y + (typeof y === 'number' ? y : y.value)
-         );
+   add(a: number | X2): XVector;
+   add(x: number, y: number): XVector;
+   add (a: number | X2, b = a as number) {
+      if (typeof a === 'number') {
+         return new XVector(this.x + a, this.y + b);
       } else {
-         return this.add(a1.x, a1.y);
+         return this.add(a.x, a.y);
       }
    }
-   /** Clamps this object's position within a region and returns a new `XVector` object with the result as its position. */
    clamp (min: X2, max: X2) {
-      return new XVector(new XNumber(this.x).clamp(min.x, max.x), new XNumber(this.y).clamp(min.y, max.y));
+      return new XVector(Math.min(Math.max(this.x, min.x), max.x), Math.min(Math.max(this.y, min.y), max.y));
    }
-   /** Returns a new `XVector` object with the same position as this object. */
    clone () {
       return new XVector(this);
    }
-   /** Calculates the relative direction from this object's position and another position. */
    angle (vector: X2) {
-      return (180 / Math.PI) * Math.atan2(this.y - vector.y, this.x - vector.x);
+      return ((180 / Math.PI) * Math.atan2(this.y - vector.y, this.x - vector.x) + 360) % 360;
    }
-   /** Calculates the distance between this object's position and another position. */
    extent (vector: X2) {
       return Math.sqrt((vector.x - this.x) ** 2 + (vector.y - this.y) ** 2);
    }
-   /** Divides this object's position by another position and returns a new `XVector` object with said position. */
-   divide(x: number | XNumber, y: number | XNumber): XVector;
-   divide(a1: number | XNumber | X2): XVector;
-   divide (a1: number | XNumber | X2, y = a1 as number | XNumber) {
-      if (typeof a1 === 'number' || a1 instanceof XNumber) {
-         return new XVector(
-            this.x / (typeof a1 === 'number' ? a1 : a1.value),
-            this.y / (typeof y === 'number' ? y : y.value)
-         );
+   divide(a: number | X2): XVector;
+   divide(x: number, y: number): XVector;
+   divide (a: number | X2, b = a as number) {
+      if (typeof a === 'number') {
+         return new XVector(this.x / a, this.y / b);
       } else {
-         return this.divide(a1.x, a1.y);
+         return this.divide(a.x, a.y);
       }
    }
-   /**
-    * Calculates the position at a specific angle and extent from this object's position and returns
-    * a new `XVector` object with the result as its position.
-    */
-   endpoint(angle: number | XNumber, extent: number | XNumber): XVector;
-   endpoint(a1: number | XNumber | X2): XVector;
-   endpoint (a1: number | XNumber | X2, extent = a1 as number | XNumber) {
-      if (typeof a1 === 'number' || a1 instanceof XNumber) {
-         const radians = ((((typeof a1 === 'number' ? a1 : a1.value) + 90) % 360) * Math.PI) / 180;
-         const a2 = typeof extent === 'number' ? extent : extent.value;
-         return new XVector(this.x + a2 * Math.sin(Math.PI - radians), this.y + a2 * Math.cos(Math.PI - radians));
-      } else {
-         return this.endpoint(a1.x, a1.y);
-      }
+   endpoint (angle: number, extent: number) {
+      const rads = Math.PI - (((angle + 90) % 360) * Math.PI) / 180;
+      return new XVector(this.x + extent * Math.sin(rads), this.y + extent * Math.cos(rads));
    }
-   /** Alter the internal value of this positional over a specified duration. */
    modulate (duration: number, ...points: X2[]) {
+      const x = this.x;
+      const y = this.y;
+      const base = X.time;
       return new Promise<void>(resolve => {
-         const x = this.x;
-         const y = this.y;
+         let active = true;
          X.cache.modulationTasks.get(this)?.cancel();
-         X.cache.modulationTasks.set(
-            this,
-            (() => {
-               let active = true;
-               X.chain<number, Promise<void>>(0, async (elapsed, next) => {
-                  if (active) {
-                     if (elapsed < duration) {
-                        this.x = X.math.bezier(elapsed / duration, x, ...points.map(point => point.x));
-                        this.y = X.math.bezier(elapsed / duration, y, ...points.map(point => point.y));
-                        await X.timer.on('tick');
-                        await next(elapsed + 5);
-                     } else {
-                        this.x = X.math.bezier(1, x, ...points.map(point => point.x));
-                        this.y = X.math.bezier(1, y, ...points.map(point => point.y));
-                        X.cache.modulationTasks.get(this)?.cancel();
-                        resolve();
-                     }
-                  }
-               });
-               return { cancel: () => (active = false) };
-            })()
-         );
+         X.cache.modulationTasks.set(this, {
+            cancel () {
+               active = false;
+            }
+         });
+         const listener = () => {
+            if (active) {
+               const elapsed = X.time - base;
+               if (elapsed < duration) {
+                  this.x = X.math.bezier(elapsed / duration, x, ...points.map(point => point.x));
+                  this.y = X.math.bezier(elapsed / duration, y, ...points.map(point => point.y));
+               } else {
+                  X.cache.modulationTasks.delete(this);
+                  this.x = points.length > 0 ? points[points.length - 1].x : x;
+                  this.y = points.length > 0 ? points[points.length - 1].y : y;
+                  X.timer.off('tick', listener);
+                  resolve();
+               }
+            } else {
+               X.timer.off('tick', listener);
+            }
+         };
+         X.timer.on('tick', listener);
       });
    }
-   /** Multiplies this object's position by another position and returns a new `XVector` object with said position. */
-   multiply(x: number | XNumber, y: number | XNumber): XVector;
-   multiply(a1: number | XNumber | X2): XVector;
-   multiply (a1: number | XNumber | X2, y = a1 as number | XNumber) {
-      if (typeof a1 === 'number' || a1 instanceof XNumber) {
-         return new XVector(
-            this.x * (typeof a1 === 'number' ? a1 : a1.value),
-            this.y * (typeof y === 'number' ? y : y.value)
-         );
+   multiply(a: number | X2): XVector;
+   multiply(x: number, y: number): XVector;
+   multiply (a: number | X2, b = a as number) {
+      if (typeof a === 'number') {
+         return new XVector(this.x * a, this.y * b);
       } else {
-         return this.multiply(a1.x, a1.y);
+         return this.multiply(a.x, a.y);
       }
    }
-   /** Returns an `XVector` object with the rounded position of this object's position. */
    round (base?: number): XVector {
       return base ? this.multiply(base).round().divide(base) : new XVector(Math.round(this.x), Math.round(this.y));
    }
-   /** Rotates and extends this object around the zero point. */
-   shift (angle: number, extent: number) {
-      return X.zero.endpoint(this.angle(X.zero) + angle, this.extent(X.zero) + extent);
+   shift (angle: number, extent: number, origin = X.zero) {
+      return origin.endpoint(this.angle(origin) + angle, this.extent(origin) + extent);
    }
-   /** Subtracts another position from this object's position and returns a new `XVector` object with said position. */
-   subtract(x: number | XNumber, y: number | XNumber): XVector;
-   subtract(a1: number | XNumber | X2): XVector;
-   subtract (a1: number | XNumber | X2, y = a1 as number | XNumber) {
-      if (typeof a1 === 'number' || a1 instanceof XNumber) {
-         return new XVector(
-            this.x - (typeof a1 === 'number' ? a1 : a1.value),
-            this.y - (typeof y === 'number' ? y : y.value)
-         );
+   subtract(a: number | X2): XVector;
+   subtract(x: number, y: number): XVector;
+   subtract (a: number | X2, b = a as number) {
+      if (typeof a === 'number') {
+         return new XVector(this.x - a, this.y - b);
       } else {
-         return this.subtract(a1.x, a1.y);
+         return this.subtract(a.x, a.y);
       }
    }
-   /** Returns the raw values of this object's position. */
    value () {
       return { x: this.x, y: this.y };
    }
 }
+
+const GL = PIXI.utils.isWebGLSupported();
 
 const X = {
    /** Gets an `AudioBuffer` from the given source URL. */
@@ -1922,31 +1589,52 @@ const X = {
       });
       return asset;
    },
-   /** A cache for various types of resources. */
+   blend (input: GlobalCompositeOperation) {
+      switch (input) {
+         case 'lighten':
+            return PIXI.BLEND_MODES.ADD;
+         case 'multiply':
+            return PIXI.BLEND_MODES.MULTIPLY;
+         case 'screen':
+            return PIXI.BLEND_MODES.SCREEN;
+         default:
+            return PIXI.BLEND_MODES.NORMAL;
+      }
+   },
    cache: {
-      /** Stores promises for all audio requests. */
       audios: {} as XKeyed<Promise<AudioBuffer>>,
-      /** All loaded assets attached to any given cached audio. */
       audioAssets: {} as XKeyed<XAudio[]>,
-      /** Stores promises for all data requests. */
+      color: {} as XKeyed<XColor>,
       datas: {} as XKeyed<Promise<XBasic>>,
-      /** All loaded assets attached to any given cached data. */
       dataAssets: {} as XKeyed<XData[]>,
-      /** Stores promises for all image requests. */
-      images: {} as XKeyed<Promise<HTMLImageElement>>,
-      /** All loaded assets attached to any given cached image. */
+      fonts: {} as XKeyed<PBitmapFont>,
+      images: {} as XKeyed<Promise<PBaseTexture>>,
       imageAssets: {} as XKeyed<XImage[]>,
-      /** Computed text metrics. */
-      textMetrics: {} as XKeyed<TextMetrics>,
-      /** Stores all active modulation tasks for any `AudioParam`, `XNumber`, or `XVector` objects. */
+      textMetrics: {} as XKeyed<X2>,
+      textures: new Map<XImage, PTexture>(),
       modulationTasks: new Map<AudioParam | XNumber | XVector, { cancel: () => void }>()
    },
-   /** A recursive operator function. */
    chain<A, B> (input: A, handler: (input: A, loop: (input: A) => B) => B) {
       const loop = (input: A) => handler(input, loop);
       return loop(input);
    },
-   /** Sets the given canvas to the specified size and generates a new `CanvasRenderingContext2D` from it. */
+   color (input: string) {
+      if (input in X.cache.color) {
+         return X.cache.color[input];
+      } else {
+         const element = document.createElement('x');
+         element.style.color = input;
+         document.body.appendChild(element);
+         const color = getComputedStyle(element)
+            .color.split('(')[1]
+            .slice(0, -1)
+            .split(', ')
+            .map(value => +value);
+         element.remove();
+         color.length === 3 && color.push(1);
+         return (X.cache.color[input] = color as XColor);
+      }
+   },
    context (canvas: HTMLCanvasElement, width = 1, height = 1) {
       return Object.assign(Object.assign(canvas, { width, height }).getContext('2d'), {
          fillStyle: 'transparent',
@@ -1954,19 +1642,13 @@ const X = {
          strokeStyle: 'transparent'
       });
    },
-   /** Returns an audio daemon for generating audio player instances. */
    daemon (
       audio: XAudio,
       {
-         /** The AudioContext to use for this daemon. */
          context = new AudioContext(),
-         /** The base gain of this player. */
          gain = 1,
-         /** Whether or not this player's instances should loop by default. */
          loop = false,
-         /** The base playback rate of this player. */
          rate = 1,
-         /** The audio router to use for this object. */
          router = ((context: AudioContext, input: GainNode) => input.connect(context.destination)) as XRouter
       } = {}
    ) {
@@ -1974,25 +1656,18 @@ const X = {
          audio,
          context,
          gain,
-         instance (offset = 0) {
-            // initialize values
+         instance (offset = 0, store = false) {
             const context = daemon.context;
             const gain = context.createGain();
             const source = context.createBufferSource();
-
-            // set defaults
             gain.gain.value = daemon.gain;
             source.buffer = daemon.audio.value;
             source.loop = daemon.loop;
             source.playbackRate.value = daemon.rate;
-
-            // establish connections
             daemon.router(context, gain);
             source.connect(gain);
             source.start(0, offset);
-
-            // return controller
-            return {
+            const instance = {
                context,
                daemon,
                gain: gain.gain,
@@ -2007,8 +1682,11 @@ const X = {
                   source.stop();
                   source.disconnect();
                   source.buffer = null;
+                  store && daemon.instances.splice(daemon.instances.indexOf(instance), 1);
                }
             };
+            store && daemon.instances.push(instance);
+            return instance;
          },
          instances: [] as XInstance[],
          loop,
@@ -2017,7 +1695,6 @@ const X = {
       };
       return daemon;
    },
-   /** Gets an `XBasic` from the given source URL. */
    data (source: string) {
       if (source in X.cache.datas) {
          return X.cache.datas[source];
@@ -2025,19 +1702,9 @@ const X = {
          return (X.cache.datas[source] = fetch(source).then(value => value.json() as Promise<XBasic>));
       }
    },
-   /** Returns an asset for a given data source. */
    dataAsset<A extends XBasic = XBasic> (
-      /** The data's source. */
       source: string,
-      {
-         /**
-          * The extra duration in which to keep this asset's source data in memory after this asset and all of its
-          * siblings (other assets which share this asset's source data) are unloaded.
-          */
-         cache = 0,
-         /** The pixel shader to apply to the image. */
-         modifier = void 0 as ((data: XBasic) => A) | void
-      } = {}
+      { cache = 0, modifier = void 0 as ((data: XBasic) => A) | void } = {}
    ): XData<A> {
       const asset = new XAsset<A>({
          async loader () {
@@ -2063,48 +1730,57 @@ const X = {
       });
       return asset;
    },
-   /** Gets an `HTMLImageElement` from the given source URL. */
+   font (style: PTextStyle, charset: string, quality = 1) {
+      const key = `${Object.values(style).join('\x00')}\x00${charset}\x00${quality}`;
+      if (key in X.cache.fonts) {
+         return X.cache.fonts[key];
+      } else {
+         const size =
+            typeof style.fontSize === 'number' ? style.fontSize : +style.fontSize.replace(/(px|pt|em|%)/g, '');
+         return (X.cache.fonts[key] = PIXI.BitmapFont.from(key, style, {
+            chars: charset.split(''),
+            padding: 0,
+            resolution: quality,
+            textureHeight: Math.max(size * quality * 1.25, 100),
+            textureWidth: Math.max(size * quality * 1.25, 100)
+         }));
+      }
+   },
+   hex (color: XColor, alpha = false) {
+      return color
+         .slice(0, alpha ? 4 : 3)
+         .map(value => value.toString(16).padStart(2, '0'))
+         .join('');
+   },
    image (source: string) {
       if (source in X.cache.images) {
          return X.cache.images[source];
       } else {
-         return (X.cache.images[source] = new Promise<HTMLImageElement>(resolve => {
-            const request = Object.assign(new XMLHttpRequest(), { responseType: 'arraybuffer' });
-            request.addEventListener('load', () => {
-               const image = document.createElement('img');
-               image.addEventListener('load', () => resolve(image));
-               image.src = URL.createObjectURL(new Blob([ new Uint8Array(request.response) ], { type: 'image/jpeg' }));
-            });
-            request.open('GET', source, true);
-            request.send();
-         }));
+         const texture = PIXI.BaseTexture.from(source);
+         return (X.cache.images[source] = texture.resource.load().then(() => texture));
       }
    },
-   /** Returns an asset for a given image source. */
    imageAsset (
-      /** The image's source. */
       source: string,
-      {
-         /**
-          * The extra duration in which to keep this asset's source image in memory after this asset and all of its
-          * siblings (other assets which share this asset's source image) are unloaded.
-          */
-         cache = 0,
-         /** The pixel shader to apply to the image. */
-         shader = void 0 as ((color: XColor, index: X2, total: X2) => XColor) | void
-      } = {}
+      { cache = 0, shader = void 0 as ((color: XColor, index: X2, total: X2) => XColor) | void } = {}
    ): XImage {
       const asset = new XAsset({
          async loader () {
             const assets = X.cache.imageAssets[source] || (X.cache.imageAssets[source] = []);
             assets.includes(asset) || assets.push(asset);
-            const image = await X.image(source);
+            let image = await X.image(source);
             if (image.width === 0 || image.height === 0) {
-               return await createImageBitmap(new ImageData(1, 1));
+               image = PIXI.BaseTexture.from(await createImageBitmap(new ImageData(1, 1)));
             } else if (shader) {
-               const context = X.context(document.createElement('canvas'), image.width, image.height);
-               context.drawImage(image, 0, 0);
-               const { data } = context.getImageData(0, 0, image.width, image.height);
+               X.shader.view.height = image.height;
+               X.shader.view.width = image.width;
+               const sprite = PIXI.Sprite.from(image);
+               sprite.scale.y = -1;
+               sprite.anchor.y = 1;
+               X.shader.render(sprite);
+               const data = new Uint8ClampedArray(new (GL ? PIXI.Extract : PIXI.CanvasExtract)(X.shader).pixels());
+               X.shader.clear();
+               sprite.destroy();
                const x4 = image.width * 4;
                const index = { x: -1, y: -1 };
                const total = { x: image.width, y: image.height };
@@ -2120,10 +1796,10 @@ const X = {
                   }
                   index.y = -1;
                }
-               return await createImageBitmap(new ImageData(data, image.width));
-            } else {
-               return image;
+               image = PIXI.BaseTexture.from(await createImageBitmap(new ImageData(data, image.width)));
             }
+            X.cache.textures.set(asset, PIXI.Texture.from(image));
+            return image;
          },
          source,
          async unloader () {
@@ -2131,15 +1807,18 @@ const X = {
             X.pause(cache).then(() => {
                assets.includes(asset) && assets.splice(assets.indexOf(asset), 1);
                if (assets.length === 0) {
-                  X.cache.images[source].then(image => URL.revokeObjectURL(image.src));
+                  X.cache.images[source]?.then(image => image.destroy());
                   delete X.cache.images[source];
+                  if (X.cache.textures.has(asset)) {
+                     X.cache.textures.get(asset)!.destroy();
+                     X.cache.textures.delete(asset);
+                  }
                }
             });
          }
       });
       return asset;
    },
-   /** Returns an inventory. */
    inventory<A extends XAsset[]> (...assets: A): XInventory<A> {
       return new XAsset({
          async loader () {
@@ -2151,9 +1830,7 @@ const X = {
          }
       });
    },
-   /** Various math-related methods used throughout the engine. */
    math: {
-      /** Calculates the value of a position on an polynomial bezier curve. */
       bezier (value: number, ...points: number[]): number {
          return points.length > 1
             ? X.math.bezier(
@@ -2162,54 +1839,50 @@ const X = {
               )
             : points[0] || 0;
       },
-      /** Checks if two line segments intersect. */
+      format (value: number) {
+         return Math.round(value);
+      },
       intersection (a1: X2, a2: X2, b1: X2, b2: X2) {
          return (
             X.math.rotation(a1, b1, b2) !== X.math.rotation(a2, b1, b2) &&
             X.math.rotation(a1, a2, b1) !== X.math.rotation(a1, a2, b2)
          );
       },
-      /** Rotates a line segment for optimized intersection checking. */
+      remap (value: number, min2: number, max2: number, min1 = 0, max1 = 1) {
+         return ((value - min1) * (max2 - min2)) / (max1 - min1) + min2;
+      },
       rotation (a1: X2, a2: X2, a3: X2) {
          return (a3.y - a1.y) * (a2.x - a1.x) > (a2.y - a1.y) * (a3.x - a1.x);
       },
-      /** Maps a value to a sine wave with a 0-1 input and output range. */
       wave (value: number) {
          return Math.sin(((value + 0.5) * 2 - 1) * Math.PI) / 2 + 0.5;
       }
    },
-   metrics (context: CanvasRenderingContext2D, content: string, cache: boolean) {
-      if (cache) {
-         const key = `${context.font}\x00${content}`;
-         if (key in X.cache.textMetrics) {
-            return X.cache.textMetrics[key];
-         } else {
-            return (X.cache.textMetrics[key] = context.measureText(content));
-         }
+   metrics (style: PTextStyle, content: string) {
+      const key = `${style.toFontString()}\x00${content}`;
+      if (key in X.cache.textMetrics) {
+         return X.cache.textMetrics[key];
       } else {
-         return context.measureText(content);
+         let index = 0;
+         let width = 0;
+         let height = 0;
+         const font = X.font(style, content);
+         while (index < content.length) {
+            const info = font.chars[content.charCodeAt(index++)];
+            if (info) {
+               width += info.texture.width + info.xOffset || 0 + info.xAdvance || 0;
+               height = Math.max(height, info.texture.height + info.yOffset || 0);
+            }
+         }
+         return (X.cache.textMetrics[key] = { x: width, y: height });
       }
    },
-   /** Parses JS objects previously stringified with `X.stringify()` */
    parse (text: string) {
       return JSON.parse(text, (key, value) => {
-         if (typeof value === 'string') {
-            switch (value[0]) {
-               case '!':
-                  return value.slice(1);
-               case '@':
-                  try {
-                     return eval(`(${value.slice(1)})`);
-                  } catch (error) {
-                     try {
-                        return eval(`({${value.slice(1)}})`)[key];
-                     } catch (error) {
-                        return void 0;
-                     }
-                  }
-               case '#':
-                  return eval(value);
-            }
+         if (value === '\x00') {
+            return Infinity;
+         } else if (value === '\x01') {
+            return -Infinity;
          } else {
             return value;
          }
@@ -2219,54 +1892,61 @@ const X = {
       provider: A,
       ...args: A extends XProvider<any, infer B> ? B : never
    ): A extends XProvider<infer B, any[]> ? B : never {
-      return typeof provider === 'function' ? provider(...args) : provider;
+      return typeof provider === 'function' ? X.provide(provider(...args)) : provider;
    },
-   /** Returns a promise that will resolve after the specified duration in milliseconds. */
    pause (duration = 0) {
       if (duration === Infinity) {
          return new Promise<void>(resolve => {});
       } else {
          return X.chain<number, Promise<void>>(0, async (elapsed, next) => {
             if (elapsed < duration) {
-               await X.timer.on('tick');
-               await next(elapsed + 5);
+               await next(elapsed + (await X.timer.on('tick'))[0]);
             }
          });
       }
    },
-   /** Converts JS objects to JSON with support for functions, undefined values, infinity, and nan values. */
+   shader: new (GL ? PIXI.Renderer : PIXI.CanvasRenderer)({
+      antialias: false,
+      backgroundAlpha: 0,
+      clearBeforeRender: false
+   }) as PRenderer & PCanvasRenderer,
+   speed: 1,
    stringify (value: any) {
       return JSON.stringify(value, (key, value) => {
-         switch (value) {
-            case +Infinity:
-               return '#+Infinity';
-            case -Infinity:
-               return '#-Infinity';
-            default:
-               switch (typeof value) {
-                  case 'bigint':
-                     return `#${value}n`;
-                  case 'function':
-                     return `@${value}`;
-                  case 'number':
-                     return value === value ? value : '#NaN';
-                  case 'string':
-                     return `!${value}`;
-                  default:
-                     return value;
-               }
+         if (value === Infinity) {
+            return '\x00';
+         } else if (value === -Infinity) {
+            return '\x01';
+         } else {
+            return value;
          }
       });
    },
-   /** The global time. */
+   text: (() => {
+      const canvas = document.createElement('canvas');
+      Object.assign(canvas.style, {
+         imageRendering: 'pixelated',
+         webkitFontSmoothing: 'none'
+      });
+      return canvas;
+   })(),
    time: 0,
-   /** The global timer. */
-   timer: new XHost<{ tick: [] }>(),
-   /** The inital transform used in rendering and vertex calculations. */
-   transform: [ new XVector(), new XNumber(), new XVector(1) ] as XTransform,
-   /** A zero-vector for vector rotation operations. */
+   timer: (() => {
+      const host = new XHost<{ init: []; tick: [number] }>();
+      host.on('init').then(() => {
+         setInterval(() => {
+            X.time += 5 * X.speed;
+            X.timer.fire('tick', 5 * X.speed);
+         }, 5);
+      });
+      return host;
+   })(),
    zero: new XVector()
 };
+
+PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
+PIXI.settings.ROUND_PIXELS = false;
+PIXI.settings.RESOLUTION = devicePixelRatio;
 
 Object.assign(AudioParam.prototype, {
    modulate (duration: number, ...points: number[]) {
@@ -2274,7 +1954,4 @@ Object.assign(AudioParam.prototype, {
    }
 });
 
-setInterval(() => {
-   X.time += 5;
-   X.timer.fire('tick');
-}, 5);
+X.timer.fire('init');

@@ -1,22 +1,8 @@
 "use strict";
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
-//                                                                                                      //
-//   ########   ########   ########   ########                                                          //
-//   ##         ##    ##   ##    ##   ##                                                                //
-//   ##         ##    ##   ##    ##   ##                                                                //
-//   ##         ##    ##   ########   ######                                                            //
-//   ##         ##    ##   ## ###     ##                                                                //
-//   ##         ##    ##   ##  ###    ##                                                                //
-//   ########   ########   ##   ###   ########                                                          //
-//                                                                                                      //
-//// needs more optimizating /////////////////////////////////////////////////////////////////////////////
-/** An event host. The type parameter `A` defines which events this host should fire and listen for. */
 class XHost {
     constructor() {
-        /** This host's internal listener storage map. */
         this.events = {};
     }
-    /** Fires an event. */
     fire(name, ...data) {
         const list = this.events[name];
         if (list) {
@@ -28,7 +14,6 @@ class XHost {
             return [];
         }
     }
-    /** Removes an event listener from this host. */
     off(name, handler) {
         const list = this.events[name];
         if (list) {
@@ -60,23 +45,22 @@ class XHost {
             return this;
         }
     }
-    /** Accepts a provider function whose return value is then registered as a listener for a given event. */
     wrapOn(name, provider) {
         return this.on(name, provider(this));
     }
-    /** Accepts a provider function whose return value is then unregistered as a listener for a given event. */
-    wrapOff(name, provider) {
-        return this.off(name, provider(this));
-    }
 }
-/** A rendered object. */
 class XObject extends XHost {
-    constructor({ alpha = 1, anchor: { x: anchor_x = -1, y: anchor_y = -1 } = {}, blend, fill = void 0, line: { cap = void 0, dash = void 0, join = void 0, miter = void 0, width = void 0 } = {}, metadata = {}, objects = [], parallax: { x: parallax_x = 0, y: parallax_y = 0 } = {}, position: { x: position_x = 0, y: position_y = 0 } = {}, priority = 0, rotation = 0, scale: { x: scale_x = 1, y: scale_y = 1 } = {}, shadow: { blur = void 0, color = void 0, offset: { x: shadow$offset_x = 0, y: shadow$offset_y = 0 } = {} } = {}, stroke = void 0, text: { align = void 0, baseline = void 0, direction = void 0, font = void 0 } = {} } = {}) {
+    constructor({ alpha = 1, anchor: { x: anchor_x = -1, y: anchor_y = -1 } = {}, blend, fill = void 0, friction = 1, gravity: { angle = 0, extent = 0 } = {}, line: { cap = void 0, dash = void 0, join = void 0, miter = void 0, width = void 0 } = {}, metadata = {}, objects = [], parallax: { x: parallax_x = 0, y: parallax_y = 0 } = {}, position: { x: position_x = 0, y: position_y = 0 } = {}, priority = 0, rotation = 0, scale: { x: scale_x = 1, y: scale_y = 1 } = {}, shadow: { blur = void 0, color = void 0, offset: { x: shadow$offset_x = 0, y: shadow$offset_y = 0 } = {} } = {}, stroke = void 0, text: { align = void 0, baseline = void 0, direction = void 0, font = void 0 } = {}, velocity: { x: velocity_x = 0, y: velocity_y = 0 } = {} } = {}) {
         super();
         this.alpha = new XNumber(alpha);
         this.anchor = new XVector(anchor_x, anchor_y);
         this.blend = blend;
         this.fill = fill;
+        this.friction = new XNumber(friction);
+        this.gravity = {
+            angle: new XNumber(angle),
+            extent: new XNumber(extent)
+        };
         this.line = {
             cap,
             dash: dash === void 0 ? void 0 : new XNumber(dash),
@@ -101,143 +85,59 @@ class XObject extends XHost {
         };
         this.stroke = stroke;
         this.text = { align, baseline, direction, font };
-    }
-    /**
-     * If this object is a hitbox and matches the given filter, its vertices are calculated and it is added to the input
-     * list. The `calculate` method is then called on this object's children, and the process repeats until the entire
-     * object tree has been iterated over and filtered into the list. The list is then returned.
-     */
-    calculate(filter, list, camera, transform) {
-        const position = transform[0].add(this.position).add(this.parallax.multiply(camera));
-        const rotation = transform[1].add(this.rotation);
-        const scale = transform[2].multiply(this.scale);
-        if (this instanceof XHitbox && X.provide(filter, this)) {
-            list.push(this);
-            const size = this.size.multiply(scale);
-            const half = size.divide(2);
-            const base = position.subtract(half.add(half.multiply(this.anchor)));
-            const dimensions = `${base.x}:${base.y}:${position.x}:${position.y}:${rotation.value}:${size.x}:${size.y}`;
-            if (dimensions !== this.state.dimensions) {
-                const offset = rotation.value + 180;
-                const corner2 = base.endpoint(0, size.x);
-                const corner3 = corner2.endpoint(90, size.y);
-                const corner4 = corner3.endpoint(180, size.x);
-                this.state.vertices[0] = position
-                    .endpoint(position.direction(base) + offset, position.distance(base))
-                    .round(1e6);
-                this.state.vertices[1] = position
-                    .endpoint(position.direction(corner2) + offset, position.distance(corner2))
-                    .round(1e6);
-                this.state.vertices[2] = position
-                    .endpoint(position.direction(corner3) + offset, position.distance(corner3))
-                    .round(1e6);
-                this.state.vertices[3] = position
-                    .endpoint(position.direction(corner4) + offset, position.distance(corner4))
-                    .round(1e6);
-                this.state.dimensions = dimensions;
-            }
-        }
-        for (const object of this.objects) {
-            object.calculate(filter, list, camera, [position, rotation, scale]);
-        }
+        this.velocity = new XVector(velocity_x, velocity_y);
     }
     compute() {
-        return new XVector();
+        return X.zero;
     }
     draw() { }
-    /** Renders this object to a context with the given camera position and transform values. */
-    render(camera, context, transform, debug) {
+    render(renderer, camera, transform, [quality, zoom], style, debug) {
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x;
+        if (this.gravity.extent.value !== 0) {
+            Object.assign(this.velocity, this.velocity.endpoint(this.gravity.angle.value, this.gravity.extent.value).value());
+        }
+        if (this.friction.value !== 1) {
+            Object.assign(this.velocity, this.velocity.divide(this.friction.value).value());
+        }
+        if (this.velocity.x !== 0 || this.velocity.y !== 0) {
+            Object.assign(this.position, this.position.add(this.velocity));
+        }
         this.fire('tick');
-        const state = {
-            direction: context.direction,
-            font: context.font,
-            fillStyle: context.fillStyle,
-            globalAlpha: context.globalAlpha,
-            globalCompositeOperation: context.globalCompositeOperation,
-            lineCap: context.lineCap,
-            lineDashOffset: context.lineDashOffset,
-            lineJoin: context.lineJoin,
-            lineWidth: context.lineWidth,
-            miterLimit: context.miterLimit,
-            shadowBlur: context.shadowBlur,
-            shadowColor: context.shadowColor,
-            shadowOffsetX: context.shadowOffsetX,
-            shadowOffsetY: context.shadowOffsetY,
-            strokeStyle: context.strokeStyle,
-            textAlign: context.textAlign,
-            textBaseline: context.textBaseline
-        };
-        this.alpha && (context.globalAlpha *= this.alpha.clamp(0, 1).value);
-        this.blend && (context.globalCompositeOperation = this.blend);
-        this.fill && (context.fillStyle = this.fill);
-        this.line.cap && (context.lineCap = this.line.cap);
-        this.line.dash && (context.lineDashOffset = this.line.dash.value);
-        this.line.join && (context.lineJoin = this.line.join);
-        this.line.miter && (context.miterLimit = this.line.miter.value);
-        this.line.width && (context.lineWidth = this.line.width.value);
-        this.shadow.blur && (context.shadowBlur = this.shadow.blur.value);
-        this.shadow.color && (context.shadowColor = this.shadow.color);
-        this.shadow.offset.x && (context.shadowOffsetX = this.shadow.offset.x.value);
-        this.shadow.offset.y && (context.shadowOffsetY = this.shadow.offset.y.value);
-        this.stroke && (context.strokeStyle = this.stroke);
-        this.text.align && (context.textAlign = this.text.align);
-        this.text.baseline && (context.textBaseline = this.text.baseline);
-        this.text.direction && (context.direction = this.text.direction);
-        this.text.font && (context.font = this.text.font);
-        const position = transform[0].add(this.position).add(this.parallax.multiply(camera));
-        const rotation = transform[1].add(this.rotation);
-        const scale = transform[2].multiply(this.scale);
-        const size = this.compute(context);
-        const half = size.divide(2);
-        const base = position.subtract(half.add(half.multiply(this.anchor)));
-        const rads = (Math.PI / 180) * this.rotation.value;
-        context.translate(position.x, position.y);
-        context.rotate(rads);
-        const matrix = context.getTransform();
-        context.scale(this.scale.x, this.scale.y);
-        context.translate(-position.x, -position.y);
-        context.globalAlpha === 0 || this.draw(context, base);
-        if (this.objects.length > 0) {
-            for (const object of this.objects) {
-                object.render(camera, context, [position, rotation, scale], debug);
-            }
-        }
-        if (debug) {
-            const previous = context.strokeStyle;
-            context.strokeStyle = '#fff8';
-            context.strokeRect(base.x, base.y, size.x, size.y);
-            context.strokeStyle = previous;
-        }
-        if (debug && this instanceof XHitbox) {
-            // rainbow hitboxes! :D
-            context.strokeStyle = `hsla(${(X.time % 1e3) * 0.25}, 100%, 50%, 0.5)`;
-            try {
-                const vertices = this.vertices();
-                for (const [b1, b2] of [
-                    [vertices[0], vertices[1]],
-                    [vertices[1], vertices[2]],
-                    [vertices[2], vertices[3]],
-                    [vertices[3], vertices[0]]
-                ]) {
-                    context.beginPath();
-                    context.moveTo(b1.x, b1.y);
-                    context.lineTo(b2.x, b2.y);
-                    context.stroke();
-                    context.closePath();
+        const subalpha = style.globalAlpha * Math.min(Math.max(this.alpha.value, 0), 1);
+        if (subalpha > 0 || this.objects.length > 0) {
+            const subtransform = [
+                transform[0].add(this.position).add(this.parallax.multiply(camera)).shift(transform[1], 0, transform[0]),
+                transform[1] + this.rotation.value,
+                transform[2].multiply(this.scale)
+            ];
+            const substyle = {
+                globalAlpha: subalpha,
+                globalCompositeOperation: (_a = this.blend) !== null && _a !== void 0 ? _a : style.globalCompositeOperation,
+                fillStyle: (_b = this.fill) !== null && _b !== void 0 ? _b : style.fillStyle,
+                lineCap: (_c = this.line.cap) !== null && _c !== void 0 ? _c : style.lineCap,
+                lineDashOffset: (_e = (_d = this.line.dash) === null || _d === void 0 ? void 0 : _d.value) !== null && _e !== void 0 ? _e : style.lineDashOffset,
+                lineJoin: (_f = this.line.join) !== null && _f !== void 0 ? _f : style.lineJoin,
+                miterLimit: (_h = (_g = this.line.miter) === null || _g === void 0 ? void 0 : _g.value) !== null && _h !== void 0 ? _h : style.miterLimit,
+                lineWidth: (_k = (_j = this.line.width) === null || _j === void 0 ? void 0 : _j.value) !== null && _k !== void 0 ? _k : style.lineWidth,
+                shadowBlur: (_m = (_l = this.shadow.blur) === null || _l === void 0 ? void 0 : _l.value) !== null && _m !== void 0 ? _m : style.shadowBlur,
+                shadowColor: (_o = this.shadow.color) !== null && _o !== void 0 ? _o : style.shadowColor,
+                shadowOffsetX: (_q = (_p = this.shadow.offset.x) === null || _p === void 0 ? void 0 : _p.value) !== null && _q !== void 0 ? _q : style.shadowOffsetX,
+                shadowOffsetY: (_s = (_r = this.shadow.offset.y) === null || _r === void 0 ? void 0 : _r.value) !== null && _s !== void 0 ? _s : style.shadowOffsetY,
+                strokeStyle: (_t = this.stroke) !== null && _t !== void 0 ? _t : style.strokeStyle,
+                textAlign: (_u = this.text.align) !== null && _u !== void 0 ? _u : style.textAlign,
+                textBaseline: (_v = this.text.baseline) !== null && _v !== void 0 ? _v : style.textBaseline,
+                direction: (_w = this.text.direction) !== null && _w !== void 0 ? _w : style.direction,
+                font: (_x = this.text.font) !== null && _x !== void 0 ? _x : style.font
+            };
+            subalpha === 0 || this.draw(renderer, subtransform, [quality, zoom], substyle, debug);
+            if (this.objects.length > 0) {
+                for (const object of this.objects) {
+                    object.render(renderer, camera, subtransform, [quality, zoom], substyle, debug);
                 }
             }
-            catch (error) {
-                //
-            }
         }
-        context.translate(position.x, position.y);
-        context.setTransform(matrix);
-        context.rotate(-rads);
-        context.translate(-position.x, -position.y);
-        Object.assign(context, state);
     }
 }
-/** An asset, either loaded or not. */
 class XAsset extends XHost {
     constructor({ loader, source, unloader }) {
         super();
@@ -246,7 +146,6 @@ class XAsset extends XHost {
         this.source = source;
         this.unloader = unloader;
     }
-    /** A getter for the asset's internal value. Throws an error if the asset is not current loaded. */
     get value() {
         const value = this.state.value;
         if (value === void 0) {
@@ -256,14 +155,12 @@ class XAsset extends XHost {
             return value;
         }
     }
-    /** Loads the asset. */
     async load(force) {
         if (force || this.state.value === void 0) {
             this.state.value = await this.loader();
             this.fire('load');
         }
     }
-    /** Unloads the asset. */
     async unload(force) {
         if (force || this.state.value !== void 0) {
             this.state.value = await this.unloader();
@@ -271,40 +168,31 @@ class XAsset extends XHost {
         }
     }
 }
-/**
- * The XAtlas class defines a system in which several XNavigator objects are associated with each other. When two
- * navigators share an atlas, those navigators can be traversed between.
- */
 class XAtlas {
     constructor({ navigators = {} } = {}) {
-        /** This navigator's state. Contains the currently open navigator. */
         this.state = { navigator: null };
         this.navigators = navigators;
     }
-    /** Attaches navigators to a specific layer on a renderer. */
     attach(renderer, layer, ...navigators) {
         for (const navigator of navigators) {
             navigator in this.navigators && this.navigators[navigator].attach(renderer, layer);
         }
     }
-    /** Detaches navigators from a specific layer on a renderer. */
     detach(renderer, layer, ...navigators) {
         for (const navigator of navigators) {
             navigator in this.navigators && this.navigators[navigator].detach(renderer, layer);
         }
     }
-    /** Returns the current navigator. */
     navigator() {
         return this.state.navigator ? this.navigators[this.state.navigator] : void 0;
     }
-    /** Alters the position of this atlas's current navigator, if any. */
     seek({ x = 0, y = 0 } = {}) {
         const navigator = this.navigator();
         if (navigator) {
             const origin = navigator.selection();
             const row = X.provide(navigator.grid, navigator, this);
             const flip = X.provide(navigator.flip, navigator, this);
-            navigator.position.x = new XNumber(navigator.position.x).clamp(0, row.length - 1).value;
+            navigator.position.x = Math.min(Math.max(navigator.position.x, 0), row.length - 1);
             navigator.position.x += flip ? y : x;
             if (row.length - 1 < navigator.position.x) {
                 navigator.position.x = 0;
@@ -313,7 +201,7 @@ class XAtlas {
                 navigator.position.x = row.length - 1;
             }
             const column = row[navigator.position.x] || [];
-            navigator.position.y = new XNumber(navigator.position.y).clamp(0, column.length - 1).value;
+            navigator.position.y = Math.min(Math.max(navigator.position.y, 0), column.length - 1);
             navigator.position.y += flip ? x : y;
             if (column.length - 1 < navigator.position.y) {
                 navigator.position.y = 0;
@@ -324,11 +212,6 @@ class XAtlas {
             origin === navigator.selection() || navigator.fire('move', this, navigator);
         }
     }
-    /**
-     * This function accepts one of two values, those being `'next'` and `'prev'`. If this atlas has a navigator open,
-     * the respective `next` or `prev` property on said open navigator is resolved and the navigator associated with the
-     * resolved value is switched to, given it's associated with this atlas.
-     */
     navigate(action) {
         switch (action) {
             case 'next':
@@ -342,10 +225,6 @@ class XAtlas {
                 }
         }
     }
-    /**
-     * Directly switch to a navigator associated with this atlas. If `null` is specified, the current navigator, if any,
-     * will be closed. If `void` is specified, then nothing will happen.
-     */
     switch(name) {
         if (name !== void 0) {
             let next = null;
@@ -364,96 +243,41 @@ class XAtlas {
         }
     }
 }
-/** A hitbox object. Hitboxes have a defined size and a set of calculated vertices used for hit detection. */
 class XHitbox extends XObject {
     constructor(properties = {}) {
         super(properties);
-        /** This hitbox's state. Contains the current dimensions and computed vertices, if any. */
         this.state = { dimensions: void 0, vertices: [] };
         (({ size: { x: size_x = 0, y: size_y = 0 } = {} } = {}) => {
             this.size = new XVector(size_x, size_y);
         })(properties);
     }
-    /** Calculates the center of this hitbox's vertices. */
-    center() {
-        const vertices = this.vertices();
-        return new XVector(vertices[0]).subtract(vertices[2]).divide(2).add(vertices[2]);
-    }
     compute() {
         return this.size;
     }
-    /**
-     * Detects collision between this hitbox and others.
-     * @author bokke1010, spacefluff432
-     */
-    detect(renderer, ...hitboxes) {
-        renderer.calculate(hitbox => hitbox === this);
-        const hits = [];
-        const [min1, max1] = this.region();
-        for (const hitbox of hitboxes) {
-            if (hitbox.state.dimensions === void 0) {
-                continue;
+    draw(renderer, [position, rotation, scale], [quality, zoom], style, debug) {
+        // debug
+        if (debug && this.state.dimensions !== void 0) {
+            const vertices = this.vertices();
+            const graphics = new PIXI.Graphics();
+            graphics.lineStyle({
+                alpha: 0.5,
+                color: parseInt('ffffff', 16),
+                width: 1
+            });
+            for (const [b1, b2] of [
+                [vertices[0], vertices[1]],
+                [vertices[1], vertices[2]],
+                [vertices[2], vertices[3]],
+                [vertices[3], vertices[0]]
+            ]) {
+                graphics.beginFill(0, 0);
+                graphics.moveTo(b1.x, b1.y);
+                graphics.lineTo(b2.x, b2.y);
+                graphics.endFill();
             }
-            else if ((this.size.x === 0 || this.size.y === 0) && (hitbox.size.x === 0 || hitbox.size.y === 0)) {
-                // zero exclusion - if both hitboxes have a volume of zero, treat them as single lines
-                const [min2, max2] = hitbox.region();
-                if (X.math.intersection(min1, max1, min2, max2)) {
-                    hits.push(hitbox);
-                }
-            }
-            else {
-                const [min2, max2] = hitbox.region();
-                if (min1.x < max2.x && min2.x < max1.x && min1.y < max2.y && min2.y < max1.y) {
-                    // aabb minmax exclusion - if the aabb formed by the min and max of both boxes collide, continue
-                    const vertices1 = this.vertices().map(vertex => new XVector(vertex).round(1e6));
-                    const vertices2 = hitbox.vertices().map(vertex => new XVector(vertex).round(1e6));
-                    if ((vertices1[0].x === vertices1[1].x || vertices1[0].y === vertices1[1].y) &&
-                        (vertices2[0].x === vertices2[1].x || vertices2[0].y === vertices2[1].y)) {
-                        // alignment check - if the two boxes are axis-aligned at this stage, they are colliding
-                        hits.push(hitbox);
-                    }
-                    else {
-                        for (const a1 of vertices1) {
-                            let miss = true;
-                            const a2 = new XVector(a1).add(new XVector(max2).subtract(min2).multiply(2)).value();
-                            for (const [b1, b2] of [
-                                [vertices2[0], vertices2[1]],
-                                [vertices2[1], vertices2[2]],
-                                [vertices2[2], vertices2[3]],
-                                [vertices2[3], vertices2[0]]
-                            ]) {
-                                if (X.math.intersection(a1, a2, b1, b2)) {
-                                    if ((miss = !miss)) {
-                                        break;
-                                    }
-                                }
-                            }
-                            if (!miss) {
-                                // point raycast - if a line drawn from box1 intersects with box2 only once, there is collision
-                                hits.push(hitbox);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
+            renderer.render(graphics);
         }
-        return hits;
     }
-    /** Returns the total height of this hitbox's region. */
-    height() {
-        const bounds = this.region();
-        return bounds[1].y - bounds[0].y;
-    }
-    /** Calculates the distance from this hitbox's center to any given corner. */
-    radius() {
-        const vertices = this.vertices();
-        return new XVector(vertices[0]).distance(vertices[2]) / 2;
-    }
-    /**
-     * Calculates the minimum and maximum X and Y coordinates that this hitbox intersects with, effectively creating an
-     * axis-aligned superstructure around the entirety of this hitbox.
-     */
     region() {
         const vertices = this.vertices();
         const { x: x1, y: y1 } = vertices[0];
@@ -465,7 +289,6 @@ class XHitbox extends XObject {
             new XVector(Math.max(x1, x2, x3, x4), Math.max(y1, y2, y3, y4))
         ];
     }
-    /** Returns the vertices of this hitbox. */
     vertices() {
         if (this.state.dimensions === void 0) {
             throw "This object's vertices are unresolved!";
@@ -474,20 +297,10 @@ class XHitbox extends XObject {
             return this.state.vertices;
         }
     }
-    /** Returns the total width of this hitbox's region. */
-    width() {
-        const bounds = this.region();
-        return bounds[1].x - bounds[0].x;
-    }
 }
-/**
- * Handles mouse and keyboard inputs. Mouse inputs are represented as numeric values, while keyboard inputs are
- * represented by their key name in string form.
- */
 class XInput extends XHost {
     constructor({ codes = [], target = window, transformer } = {}) {
         super();
-        /** This input's state. Contains the currently active inputs. */
         this.state = { codes: new Set() };
         target.addEventListener('keyup', ({ key }) => {
             transformer && (key = transformer(key));
@@ -516,15 +329,10 @@ class XInput extends XHost {
             }
         });
     }
-    /** Whether or not any of this input's valid codes are in an active state. */
     active() {
         return this.state.codes.size > 0;
     }
 }
-/**
- * The XNavigator class defines a system in which a grid can specify available options to navigate through. This class
- * doesn't do much without an associated atlas to control it.
- */
 class XNavigator extends XHost {
     constructor({ flip = false, grid = [], next = void 0, objects = [], position: { x = 0, y = 0 } = {}, prev = void 0 } = {}) {
         super();
@@ -535,107 +343,53 @@ class XNavigator extends XHost {
         this.position = { x, y };
         this.prev = prev;
     }
-    /** Attaches this navigator's objects to a specific layer on the given renderer. */
     attach(renderer, layer) {
         renderer.attach(layer, ...this.objects);
     }
-    /** Detaches this navigator's objects from a specific layer on the given renderer. */
     detach(renderer, layer) {
         renderer.detach(layer, ...this.objects);
     }
-    /** Returns the value in this navigator's grid at its current position. */
     selection() {
         return (X.provide(this.grid, this)[this.position.x] || [])[this.position.y];
     }
 }
-/** An object representing a numeric value. */
 class XNumber {
     constructor(value = 0) {
         this.value = value;
     }
-    /** Adds another value to this object's value and returns a new `XNumber` object with said value. */
-    add(value = 0) {
-        if (typeof value === 'number') {
-            return new XNumber(this.value + value);
-        }
-        else {
-            return this.add(value.value);
-        }
-    }
-    /** Returns an `XNumber` object with the ceilinged value of this object's value. */
-    ceil() {
-        return new XNumber(Math.ceil(this.value));
-    }
-    /** Clamps this object's value between two numbers and returns a new `XNumber` object with the result as its value. */
-    clamp(min, max) {
-        return new XNumber(Math.min(Math.max(this.value, min), max));
-    }
-    /** Returns a new `XNumber` object with the same value as this object. */
-    clone() {
-        return new XNumber(this.value);
-    }
-    /** Divides this object's value by another value and returns a new `XNumber` object with said value. */
-    divide(value = 1) {
-        if (typeof value === 'number') {
-            return new XNumber(this.value / value);
-        }
-        else {
-            return this.divide(value.value);
-        }
-    }
-    /** Returns an `XNumber` object with the floored value of this object's value. */
-    floor() {
-        return new XNumber(Math.floor(this.value));
-    }
-    /** Alter the internal value of this numeric over a specified duration. */
     modulate(duration, ...points) {
+        const base = X.time;
+        const value = this.value;
         return new Promise(resolve => {
-            const value = this.value;
-            X.cache.modulationTasks.get(this)?.cancel();
-            X.cache.modulationTasks.set(this, (() => {
-                let active = true;
-                X.chain(0, async (elapsed, next) => {
-                    if (active) {
-                        if (elapsed < duration) {
-                            this.value = X.math.bezier(elapsed / duration, value, ...points);
-                            await X.timer.on('tick');
-                            await next(elapsed + 5);
-                        }
-                        else {
-                            this.value = X.math.bezier(1, value, ...points);
-                            X.cache.modulationTasks.get(this)?.cancel();
-                            resolve();
-                        }
+            var _a;
+            let active = true;
+            (_a = X.cache.modulationTasks.get(this)) === null || _a === void 0 ? void 0 : _a.cancel();
+            X.cache.modulationTasks.set(this, {
+                cancel() {
+                    active = false;
+                }
+            });
+            const listener = () => {
+                if (active) {
+                    const elapsed = X.time - base;
+                    if (elapsed < duration) {
+                        this.value = X.math.bezier(elapsed / duration, value, ...points);
                     }
-                });
-                return { cancel: () => (active = false) };
-            })());
+                    else {
+                        X.cache.modulationTasks.delete(this);
+                        this.value = points.length > 0 ? points[points.length - 1] : value;
+                        X.timer.off('tick', listener);
+                        resolve();
+                    }
+                }
+                else {
+                    X.timer.off('tick', listener);
+                }
+            };
+            X.timer.on('tick', listener);
         });
     }
-    /** Multiplies this object's value by another value and returns a new `XNumber` object with said value. */
-    multiply(value = 1) {
-        if (typeof value === 'number') {
-            return new XNumber(this.value * value);
-        }
-        else {
-            return this.multiply(value.value);
-        }
-    }
-    /** Returns an `XNumber` object with the rounded value of this object's value. */
-    round() {
-        return new XNumber(Math.round(this.value));
-    }
-    /** Subtracts another value from this object's value and returns a new `XNumber` object with said value. */
-    subtract(value = 0) {
-        if (typeof value === 'number') {
-            return new XNumber(this.value - value);
-        }
-        else {
-            return this.subtract(value.value);
-        }
-    }
 }
-/** A rendered object specifically designed to trace a path on a canvas. */
 class XPath extends XObject {
     constructor(properties = {}) {
         super(properties);
@@ -647,18 +401,10 @@ class XPath extends XObject {
     compute() {
         return this.size;
     }
-    draw(context, base) {
-        context.beginPath();
-        this.tracer(context, () => {
-            context.fillStyle === 'transparent' || context.fill();
-            context.strokeStyle === 'transparent' || context.stroke();
-            context.closePath();
-            context.beginPath();
-        }, base.value());
-        context.closePath();
+    draw(renderer, transform, [quality, zoom], style) {
+        this.tracer(renderer, transform, [quality, zoom], style);
     }
 }
-/** A rendered object specifically designed to draw a rectangle on a canvas. */
 class XRectangle extends XObject {
     constructor(properties = {}) {
         super(properties);
@@ -669,28 +415,59 @@ class XRectangle extends XObject {
     compute() {
         return this.size;
     }
-    draw(context, base) {
-        context.fillStyle === 'transparent' || context.fillRect(base.x, base.y, this.size.x, this.size.y);
-        context.strokeStyle === 'transparent' || context.strokeRect(base.x, base.y, this.size.x, this.size.y);
+    draw(renderer, [position, rotation, scale], [quality, zoom], style) {
+        const fill = style.fillStyle !== 'transparent';
+        const stroke = style.strokeStyle !== 'transparent';
+        if (fill || stroke) {
+            const size = this.compute();
+            const half = size.divide(2);
+            const base = position.subtract(half.add(half.multiply(this.anchor)));
+            const rectangle = new PIXI.Graphics();
+            rectangle.pivot.set(size.x * ((this.anchor.x + 1) / 2), size.y * ((this.anchor.y + 1) / 2));
+            rectangle.position.set((base.x + rectangle.pivot.x) * quality, (base.y + rectangle.pivot.y) * quality);
+            rectangle.rotation = (Math.PI / 180) * (rotation % 360);
+            rectangle.scale.set(scale.x, scale.y);
+            rectangle.alpha = style.globalAlpha;
+            rectangle.blendMode = X.blend(style.globalCompositeOperation);
+            if (stroke) {
+                const strokeColor = X.color(style.strokeStyle);
+                if (strokeColor[3] > 0) {
+                    rectangle.lineStyle({
+                        alpha: strokeColor[3],
+                        cap: { butt: PIXI.LINE_CAP.BUTT, round: PIXI.LINE_CAP.ROUND, square: PIXI.LINE_CAP.SQUARE }[style.lineCap],
+                        color: parseInt(X.hex(strokeColor), 16),
+                        join: { bevel: PIXI.LINE_JOIN.BEVEL, miter: PIXI.LINE_JOIN.MITER, round: PIXI.LINE_JOIN.ROUND }[style.lineJoin],
+                        miterLimit: style.miterLimit,
+                        width: style.lineWidth
+                    });
+                }
+            }
+            if (fill) {
+                const fillColor = X.color(style.fillStyle);
+                if (fillColor[3] > 0) {
+                    rectangle.beginFill(parseInt(X.hex(fillColor), 16), fillColor[3]);
+                }
+                else {
+                    rectangle.beginFill(0, 0);
+                }
+            }
+            renderer.render(rectangle.drawRect(0, 0, size.x, size.y).endFill());
+        }
     }
 }
-/**
- * The business end of the Storyteller engine, where objects are rendered to canvases and all is made right with the
- * world. Jokes aside, this class is responsible for canvas and context management.
- */
 class XRenderer extends XHost {
-    constructor({ alpha = 1, auto = false, camera: { x: camera_x = -1, y: camera_y = -1 } = {}, container = document.body, debug = false, framerate = 30, layers = {}, region: [{ x: min_x = -Infinity, y: min_y = -Infinity } = {}, { x: max_x = Infinity, y: max_y = Infinity } = {}] = [], shake = 0, size: { x: size_x = 320, y: size_y = 240 } = {} } = {}) {
+    constructor({ alpha = 1, auto = false, camera: { x: camera_x = 0, y: camera_y = 0 } = {}, container = document.body, debug = false, framerate = 30, layers = {}, region: [{ x: min_x = -Infinity, y: min_y = -Infinity } = {}, { x: max_x = Infinity, y: max_y = Infinity } = {}] = [], shake = 0, size: { x: size_x = 320, y: size_y = 240 } = {}, quality = 1, zoom = 1 } = {}) {
         super();
-        /**
-         * This renderer's state. Contains the last computed camera position, rendering interval timer handle, last known
-         * container height, last computed scale, and last known container width.
-         */
         this.state = {
             camera: { x: NaN, y: NaN },
             active: false,
-            height: 0,
+            rendererX: NaN,
+            rendererY: NaN,
             scale: 1,
-            width: 0
+            windowX: NaN,
+            windowY: NaN,
+            quality: NaN,
+            zoom: NaN
         };
         Object.assign(container.style, {
             display: 'grid',
@@ -707,17 +484,21 @@ class XRenderer extends XHost {
             const canvas = document.createElement('canvas');
             Object.assign(canvas.style, {
                 gridArea: 'center',
-                imageRendering: 'pixelated',
-                webkitFontSmoothing: 'none'
+                imageRendering: 'pixelated'
             });
             this.container.appendChild(canvas);
             return [
                 key,
                 {
                     canvas,
-                    context: X.context(canvas),
                     modifiers: value,
-                    objects: []
+                    objects: [],
+                    renderer: new (GL ? PIXI.Renderer : PIXI.CanvasRenderer)({
+                        antialias: false,
+                        backgroundAlpha: 0,
+                        clearBeforeRender: false,
+                        view: canvas
+                    })
                 }
             ];
         }));
@@ -727,9 +508,9 @@ class XRenderer extends XHost {
         ];
         this.shake = new XNumber(shake);
         this.size = new XVector(size_x, size_y);
-        auto && this.start();
+        this.quality = new XNumber(quality);
+        this.zoom = new XNumber(zoom);
     }
-    /** Attaches objects to a specific layer on this renderer. */
     attach(key, ...objects) {
         if (key in this.layers) {
             const layer = this.layers[key];
@@ -742,28 +523,53 @@ class XRenderer extends XHost {
             });
         }
     }
-    /**
-     * Calls the `calculate` method on all objects in this renderer with the given filter, and returns a list of all
-     * computed hitboxes.
-     */
-    calculate(filter = true) {
+    calculate(key, filter = true) {
         const list = [];
-        for (const key in this.layers) {
-            for (const object of this.layers[key].objects) {
-                object.calculate(filter, list, this.camera.clamp(...this.region), X.transform);
+        const camera = this.camera.clamp(...this.region);
+        X.chain([[new XVector(), 0, new XVector(1)], this.layers[key].objects], ([transform, objects], next) => {
+            for (const object of objects) {
+                const position = transform[0].add(object.position).add(object.parallax.multiply(camera));
+                const rotation = transform[1] + object.rotation.value;
+                const scale = transform[2].multiply(object.scale);
+                if (object instanceof XHitbox && X.provide(filter, object)) {
+                    list.push(object);
+                    const size = object.size.multiply(scale);
+                    const half = size.divide(2);
+                    const base = position.subtract(half.add(half.multiply(object.anchor)));
+                    const dimensions = `${base.x}:${base.y}:${position.x}:${position.y}:${rotation}:${size.x}:${size.y}`;
+                    if (dimensions !== object.state.dimensions) {
+                        const offset = rotation + 180;
+                        const corner2 = base.endpoint(0, size.x);
+                        const corner3 = corner2.endpoint(90, size.y);
+                        const corner4 = corner3.endpoint(180, size.x);
+                        object.state.vertices[0] = position
+                            .endpoint(position.angle(base) + offset, position.extent(base))
+                            .round(1e6);
+                        object.state.vertices[1] = position
+                            .endpoint(position.angle(corner2) + offset, position.extent(corner2))
+                            .round(1e6);
+                        object.state.vertices[2] = position
+                            .endpoint(position.angle(corner3) + offset, position.extent(corner3))
+                            .round(1e6);
+                        object.state.vertices[3] = position
+                            .endpoint(position.angle(corner4) + offset, position.extent(corner4))
+                            .round(1e6);
+                        object.state.dimensions = dimensions;
+                    }
+                }
+                next([[position, rotation, scale], object.objects]);
             }
-        }
+        });
         return list;
     }
-    /** Completely clears the given layer, detaching all of its objects. */
     clear(key) {
         if (key in this.layers) {
             const layer = this.layers[key];
             layer.modifiers.includes('ambient') && this.refresh();
             layer.objects.splice(0, layer.objects.length);
+            this.reset(key);
         }
     }
-    /** Detaches objects from a specific layer on this renderer. */
     detach(key, ...objects) {
         if (key in this.layers) {
             const layer = this.layers[key];
@@ -774,9 +580,61 @@ class XRenderer extends XHost {
                     layer.objects.splice(index, 1);
                 }
             }
+            if (layer.objects.length === 0) {
+                this.reset(key);
+            }
         }
     }
-    /** Pass each object in a layer (or all layers) to a handler, and return an array of the outputs. */
+    detect(key, source, ...hitboxes) {
+        key && this.calculate(key, hitbox => hitbox === source);
+        const hits = [];
+        const [min1, max1] = source.region();
+        for (const hitbox of hitboxes) {
+            if (hitbox.state.dimensions === void 0) {
+                continue;
+            }
+            else if ((source.size.x === 0 || source.size.y === 0) && (hitbox.size.x === 0 || hitbox.size.y === 0)) {
+                const [min2, max2] = hitbox.region();
+                if (X.math.intersection(min1, max1, min2, max2)) {
+                    hits.push(hitbox);
+                }
+            }
+            else {
+                const [min2, max2] = hitbox.region();
+                if (min1.x < max2.x && min2.x < max1.x && min1.y < max2.y && min2.y < max1.y) {
+                    const vertices1 = source.vertices();
+                    const vertices2 = hitbox.vertices();
+                    if ((vertices1[0].x === vertices1[1].x || vertices1[0].y === vertices1[1].y) &&
+                        (vertices2[0].x === vertices2[1].x || vertices2[0].y === vertices2[1].y)) {
+                        hits.push(hitbox);
+                    }
+                    else {
+                        for (const a1 of vertices1) {
+                            let miss = true;
+                            const a2 = new XVector(a1).add(new XVector(max2).subtract(min2).multiply(2)).value();
+                            for (const [b1, b2] of [
+                                [vertices2[0], vertices2[1]],
+                                [vertices2[1], vertices2[2]],
+                                [vertices2[2], vertices2[3]],
+                                [vertices2[3], vertices2[0]]
+                            ]) {
+                                if (X.math.intersection(a1, a2, b1, b2)) {
+                                    if ((miss = !miss)) {
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!miss) {
+                                hits.push(hitbox);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return hits;
+    }
     iterate(handler = (object) => object, key) {
         if (typeof key === 'string') {
             return X.chain(this.layers[key].objects, (objects, loop) => {
@@ -787,114 +645,129 @@ class XRenderer extends XHost {
             return Object.keys(this.layers).flatMap(key => this.iterate(handler, key));
         }
     }
-    /** Reads pixel data from the canvas within a specified range. */
-    read(key, min, max = new XVector(min).add(1 / this.state.scale)) {
-        const resmin = this.resolve(key, min);
-        const resmax = this.resolve(key, max);
-        const w = Math.floor(resmax.x - resmin.x);
-        const data = this.layers[key].context.getImageData(Math.floor(resmin.x), Math.floor(resmin.y), w, Math.floor(resmax.y - resmin.y)).data;
-        const pixels = data.length / 4;
-        const output = [[]];
-        let index = 0;
-        while (index < pixels) {
-            if (output[output.length - 1].push([...data.slice(index, index + 4)]) === w && ++index < pixels) {
-                output.push([]);
-            }
-        }
-        return output;
+    reset(key) {
+        const renderer = this.layers[key].renderer;
+        renderer instanceof PIXI.Renderer && renderer.reset();
+        renderer.clear();
     }
-    /** Resolves the given position to its corresponding pixel position. */
-    resolve(key, position) {
-        const transform = this.layers[key].context.getTransform();
-        return {
-            x: position.x * this.state.scale + transform.e,
-            y: position.y * this.state.scale + transform.f
-        };
-    }
-    /** Restricts the given position to within the camera's scope. */
     restrict(position) {
         return this.size
             .divide(2)
             .subtract(this.camera.clamp(...this.region))
             .add(position);
     }
-    /** Starts the rendering loop. */
     start() {
-        let active = true;
-        X.chain(void 0, (none, next) => {
-            X.pause(1e3 / this.framerate).then(() => {
-                if (active) {
-                    next();
-                    this.render();
-                }
-            });
+        const ticker = new PIXI.Ticker();
+        ticker.add(() => {
+            this.render();
+            ticker.minFPS = this.framerate;
+            ticker.maxFPS = this.framerate;
         });
-        return { cancel: () => (active = false) };
+        ticker.start();
+        return { cancel: () => ticker.destroy() };
     }
-    /** Forces an update to all ambient rendering layers. */
     refresh() {
         this.state.camera = { x: NaN, y: NaN };
     }
-    /** Renders a single frame. */
     render() {
         this.fire('tick');
         let update = false;
-        const camera = this.camera.clamp(...this.region).value();
-        this.container.style.opacity = this.alpha.clamp(0, 1).value.toString();
+        let resize = false;
+        const camera = this.camera.clamp(...this.region);
+        this.container.style.opacity = Math.min(Math.max(this.alpha.value, 0), 1).toString();
+        if (this.zoom.value !== this.state.zoom) {
+            update = true;
+            this.state.zoom = this.zoom.value;
+        }
         if (camera.x !== this.state.camera.x || camera.y !== this.state.camera.y) {
             update = true;
-            Object.assign(this.state.camera, camera);
+            this.state.camera = camera.value();
         }
-        {
-            let width = this.container.clientWidth;
-            let height = this.container.clientHeight;
-            if (width !== this.state.width || height !== this.state.height) {
-                update = true;
-                this.state.width = width;
-                this.state.height = height;
-                const ratio = this.size.x / this.size.y;
-                if (this.state.width / this.state.height > ratio) {
-                    width = height * ratio;
-                    this.state.scale = height / this.size.y;
+        if (this.quality.value !== this.state.quality) {
+            update = true;
+            resize = true;
+            this.state.quality = this.quality.value;
+        }
+        if (innerWidth !== this.state.windowX ||
+            innerHeight !== this.state.windowY ||
+            this.size.x !== this.state.rendererX ||
+            this.size.y !== this.state.rendererY) {
+            update = true;
+            resize = true;
+            this.state.windowX = innerWidth;
+            this.state.windowY = innerHeight;
+            this.state.rendererX = this.size.x;
+            this.state.rendererY = this.size.y;
+            const ratio = this.size.x / this.size.y;
+            if (this.state.windowX / this.state.windowY > ratio) {
+                this.state.scale = innerHeight / this.size.y;
+            }
+            else {
+                this.state.scale = innerWidth / this.size.x;
+            }
+        }
+        if (resize) {
+            const width = this.size.x * this.quality.value;
+            const height = this.size.y * this.quality.value;
+            const scale = this.state.scale / this.quality.value;
+            for (const key in this.layers) {
+                const { canvas } = this.layers[key];
+                canvas.width = width;
+                canvas.height = height;
+                canvas.style.transform = `scale(${scale})`;
+                if (scale < 1) {
+                    canvas.style.transformOrigin = innerWidth > innerHeight ? '50% 0' : '0 50%';
                 }
                 else {
-                    height = width / ratio;
-                    this.state.scale = width / this.size.x;
-                }
-                for (const key in this.layers) {
-                    const layer = this.layers[key];
-                    layer.context = X.context(layer.canvas, width, height);
+                    canvas.style.transformOrigin = '';
                 }
             }
         }
+        const shakeX = this.shake.value ? this.shake.value * (Math.random() - 0.5) : 0;
+        const shakeY = this.shake.value ? this.shake.value * (Math.random() - 0.5) : 0;
         for (const key in this.layers) {
-            const { context, modifiers, objects } = this.layers[key];
-            if (update || !modifiers.includes('ambient')) {
-                const scale = this.state.scale;
+            const { modifiers, objects, renderer } = this.layers[key];
+            if (objects.length > 0 && (update || !modifiers.includes('ambient'))) {
                 const center = this.size.divide(2);
-                context.resetTransform();
-                modifiers.includes('cumulative') || context.clearRect(0, 0, context.canvas.width, context.canvas.height);
-                context.setTransform(scale, 0, 0, scale, scale * (center.x + -(modifiers.includes('static') ? center.x : camera.x)) +
-                    (this.shake.value ? scale * this.shake.value * (Math.random() - 0.5) : 0), scale * (center.y + -(modifiers.includes('static') ? center.y : camera.y)) +
-                    (this.shake.value ? scale * this.shake.value * (Math.random() - 0.5) : 0));
+                const statik = modifiers.includes('static');
+                this.reset(key);
                 if (modifiers.includes('vertical')) {
                     objects.sort((object1, object2) => (object1.priority.value || object1.position.y) - (object2.priority.value || object2.position.y));
                 }
+                const zoom = statik ? 1 : this.zoom.value;
+                const transform = [
+                    new XVector(center.x + -(statik ? center.x : camera.x) + shakeX, center.y + -(statik ? center.y : camera.y) + shakeY),
+                    0,
+                    new XVector(this.quality.value * zoom)
+                ];
                 for (const object of objects) {
-                    object.render(camera, context, X.transform, this.debug);
+                    object.render(renderer, camera, transform, [this.quality.value * zoom, zoom], {
+                        globalAlpha: 1,
+                        globalCompositeOperation: 'source-over',
+                        fillStyle: 'transparent',
+                        lineCap: 'butt',
+                        lineDashOffset: 0,
+                        lineJoin: 'miter',
+                        miterLimit: 10,
+                        lineWidth: 1,
+                        shadowBlur: 0,
+                        shadowColor: 'transparent',
+                        shadowOffsetX: 0,
+                        shadowOffsetY: 0,
+                        strokeStyle: 'transparent',
+                        textAlign: 'start',
+                        textBaseline: 'alphabetic',
+                        direction: 'ltr',
+                        font: '10px monospace'
+                    }, this.debug);
                 }
             }
         }
     }
 }
-/** A rendered object specifically designed to draw an image or images on a canvas. */
 class XSprite extends XObject {
     constructor(properties = {}) {
         super(properties);
-        /**
-         * This sprite's state. Contains the index of the currently displayed frame, whether or not the sprite is active, and
-         * the current step value.
-         */
         this.state = { index: 0, active: false, step: 0 };
         (({ auto = false, crop: { bottom = 0, left = 0, right = 0, top = 0 } = {}, step = 0, steps = 1, frames = [] } = {}) => {
             this.crop = { bottom, left, right, top };
@@ -906,7 +779,7 @@ class XSprite extends XObject {
     }
     compute() {
         const texture = this.frames[this.state.index];
-        if (texture) {
+        if (texture && texture.state.value) {
             const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
             const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
             const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
@@ -917,19 +790,59 @@ class XSprite extends XObject {
             return new XVector(0, 0);
         }
     }
-    /** Disables the sprite's animation. */
     disable() {
         this.state.active = false;
         return this;
     }
-    draw(context, base) {
+    draw(renderer, [position, rotation, scale], [quality, zoom], style, debug) {
         const texture = this.frames[this.state.index];
         if (texture && texture.state.value) {
+            const r = (Math.PI / 180) * (rotation % 360);
+            const a = (this.anchor.x + 1) / 2;
+            const b = (this.anchor.y + 1) / 2;
             const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
             const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
             const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
             const h = (this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom - y;
-            context.drawImage(texture.value, x, y, w, h, base.x, base.y, w, h);
+            const sprite = new PIXI.Sprite(X.cache.textures.get(texture));
+            sprite.anchor.set((x + w * a) / texture.value.width, (y + h * b) / texture.value.height);
+            sprite.position.set(position.x * quality, position.y * quality);
+            sprite.rotation = r;
+            sprite.scale.set(scale.x, scale.y);
+            sprite.alpha = style.globalAlpha;
+            sprite.blendMode = X.blend(style.globalCompositeOperation);
+            // mask setup
+            const graphics = new PIXI.Graphics();
+            graphics.position.set(sprite.position.x, sprite.position.y);
+            graphics.pivot.set(w * a, h * b);
+            graphics.rotation = r;
+            graphics.scale.set(scale.x, scale.y);
+            graphics.beginFill(0xffffff, 1).drawRect(0, 0, w, h).endFill();
+            const mask = new PIXI.MaskData(graphics);
+            mask.type = rotation % 90 === 0 ? PIXI.MASK_TYPES.SCISSOR : PIXI.MASK_TYPES.STENCIL;
+            sprite.mask = mask;
+            // render
+            (GL && rotation % 90 === 0) || renderer.render(graphics);
+            renderer.render(sprite);
+            // debug
+            /*
+            if (debug) {
+               const graphics = new PIXI.Graphics();
+               graphics.position.set(sprite.position.x, sprite.position.y);
+               graphics.pivot.set(w * a, h * b);
+               graphics.scale.set(scale.x, scale.y);
+               graphics
+                  .lineStyle({
+                     alpha: 0.5,
+                     color: parseInt('ffffff', 16),
+                     width: 1
+                  })
+                  .beginFill(0, 0)
+                  .drawRect(0, 0, w, h)
+                  .endFill();
+               renderer.render(graphics);
+            }
+            */
         }
         if (this.steps <= ++this.state.step) {
             this.state.step = 0;
@@ -938,75 +851,108 @@ class XSprite extends XObject {
             }
         }
     }
-    /** Enables the sprite's animation. */
     enable() {
         this.state.active = true;
         return this;
     }
-    /** Loads this sprite's frames. */
     async load() {
         await Promise.all(this.frames.map(asset => asset && asset.load()));
     }
-    /** Resets the sprite's animation to its default state. */
+    read(min, max) {
+        var _a, _b, _c, _d;
+        const frame = this.frames[this.state.index];
+        const colors = [];
+        if (frame) {
+            const sprite = PIXI.Sprite.from(X.cache.textures.get(frame));
+            const originX = Math.round((_a = min === null || min === void 0 ? void 0 : min.x) !== null && _a !== void 0 ? _a : 0);
+            const originY = Math.round((_b = min === null || min === void 0 ? void 0 : min.y) !== null && _b !== void 0 ? _b : 0);
+            const sizeX = Math.round((_c = max === null || max === void 0 ? void 0 : max.x) !== null && _c !== void 0 ? _c : sprite.width) - originX;
+            const sizeY = Math.round((_d = max === null || max === void 0 ? void 0 : max.y) !== null && _d !== void 0 ? _d : sprite.height) - originY;
+            const pixels = [
+                ...new (GL ? PIXI.Extract : PIXI.CanvasExtract)(X.shader)
+                    .pixels(sprite)
+                    .slice((originX + originY * sprite.width) * 4)
+            ];
+            while (colors.length < sizeY) {
+                const subcolors = [];
+                while (subcolors.length < sizeX) {
+                    subcolors.push(pixels.splice(0, 4));
+                }
+                colors.push(subcolors);
+                pixels.splice(0, (sprite.width - sizeY) * 4);
+            }
+        }
+        return colors;
+    }
     reset() {
         Object.assign(this.state, { active: false, index: 0, step: this.step });
         return this;
     }
-    /** Unloads this sprite's frames. */
     async unload() {
         await Promise.all(this.frames.map(asset => asset && asset.unload()));
     }
 }
-/** A rendered object specifically designed to draw text on a canvas. */
 class XText extends XObject {
     constructor(properties = {}) {
         super(properties);
-        (({ charset = '/0123456789=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', content = '', spacing: { x: spacing_x = 0, y: spacing_y = 0 } = {} } = {}) => {
+        (({ cache = true, charset = '/0123456789=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', content = '', spacing: { x: spacing_x = 0, y: spacing_y = 0 } = {} } = {}) => {
+            this.cache = cache;
             this.charset = charset;
             this.content = content;
             this.spacing = new XVector(spacing_x, spacing_y);
         })(properties);
     }
-    compute(context) {
-        const lines = this.content.split('\n').map(section => {
-            let total = 0;
-            for (const char of section) {
-                total += X.metrics(context, char).width + this.spacing.x;
-            }
-            return total;
-        });
-        const metrics = X.metrics(context, this.charset);
-        const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-        return new XVector(Math.max(...lines), height + (height + this.spacing.y) * (lines.length - 1));
+    compute() {
+        return new XVector();
     }
-    draw(context, base) {
+    draw(renderer, [position, rotation, scale], [quality, zoom], style) {
         let index = 0;
-        const state = {
-            fillStyle: context.fillStyle,
-            globalAlpha: context.globalAlpha,
-            globalCompositeOperation: context.globalCompositeOperation,
-            lineCap: context.lineCap,
-            lineDashOffset: context.lineDashOffset,
-            lineJoin: context.lineJoin,
-            lineWidth: context.lineWidth,
-            miterLimit: context.miterLimit,
-            shadowBlur: context.shadowBlur,
-            shadowColor: context.shadowColor,
-            shadowOffsetX: context.shadowOffsetX,
-            shadowOffsetY: context.shadowOffsetY,
-            strokeStyle: context.strokeStyle
-        };
+        const state = Object.assign({}, style);
         const phase = X.time / 1e3;
         const offset = { x: 0, y: 0 };
         const random = { x: 0, y: 0 };
         const swirl = { p: 0, r: 0, s: 0 };
-        const metrics = X.metrics(context, this.charset);
-        const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+        const [fontSize, fontFamily] = style.font.split(' ');
+        const shadowColor = X.color(style.shadowColor);
+        const strokeColor = X.color(style.strokeStyle);
+        const textStyle = new PIXI.TextStyle({
+            dropShadow: shadowColor[3] > 0,
+            dropShadowAlpha: shadowColor[3],
+            dropShadowAngle: X.zero.angle({ x: style.shadowOffsetX, y: style.shadowOffsetY }),
+            dropShadowBlur: style.shadowBlur,
+            dropShadowColor: `#${X.hex(shadowColor)}`,
+            dropShadowDistance: X.zero.extent({ x: style.shadowOffsetX, y: style.shadowOffsetY }),
+            fill: `#${X.hex(X.color(style.fillStyle))}`,
+            fontFamily,
+            fontSize,
+            lineJoin: style.lineJoin,
+            miterLimit: style.miterLimit,
+            stroke: `#${X.hex(strokeColor)}`,
+            strokeThickness: strokeColor[3] > 0 ? style.lineWidth : 0,
+            textBaseline: style.textBaseline
+        });
+        const metrics = X.metrics(textStyle, this.charset);
+        const lines = this.content.split('\n').map(section => {
+            let total = 0;
+            for (const char of section) {
+                total += X.metrics(textStyle, char).x + this.spacing.x;
+            }
+            return total;
+        });
+        const size = new XVector(Math.max(...lines), metrics.y + (metrics.y + this.spacing.y) * (lines.length - 1));
+        const half = size.divide(2);
+        const base = position
+            .divide(scale)
+            .multiply(quality)
+            .subtract(half.add(half.multiply(this.anchor)));
+        const container = new PIXI.Container();
+        container.rotation = (Math.PI / 180) * (rotation % 360);
+        container.scale.set(scale.x, scale.y);
         while (index < this.content.length) {
             const char = this.content[index++];
             if (char === '\n') {
                 offset.x = 0;
-                offset.y += height + this.spacing.y;
+                offset.y += metrics.y + this.spacing.y;
             }
             else if (char === '\xa7') {
                 const code = this.content.slice(index, this.content.indexOf('\xa7', index));
@@ -1014,49 +960,16 @@ class XText extends XObject {
                 index += code.length + 1;
                 switch (key) {
                     case 'alpha':
-                        context.globalAlpha = state.globalAlpha * new XNumber(+value).clamp(0, 1).value;
+                        style.globalAlpha = state.globalAlpha * Math.min(Math.max(+value, 0), 1);
                         break;
                     case 'blend':
-                        context.globalCompositeOperation = value;
+                        style.globalCompositeOperation = value;
                         break;
                     case 'fill':
-                        context.fillStyle = value;
+                        textStyle.fill = `#${X.hex(X.color(value))}`;
                         break;
                     case 'font':
-                        context.font = value;
-                        break;
-                    case 'line.cap':
-                        context.lineCap = value;
-                        break;
-                    case 'line.dash':
-                        const lineDash = +value;
-                        isNaN(lineDash) || (context.lineDashOffset = lineDash);
-                        break;
-                    case 'line.join':
-                        context.lineJoin = value;
-                        break;
-                    case 'line.miter':
-                        const lineMiter = +value;
-                        isNaN(lineMiter) || (context.miterLimit = lineMiter);
-                        break;
-                    case 'line.width':
-                        const lineWidth = +value;
-                        isNaN(lineWidth) || (context.lineWidth = lineWidth);
-                        break;
-                    case 'shadow.blur':
-                        const shadowBlur = +value;
-                        isNaN(shadowBlur) || (context.shadowBlur = shadowBlur);
-                        break;
-                    case 'shadow.color':
-                        context.shadowColor = value;
-                        break;
-                    case 'shadow.offset.x':
-                        const shadowOffsetX = +value;
-                        isNaN(shadowOffsetX) || (context.shadowOffsetX = shadowOffsetX);
-                        break;
-                    case 'shadow.offset.y':
-                        const shadowOffsetY = +value;
-                        isNaN(shadowOffsetY) || (context.shadowOffsetY = shadowOffsetY);
+                        style.font = value;
                         break;
                     case 'offset':
                         const [offsetX, offsetY] = value.split(',').map(value => +value);
@@ -1069,10 +982,11 @@ class XText extends XObject {
                         random.y = randomY || 0;
                         break;
                     case 'stroke':
-                        context.strokeStyle = value;
+                        const strokeColor = X.color(value);
+                        textStyle.stroke = `#${X.hex(strokeColor)}`;
+                        textStyle.strokeThickness = strokeColor[3] > 0 ? style.lineWidth : 0;
                         break;
                     case 'swirl':
-                        // period, radius, speed (rotations per second)
                         const [swirlR, swirlS, swirlP] = value.split(',').map(value => +value);
                         swirl.r = swirlR || 0;
                         swirl.s = swirlS || 0;
@@ -1081,8 +995,8 @@ class XText extends XObject {
                 }
             }
             else {
-                let x = base.x + offset.x;
-                let y = base.y + offset.y + height;
+                let x = base.x - textStyle.strokeThickness / 2 + offset.x;
+                let y = base.y - textStyle.strokeThickness / 2 + offset.y;
                 if (random.x > 0) {
                     x += random.x * (Math.random() - 0.5);
                 }
@@ -1094,118 +1008,127 @@ class XText extends XObject {
                     x = endpoint.x;
                     y = endpoint.y;
                 }
-                context.fillStyle === 'transparent' || context.fillText(char, x, y);
-                context.strokeStyle === 'transparent' || context.strokeText(char, x, y);
-                offset.x += X.metrics(context, char).width + this.spacing.x;
+                const font = X.font(textStyle, char, 40);
+                const info = font.chars[char.charCodeAt(0)];
+                if (info) {
+                    const text = PIXI.Sprite.from(info.texture);
+                    text.position.set(x + info.xOffset, y + info.yOffset);
+                    text.alpha = style.globalAlpha;
+                    text.blendMode = X.blend(style.globalCompositeOperation);
+                    container.addChild(text);
+                }
+                offset.x += X.metrics(textStyle, char).x + this.spacing.x;
             }
         }
-        Object.assign(context, state);
+        renderer.render(container);
+        Object.assign(style, state);
     }
 }
-/** An object representing a two-dimensional positional value. */
 class XVector {
-    constructor(a1 = 0, y = a1) {
-        if (typeof a1 === 'number') {
-            this.x = a1;
-            this.y = y;
+    constructor(a = 0, b = a) {
+        if (typeof a === 'number') {
+            this.x = a;
+            this.y = b;
         }
         else {
-            (this.x = a1.x || 0), (this.y = a1.y || 0);
+            this.x = a.x || 0;
+            this.y = a.y || 0;
         }
     }
-    add(a1, y = a1) {
-        if (typeof a1 === 'number') {
-            return new XVector(this.x + a1, this.y + y);
+    add(a, b = a) {
+        if (typeof a === 'number') {
+            return new XVector(this.x + a, this.y + b);
         }
         else {
-            return this.add(a1.x, a1.y);
+            return this.add(a.x, a.y);
         }
     }
-    /** Clamps this object's position within a region and returns a new `XVector` object with the result as its position. */
     clamp(min, max) {
-        return new XVector(new XNumber(this.x).clamp(min.x, max.x).value, new XNumber(this.y).clamp(min.y, max.y).value);
+        return new XVector(Math.min(Math.max(this.x, min.x), max.x), Math.min(Math.max(this.y, min.y), max.y));
     }
-    /** Returns a new `XVector` object with the same position as this object. */
     clone() {
         return new XVector(this);
     }
-    /** Calculates the relative direction from this object's position and another position. */
-    direction(vector) {
-        return (180 / Math.PI) * Math.atan2(this.y - vector.y, this.x - vector.x);
+    angle(vector) {
+        return ((180 / Math.PI) * Math.atan2(this.y - vector.y, this.x - vector.x) + 360) % 360;
     }
-    /** Calculates the distance between this object's position and another position. */
-    distance(vector) {
+    extent(vector) {
         return Math.sqrt((vector.x - this.x) ** 2 + (vector.y - this.y) ** 2);
     }
-    divide(a1, y = a1) {
-        if (typeof a1 === 'number') {
-            return new XVector(this.x / a1, this.y / y);
+    divide(a, b = a) {
+        if (typeof a === 'number') {
+            return new XVector(this.x / a, this.y / b);
         }
         else {
-            return this.divide(a1.x, a1.y);
+            return this.divide(a.x, a.y);
         }
     }
-    /**
-     * Calculates the position in a specific direction and at a specific distance from this object's position and returns
-     * a new `XVector` object with the result as its position.
-     */
-    endpoint(direction, distance) {
-        const radians = (((direction + 90) % 360) * Math.PI) / 180;
-        return new XVector(this.x + distance * Math.sin(Math.PI - radians), this.y + distance * Math.cos(Math.PI - radians));
+    endpoint(angle, extent) {
+        const rads = Math.PI - (((angle + 90) % 360) * Math.PI) / 180;
+        return new XVector(this.x + extent * Math.sin(rads), this.y + extent * Math.cos(rads));
     }
-    /** Alter the internal value of this positional over a specified duration. */
     modulate(duration, ...points) {
+        const x = this.x;
+        const y = this.y;
+        const base = X.time;
         return new Promise(resolve => {
-            const x = this.x;
-            const y = this.y;
-            X.cache.modulationTasks.get(this)?.cancel();
-            X.cache.modulationTasks.set(this, (() => {
-                let active = true;
-                X.chain(0, async (elapsed, next) => {
-                    if (active) {
-                        if (elapsed < duration) {
-                            this.x = X.math.bezier(elapsed / duration, x, ...points.map(point => point.x));
-                            this.y = X.math.bezier(elapsed / duration, y, ...points.map(point => point.y));
-                            await X.timer.on('tick');
-                            await next(elapsed + 5);
-                        }
-                        else {
-                            this.x = X.math.bezier(1, x, ...points.map(point => point.x));
-                            this.y = X.math.bezier(1, y, ...points.map(point => point.y));
-                            X.cache.modulationTasks.get(this)?.cancel();
-                            resolve();
-                        }
+            var _a;
+            let active = true;
+            (_a = X.cache.modulationTasks.get(this)) === null || _a === void 0 ? void 0 : _a.cancel();
+            X.cache.modulationTasks.set(this, {
+                cancel() {
+                    active = false;
+                }
+            });
+            const listener = () => {
+                if (active) {
+                    const elapsed = X.time - base;
+                    if (elapsed < duration) {
+                        this.x = X.math.bezier(elapsed / duration, x, ...points.map(point => point.x));
+                        this.y = X.math.bezier(elapsed / duration, y, ...points.map(point => point.y));
                     }
-                });
-                return { cancel: () => (active = false) };
-            })());
+                    else {
+                        X.cache.modulationTasks.delete(this);
+                        this.x = points.length > 0 ? points[points.length - 1].x : x;
+                        this.y = points.length > 0 ? points[points.length - 1].y : y;
+                        X.timer.off('tick', listener);
+                        resolve();
+                    }
+                }
+                else {
+                    X.timer.off('tick', listener);
+                }
+            };
+            X.timer.on('tick', listener);
         });
     }
-    multiply(a1, y = a1) {
-        if (typeof a1 === 'number') {
-            return new XVector(this.x * a1, this.y * y);
+    multiply(a, b = a) {
+        if (typeof a === 'number') {
+            return new XVector(this.x * a, this.y * b);
         }
         else {
-            return this.multiply(a1.x, a1.y);
+            return this.multiply(a.x, a.y);
         }
     }
-    /** Returns an `XVector` object with the rounded position of this object's position. */
     round(base) {
         return base ? this.multiply(base).round().divide(base) : new XVector(Math.round(this.x), Math.round(this.y));
     }
-    subtract(a1, y = a1) {
-        if (typeof a1 === 'number') {
-            return new XVector(this.x - a1, this.y - y);
+    shift(angle, extent, origin = X.zero) {
+        return origin.endpoint(this.angle(origin) + angle, this.extent(origin) + extent);
+    }
+    subtract(a, b = a) {
+        if (typeof a === 'number') {
+            return new XVector(this.x - a, this.y - b);
         }
         else {
-            return this.subtract(a1.x, a1.y);
+            return this.subtract(a.x, a.y);
         }
     }
-    /** Returns the raw values of this object's position. */
     value() {
         return { x: this.x, y: this.y };
     }
 }
+const GL = PIXI.utils.isWebGLSupported();
 const X = {
     /** Gets an `AudioBuffer` from the given source URL. */
     audio(source) {
@@ -1275,31 +1198,53 @@ const X = {
         });
         return asset;
     },
-    /** A cache for various types of resources. */
+    blend(input) {
+        switch (input) {
+            case 'lighten':
+                return PIXI.BLEND_MODES.ADD;
+            case 'multiply':
+                return PIXI.BLEND_MODES.MULTIPLY;
+            case 'screen':
+                return PIXI.BLEND_MODES.SCREEN;
+            default:
+                return PIXI.BLEND_MODES.NORMAL;
+        }
+    },
     cache: {
-        /** Stores promises for all audio requests. */
         audios: {},
-        /** All loaded assets attached to any given cached audio. */
         audioAssets: {},
-        /** Stores promises for all data requests. */
+        color: {},
         datas: {},
-        /** All loaded assets attached to any given cached data. */
         dataAssets: {},
-        /** Stores promises for all image requests. */
+        fonts: {},
         images: {},
-        /** All loaded assets attached to any given cached image. */
         imageAssets: {},
-        /** Computed text metrics. */
         textMetrics: {},
-        /** Stores all active modulation tasks for any `AudioParam`, `XNumber`, or `XVector` objects. */
+        textures: new Map(),
         modulationTasks: new Map()
     },
-    /** A recursive operator function. */
     chain(input, handler) {
         const loop = (input) => handler(input, loop);
         return loop(input);
     },
-    /** Sets the given canvas to the specified size and generates a new `CanvasRenderingContext2D` from it. */
+    color(input) {
+        if (input in X.cache.color) {
+            return X.cache.color[input];
+        }
+        else {
+            const element = document.createElement('x');
+            element.style.color = input;
+            document.body.appendChild(element);
+            const color = getComputedStyle(element)
+                .color.split('(')[1]
+                .slice(0, -1)
+                .split(', ')
+                .map(value => +value);
+            element.remove();
+            color.length === 3 && color.push(1);
+            return (X.cache.color[input] = color);
+        }
+    },
     context(canvas, width = 1, height = 1) {
         return Object.assign(Object.assign(canvas, { width, height }).getContext('2d'), {
             fillStyle: 'transparent',
@@ -1307,38 +1252,23 @@ const X = {
             strokeStyle: 'transparent'
         });
     },
-    /** Returns an audio daemon for generating audio player instances. */
-    daemon(audio, { 
-    /** The AudioContext to use for this daemon. */
-    context = new AudioContext(), 
-    /** The base gain of this player. */
-    gain = 1, 
-    /** Whether or not this player's instances should loop by default. */
-    loop = false, 
-    /** The base playback rate of this player. */
-    rate = 1, 
-    /** The audio router to use for this object. */
-    router = ((context, input) => input.connect(context.destination)) } = {}) {
+    daemon(audio, { context = new AudioContext(), gain = 1, loop = false, rate = 1, router = ((context, input) => input.connect(context.destination)) } = {}) {
         const daemon = {
             audio,
             context,
             gain,
-            instance(offset = 0) {
-                // initialize values
+            instance(offset = 0, store = false) {
                 const context = daemon.context;
                 const gain = context.createGain();
                 const source = context.createBufferSource();
-                // set defaults
                 gain.gain.value = daemon.gain;
                 source.buffer = daemon.audio.value;
                 source.loop = daemon.loop;
                 source.playbackRate.value = daemon.rate;
-                // establish connections
                 daemon.router(context, gain);
                 source.connect(gain);
                 source.start(0, offset);
-                // return controller
-                return {
+                const instance = {
                     context,
                     daemon,
                     gain: gain.gain,
@@ -1353,8 +1283,11 @@ const X = {
                         source.stop();
                         source.disconnect();
                         source.buffer = null;
+                        store && daemon.instances.splice(daemon.instances.indexOf(instance), 1);
                     }
                 };
+                store && daemon.instances.push(instance);
+                return instance;
             },
             instances: [],
             loop,
@@ -1363,7 +1296,6 @@ const X = {
         };
         return daemon;
     },
-    /** Gets an `XBasic` from the given source URL. */
     data(source) {
         if (source in X.cache.datas) {
             return X.cache.datas[source];
@@ -1372,17 +1304,7 @@ const X = {
             return (X.cache.datas[source] = fetch(source).then(value => value.json()));
         }
     },
-    /** Returns an asset for a given data source. */
-    dataAsset(
-    /** The data's source. */
-    source, { 
-    /**
-     * The extra duration in which to keep this asset's source data in memory after this asset and all of its
-     * siblings (other assets which share this asset's source data) are unloaded.
-     */
-    cache = 0, 
-    /** The pixel shader to apply to the image. */
-    modifier = void 0 } = {}) {
+    dataAsset(source, { cache = 0, modifier = void 0 } = {}) {
         const asset = new XAsset({
             async loader() {
                 const assets = X.cache.dataAssets[source] || (X.cache.dataAssets[source] = []);
@@ -1408,47 +1330,56 @@ const X = {
         });
         return asset;
     },
-    /** Gets an `HTMLImageElement` from the given source URL. */
+    font(style, charset, quality = 1) {
+        const key = `${Object.values(style).join('\x00')}\x00${charset}\x00${quality}`;
+        if (key in X.cache.fonts) {
+            return X.cache.fonts[key];
+        }
+        else {
+            const size = typeof style.fontSize === 'number' ? style.fontSize : +style.fontSize.replace(/(px|pt|em|%)/g, '');
+            return (X.cache.fonts[key] = PIXI.BitmapFont.from(key, style, {
+                chars: charset.split(''),
+                padding: 0,
+                resolution: quality,
+                textureHeight: Math.max(size * quality * 1.25, 100),
+                textureWidth: Math.max(size * quality * 1.25, 100)
+            }));
+        }
+    },
+    hex(color, alpha = false) {
+        return color
+            .slice(0, alpha ? 4 : 3)
+            .map(value => value.toString(16).padStart(2, '0'))
+            .join('');
+    },
     image(source) {
         if (source in X.cache.images) {
             return X.cache.images[source];
         }
         else {
-            return (X.cache.images[source] = new Promise(resolve => {
-                const request = Object.assign(new XMLHttpRequest(), { responseType: 'arraybuffer' });
-                request.addEventListener('load', () => {
-                    const image = document.createElement('img');
-                    image.addEventListener('load', () => resolve(image));
-                    image.src = URL.createObjectURL(new Blob([new Uint8Array(request.response)], { type: 'image/jpeg' }));
-                });
-                request.open('GET', source, true);
-                request.send();
-            }));
+            const texture = PIXI.BaseTexture.from(source);
+            return (X.cache.images[source] = texture.resource.load().then(() => texture));
         }
     },
-    /** Returns an asset for a given image source. */
-    imageAsset(
-    /** The image's source. */
-    source, { 
-    /**
-     * The extra duration in which to keep this asset's source image in memory after this asset and all of its
-     * siblings (other assets which share this asset's source image) are unloaded.
-     */
-    cache = 0, 
-    /** The pixel shader to apply to the image. */
-    shader = void 0 } = {}) {
+    imageAsset(source, { cache = 0, shader = void 0 } = {}) {
         const asset = new XAsset({
             async loader() {
                 const assets = X.cache.imageAssets[source] || (X.cache.imageAssets[source] = []);
                 assets.includes(asset) || assets.push(asset);
-                const image = await X.image(source);
+                let image = await X.image(source);
                 if (image.width === 0 || image.height === 0) {
-                    return await createImageBitmap(new ImageData(1, 1));
+                    image = PIXI.BaseTexture.from(await createImageBitmap(new ImageData(1, 1)));
                 }
                 else if (shader) {
-                    const context = X.context(document.createElement('canvas'), image.width, image.height);
-                    context.drawImage(image, 0, 0);
-                    const { data } = context.getImageData(0, 0, image.width, image.height);
+                    X.shader.view.height = image.height;
+                    X.shader.view.width = image.width;
+                    const sprite = PIXI.Sprite.from(image);
+                    sprite.scale.y = -1;
+                    sprite.anchor.y = 1;
+                    X.shader.render(sprite);
+                    const data = new Uint8ClampedArray(new (GL ? PIXI.Extract : PIXI.CanvasExtract)(X.shader).pixels());
+                    X.shader.clear();
+                    sprite.destroy();
                     const x4 = image.width * 4;
                     const index = { x: -1, y: -1 };
                     const total = { x: image.width, y: image.height };
@@ -1464,27 +1395,30 @@ const X = {
                         }
                         index.y = -1;
                     }
-                    return await createImageBitmap(new ImageData(data, image.width));
+                    image = PIXI.BaseTexture.from(await createImageBitmap(new ImageData(data, image.width)));
                 }
-                else {
-                    return image;
-                }
+                X.cache.textures.set(asset, PIXI.Texture.from(image));
+                return image;
             },
             source,
             async unloader() {
                 const assets = X.cache.imageAssets[source] || (X.cache.imageAssets[source] = []);
                 X.pause(cache).then(() => {
+                    var _a;
                     assets.includes(asset) && assets.splice(assets.indexOf(asset), 1);
                     if (assets.length === 0) {
-                        X.cache.images[source].then(image => URL.revokeObjectURL(image.src));
+                        (_a = X.cache.images[source]) === null || _a === void 0 ? void 0 : _a.then(image => image.destroy());
                         delete X.cache.images[source];
+                        if (X.cache.textures.has(asset)) {
+                            X.cache.textures.get(asset).destroy();
+                            X.cache.textures.delete(asset);
+                        }
                     }
                 });
             }
         });
         return asset;
     },
-    /** Returns an inventory. */
     inventory(...assets) {
         return new XAsset({
             async loader() {
@@ -1496,59 +1430,56 @@ const X = {
             }
         });
     },
-    /** Various math-related methods used throughout the engine. */
     math: {
-        /** Calculates the value of a position on an polynomial bezier curve. */
         bezier(value, ...points) {
             return points.length > 1
                 ? X.math.bezier(value, ...points.slice(0, -1).map((point, index) => point * (1 - value) + points[index + 1] * value))
                 : points[0] || 0;
         },
-        /** Checks if two line segments intersect. */
+        format(value) {
+            return Math.round(value);
+        },
         intersection(a1, a2, b1, b2) {
             return (X.math.rotation(a1, b1, b2) !== X.math.rotation(a2, b1, b2) &&
                 X.math.rotation(a1, a2, b1) !== X.math.rotation(a1, a2, b2));
         },
-        /** Rotates a line segment for optimized intersection checking. */
+        remap(value, min2, max2, min1 = 0, max1 = 1) {
+            return ((value - min1) * (max2 - min2)) / (max1 - min1) + min2;
+        },
         rotation(a1, a2, a3) {
             return (a3.y - a1.y) * (a2.x - a1.x) > (a2.y - a1.y) * (a3.x - a1.x);
         },
-        /** Maps a value to a sine wave with a 0-1 input and output range. */
         wave(value) {
             return Math.sin(((value + 0.5) * 2 - 1) * Math.PI) / 2 + 0.5;
         }
     },
-    metrics(context, content) {
-        const key = `${context.font} ${context.textAlign} ${context.textBaseline} ${content}`;
+    metrics(style, content) {
+        const key = `${style.toFontString()}\x00${content}`;
         if (key in X.cache.textMetrics) {
             return X.cache.textMetrics[key];
         }
         else {
-            return (X.cache.textMetrics[key] = context.measureText(content));
+            let index = 0;
+            let width = 0;
+            let height = 0;
+            const font = X.font(style, content);
+            while (index < content.length) {
+                const info = font.chars[content.charCodeAt(index++)];
+                if (info) {
+                    width += info.texture.width + info.xOffset || 0 + info.xAdvance || 0;
+                    height = Math.max(height, info.texture.height + info.yOffset || 0);
+                }
+            }
+            return (X.cache.textMetrics[key] = { x: width, y: height });
         }
     },
-    /** Parses JS objects previously stringified with `X.stringify()` */
     parse(text) {
         return JSON.parse(text, (key, value) => {
-            if (typeof value === 'string') {
-                switch (value[0]) {
-                    case '!':
-                        return value.slice(1);
-                    case '@':
-                        try {
-                            return eval(`(${value.slice(1)})`);
-                        }
-                        catch (error) {
-                            try {
-                                return eval(`({${value.slice(1)}})`)[key];
-                            }
-                            catch (error) {
-                                return void 0;
-                            }
-                        }
-                    case '#':
-                        return eval(value);
-                }
+            if (value === '\x00') {
+                return Infinity;
+            }
+            else if (value === '\x01') {
+                return -Infinity;
             }
             else {
                 return value;
@@ -1556,9 +1487,8 @@ const X = {
         });
     },
     provide(provider, ...args) {
-        return typeof provider === 'function' ? provider(...args) : provider;
+        return typeof provider === 'function' ? X.provide(provider(...args)) : provider;
     },
-    /** Returns a promise that will resolve after the specified duration in milliseconds. */
     pause(duration = 0) {
         if (duration === Infinity) {
             return new Promise(resolve => { });
@@ -1566,50 +1496,58 @@ const X = {
         else {
             return X.chain(0, async (elapsed, next) => {
                 if (elapsed < duration) {
-                    await X.timer.on('tick');
-                    await next(elapsed + 5);
+                    await next(elapsed + (await X.timer.on('tick'))[0]);
                 }
             });
         }
     },
-    /** Converts JS objects to JSON with support for functions, undefined values, infinity, and nan values. */
+    shader: new (GL ? PIXI.Renderer : PIXI.CanvasRenderer)({
+        antialias: false,
+        backgroundAlpha: 0,
+        clearBeforeRender: false
+    }),
+    speed: 1,
     stringify(value) {
         return JSON.stringify(value, (key, value) => {
-            switch (value) {
-                case +Infinity:
-                    return '#+Infinity';
-                case -Infinity:
-                    return '#-Infinity';
-                default:
-                    switch (typeof value) {
-                        case 'bigint':
-                            return `#${value}n`;
-                        case 'function':
-                            return `@${value}`;
-                        case 'number':
-                            return value === value ? value : '#NaN';
-                        case 'string':
-                            return `!${value}`;
-                        default:
-                            return value;
-                    }
+            if (value === Infinity) {
+                return '\x00';
+            }
+            else if (value === -Infinity) {
+                return '\x01';
+            }
+            else {
+                return value;
             }
         });
     },
-    /** The global time. */
+    text: (() => {
+        const canvas = document.createElement('canvas');
+        Object.assign(canvas.style, {
+            imageRendering: 'pixelated',
+            webkitFontSmoothing: 'none'
+        });
+        return canvas;
+    })(),
     time: 0,
-    /** The global timer. */
-    timer: new XHost(),
-    /** The inital transform used in rendering and vertex calculations. */
-    transform: [new XVector(), new XNumber(), new XVector(1)]
+    timer: (() => {
+        const host = new XHost();
+        host.on('init').then(() => {
+            setInterval(() => {
+                X.time += 5 * X.speed;
+                X.timer.fire('tick', 5 * X.speed);
+            }, 5);
+        });
+        return host;
+    })(),
+    zero: new XVector()
 };
+PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
+PIXI.settings.ROUND_PIXELS = false;
+PIXI.settings.RESOLUTION = devicePixelRatio;
 Object.assign(AudioParam.prototype, {
     modulate(duration, ...points) {
         return XNumber.prototype.modulate.call(this, duration, ...points);
     }
 });
-setInterval(() => {
-    X.time += 5;
-    X.timer.fire('tick');
-}, 5);
+X.timer.fire('init');
 //# sourceMappingURL=engine.js.map
