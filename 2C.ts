@@ -25,13 +25,7 @@ type PResource = import('pixi.js-legacy').Resource;
 type PTextStyle = import('pixi.js-legacy').TextStyle;
 type PTexture = import('pixi.js-legacy').Texture<PResource>;
 
-/** A two-dimensional vector. */
-type X2 = {
-   /** The vector's X-coordinate. */
-   x: number;
-   /** The vector's Y-coordinate. */
-   y: number;
-};
+type X2 = { x: number; y: number };
 
 type XAnimationData<A extends string = string> = {
    frames: { duration: number; frame: { x: number; y: number; w: number; h: number } }[];
@@ -2358,9 +2352,14 @@ const X = {
       }
    },
    when (condition: () => boolean) {
-      return X.chain<void, Promise<void>>(void 0, async (v, n) => {
-         await X.timer.on('tick');
-         condition() || (await n());
+      return new Promise<void>(resolve => {
+         const listener = () => {
+            if (condition()) {
+               resolve();
+               X.timer.off('tick', listener);
+            }
+         };
+         X.timer.on('tick', listener);
       });
    },
    zero: new XVector()
@@ -2370,10 +2369,8 @@ PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
 PIXI.settings.ROUND_PIXELS = false;
 PIXI.settings.RESOLUTION = 1;
 
-Object.assign(AudioParam.prototype, {
-   modulate (duration: number, ...points: number[]) {
-      return XNumber.prototype.modulate.call(this, duration, ...points);
-   }
-});
+AudioParam.prototype.modulate = function (duration: number, ...points: number[]) {
+   return XNumber.prototype.modulate.call(this, duration, ...points);
+}
 
 X.timer.fire('init');

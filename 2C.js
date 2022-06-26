@@ -1919,9 +1919,14 @@ const X = {
         }
     },
     when(condition) {
-        return X.chain(void 0, async (v, n) => {
-            await X.timer.on('tick');
-            condition() || (await n());
+        return new Promise(resolve => {
+            const listener = () => {
+                if (condition()) {
+                    resolve();
+                    X.timer.off('tick', listener);
+                }
+            };
+            X.timer.on('tick', listener);
         });
     },
     zero: new XVector()
@@ -1929,10 +1934,8 @@ const X = {
 PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
 PIXI.settings.ROUND_PIXELS = false;
 PIXI.settings.RESOLUTION = 1;
-Object.assign(AudioParam.prototype, {
-    modulate(duration, ...points) {
-        return XNumber.prototype.modulate.call(this, duration, ...points);
-    }
-});
+AudioParam.prototype.modulate = function (duration, ...points) {
+    return XNumber.prototype.modulate.call(this, duration, ...points);
+};
 X.timer.fire('init');
 //# sourceMappingURL=2C.js.map
