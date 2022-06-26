@@ -1,38 +1,62 @@
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
-//                                                                                                      //
-//   ########   ########   ########   ########                                                          //
-//   ##         ##    ##   ##    ##   ##                                                                //
-//   ##         ##    ##   ##    ##   ##                                                                //
-//   ##         ##    ##   ########   ######                                                            //
-//   ##         ##    ##   ## ###     ##                                                                //
-//   ##         ##    ##   ##  ###    ##                                                                //
-//   ########   ########   ##   ###   ########                                                          //
-//                                                                                                      //
-//// needs more optimizating /////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////
+//                                                             //
+//    ::::::::   ::::::::  :::    ::: ::::::::::: ::::::::::   //
+//   :+:    :+: :+:    :+: :+:    :+:     :+:     :+:          //
+//         +:+  +:+        +:+    +:+     +:+     +:+          //
+//       +#+    +#+        +#+    +:+     +#+     +#++:++#     //
+//     +#+      +#+        +#+    +#+     +#+     +#+          //
+//    #+#       #+#    #+# #+#    #+#     #+#     #+#          //
+//   ##########  ########   ########      ###     ##########   //
+//                                                             //
+//// needs more optimizating ////////////////////////////////////
+
 declare const PIXI: typeof import('pixi.js-legacy');
 
 interface AudioParam {
    modulate(duration: number, ...points: number[]): Promise<void>;
 }
 
-type PBaseTexture = import('pixi.js-legacy').BaseTexture<PResource, PIAutoDetectOptions>;
+type PBaseTexture = import('pixi.js-legacy').BaseTexture;
 type PBitmapFont = import('pixi.js-legacy').BitmapFont;
 type PCanvasRenderer = import('pixi.js-legacy').CanvasRenderer;
-type PIAutoDetectOptions = import('pixi.js-legacy').IAutoDetectOptions;
-type PPrepare = import('pixi.js-legacy').Prepare;
+type PExtract = import('pixi.js-legacy').Extract;
 type PRenderer = import('pixi.js-legacy').Renderer;
-type PRectangle = import('pixi.js-legacy').Rectangle;
 type PResource = import('pixi.js-legacy').Resource;
-type PTextMetrics = import('pixi.js-legacy').TextMetrics;
 type PTextStyle = import('pixi.js-legacy').TextStyle;
 type PTexture = import('pixi.js-legacy').Texture<PResource>;
 
-type X2 = { x: number; y: number };
+/** A two-dimensional vector. */
+type X2 = {
+   /** The vector's X-coordinate. */
+   x: number;
+   /** The vector's Y-coordinate. */
+   y: number;
+};
 
+type XAnimationData<A extends string = string> = {
+   frames: { duration: number; frame: { x: number; y: number; w: number; h: number } }[];
+   meta: { frameTags: { name: A; from: number; to: number }[]; size: { w: number; h: number } };
+};
+
+type XAnimationProperties = XNot<XSpriteProperties, 'crop' | 'frames' | 'steps'> & {
+   subcrop?: Partial<XKeyed<number, 'bottom' | 'left' | 'right' | 'top'>>;
+   framerate?: number;
+   resources?: XAnimationResources | null;
+   stepper?: boolean;
+};
+
+type XAnimationResources = XInventory<[XData<XAnimationData>, XImage]>;
 type XAtlasProperties<A extends string = string> = { navigators?: XKeyed<XNavigator<A>, A> | void } | void;
 type XAudio = XAsset<AudioBuffer>;
 type XBasic = { [k: string]: XBasic } | XBasic[] | string | number | boolean | null | undefined | void;
 type XCardinal = 'down' | 'left' | 'right' | 'up';
+type XCharacterPreset = XKeyed<XKeyed<XSprite, 'down' | 'left' | 'up' | 'right'>, 'walk' | 'talk'>;
+
+type XCharacterProperties = XNot<XEntityProperties, 'sprites'> & {
+   preset: XCharacterPreset;
+   key: string;
+};
+
 type XColor = [number, number, number, number];
 
 type XDaemon = {
@@ -48,6 +72,7 @@ type XDaemon = {
 
 type XData<A extends XBasic = XBasic> = XAsset<A>;
 type XDefined<A> = Exclude<A, null | undefined | void>;
+type XEntityProperties = XNot<XHitboxProperties, 'objects'> & XProperties<XEntity, 'sprites' | 'step'>;
 type XFactor = [number, number];
 type XHandler<A extends any[] = any> = ((...data: A) => any) | { listener: (...data: A) => any; priority: number };
 type XHitboxProperties = XObjectProperties & XProperties<XHitbox, 'size'>;
@@ -75,6 +100,8 @@ type XNavigatorKey<A extends string = string> = A | null | undefined | void;
 type XNavigatorProperties<A extends string = string> = XProperties<XNavigator<A>, 'objects' | 'position'> &
    ({ [x in 'flip' | 'grid' | 'next' | 'prev']?: XNavigator<A>[x] | void } | void);
 
+type XNot<A, B extends string> = { [x in Exclude<keyof XDefined<A>, B>]?: XDefined<A>[x] };
+
 type XObjectProperties = XProperties<
    XObject,
    | 'alpha'
@@ -98,6 +125,7 @@ type XObjectProperties = XProperties<
 >;
 
 type XPathProperties = XObjectProperties & XProperties<XPath, 'size'> & ({ tracer?: XTracer | void } | void);
+type XPlayerProperties = XEntityProperties & XProperties<XPlayer, 'extent'>;
 
 type XPrimitive<A> = A extends string | number | boolean | null | undefined
    ? A | void
@@ -139,10 +167,11 @@ type XRendererLayerModifier = 'ambient' | 'static' | 'vertical';
 
 type XRendererProperties<A extends string = string> = XProperties<
    XRenderer<A>,
-   'alpha' | 'camera' | 'container' | 'debug' | 'framerate' | 'region' | 'shake' | 'size' | 'quality' | 'zoom'
+   'alpha' | 'camera' | 'container' | 'framerate' | 'region' | 'shake' | 'size' | 'quality' | 'zoom'
 > &
    ({ auto?: boolean | void; layers?: Partial<XKeyed<XRendererLayerModifier[], A>> | void } | void);
 
+type XResult<A> = A extends () => Promise<infer B> ? B : never;
 type XRouter = (context: AudioContext, input: GainNode) => void;
 
 type XSpriteProperties = XObjectProperties &
@@ -177,6 +206,140 @@ type XTracer = (
    style: XStyle
 ) => void;
 type XTransform = [XVector, number, XVector];
+
+class XAtlas<A extends string = string> {
+   navigators: XKeyed<XNavigator<A>, A>;
+   state = { navigator: null as XNavigatorKey<A> };
+   constructor ({ navigators = {} as XKeyed<XNavigator<A>, A> }: XAtlasProperties<A> = {}) {
+      this.navigators = navigators;
+   }
+   attach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never, ...navigators: A[]) {
+      for (const navigator of navigators) {
+         navigator in this.navigators && this.navigators[navigator].attach(renderer, layer);
+      }
+   }
+   detach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never, ...navigators: A[]) {
+      for (const navigator of navigators) {
+         navigator in this.navigators && this.navigators[navigator].detach(renderer, layer);
+      }
+   }
+   navigator () {
+      return this.state.navigator ? this.navigators[this.state.navigator] : void 0;
+   }
+   seek ({ x = 0, y = 0 }: XPrimitive<X2> = {}) {
+      const navigator = this.navigator();
+      if (navigator) {
+         const origin = navigator.selection();
+         const row = X.provide(navigator.grid, navigator, this);
+         const flip = X.provide(navigator.flip, navigator, this);
+         navigator.position.x = Math.min(Math.max(navigator.position.x, 0), row.length - 1);
+         navigator.position.x += flip ? y : x;
+         if (row.length - 1 < navigator.position.x) {
+            navigator.position.x = 0;
+         } else if (navigator.position.x < 0) {
+            navigator.position.x = row.length - 1;
+         }
+         const column = row[navigator.position.x] || [];
+         navigator.position.y = Math.min(Math.max(navigator.position.y, 0), column.length - 1);
+         navigator.position.y += flip ? x : y;
+         if (column.length - 1 < navigator.position.y) {
+            navigator.position.y = 0;
+         } else if (navigator.position.y < 0) {
+            navigator.position.y = column.length - 1;
+         }
+         origin === navigator.selection() || navigator.fire('move', this, navigator);
+      }
+   }
+   navigate (action: 'next' | 'prev') {
+      switch (action) {
+         case 'next':
+         case 'prev':
+            const navigator = this.navigator();
+            if (navigator) {
+               this.switch(X.provide(navigator[action], navigator, this) as XNavigatorKey<A>);
+            } else {
+               this.switch(null);
+            }
+      }
+   }
+   switch (name: XNavigatorKey<A>) {
+      if (name !== void 0) {
+         let next: XNavigator<A> | null = null;
+         if (typeof name === 'string') {
+            if (name in this.navigators) {
+               next = this.navigators[name];
+            } else {
+               return;
+            }
+         }
+         const navigator = this.navigator();
+         navigator && navigator.fire('to', this, name, navigator);
+         next && next.fire('from', this, this.state.navigator, navigator);
+         this.state.navigator = name;
+      }
+   }
+}
+
+class XCache<A, B> extends Map<A, B> {
+   compute: (object: A) => B;
+   constructor (compute: (object: A) => B) {
+      super();
+      this.compute = compute;
+   }
+   of (object: A) {
+      this.has(object) || this.set(object, this.compute(object));
+      return this.get(object) as B;
+   }
+}
+
+class XEffect {
+   context: AudioContext;
+   dry: GainNode;
+   output: GainNode;
+   processor: AudioNode;
+   wet: GainNode;
+   get value () {
+      return this.wet.gain.value;
+   }
+   set value (value) {
+      this.dry.gain.value = 1 - (this.wet.gain.value = value);
+   }
+   constructor (context: AudioContext, processor: AudioNode, value = 1) {
+      this.context = context;
+      this.processor = processor;
+      this.dry = context.createGain();
+      this.wet = context.createGain();
+      this.output = context.createGain();
+      this.dry.connect(this.output);
+      this.processor.connect(this.wet).connect(this.output);
+      this.value = value;
+   }
+   connect (target: XEffect | AudioNode | AudioContext) {
+      if (target instanceof AudioContext) {
+         this.output.connect(target.destination);
+      } else if (target instanceof AudioNode) {
+         this.output.connect(target);
+      } else {
+         this.output.connect(target.dry);
+         this.output.connect(target.processor);
+      }
+   }
+   disconnect (target?: XEffect | AudioNode | AudioContext) {
+      if (target instanceof AudioContext) {
+         this.output.disconnect(target.destination);
+      } else if (target instanceof AudioNode) {
+         this.output.disconnect(target);
+      } else if (target) {
+         this.output.disconnect(target.dry);
+         this.output.disconnect(target.processor);
+      } else {
+         this.output.disconnect();
+      }
+   }
+   modulate (duration: number, ...points: number[]) {
+      return XNumber.prototype.modulate.call(this, duration, ...points);
+   }
+}
 
 class XHost<A extends XKeyed<any[]> = {}> {
    events: { [B in keyof A]?: XHandler<A[B]>[] } = {};
@@ -228,6 +391,190 @@ class XHost<A extends XKeyed<any[]> = {}> {
    }
    wrapOn<B extends keyof A> (name: B, provider: (host: this) => XHandler<A[B]>) {
       return this.on(name, provider(this));
+   }
+}
+
+class XAsset<A = any> extends XHost<{ load: []; unload: [] }> {
+   loader: () => Promise<A>;
+   source: string;
+   state = { value: void 0 as A | void };
+   unloader: () => Promise<void>;
+   get value () {
+      const value = this.state.value;
+      if (value === void 0) {
+         throw `The asset of "${this.source}" is not currently loaded!`;
+      } else {
+         return value;
+      }
+   }
+   constructor ({
+      loader,
+      source,
+      unloader
+   }: {
+      loader: () => Promise<A>;
+      source: string;
+      unloader: () => Promise<void>;
+   }) {
+      super();
+      this.loader = loader;
+      this.source = source;
+      this.unloader = unloader;
+   }
+   async load (force?: boolean) {
+      if (force || this.state.value === void 0) {
+         this.state.value = await this.loader();
+         this.fire('load');
+      }
+   }
+   async unload (force?: boolean) {
+      if (force || this.state.value !== void 0) {
+         this.state.value = await this.unloader();
+         this.fire('unload');
+      }
+   }
+}
+
+class XInput extends XHost<XKeyed<[string], 'down' | 'up'>> {
+   state = { codes: new Set<string>() };
+   constructor ({ codes = [], target = window as any }: XInputProperties = {}) {
+      super();
+      target.addEventListener('keyup', ({ code }) => {
+         if (codes.includes(code) && this.state.codes.has(code)) {
+            this.state.codes.delete(code);
+            this.fire('up', code);
+         }
+      });
+      target.addEventListener('keydown', ({ code }) => {
+         if (codes.includes(code) && !this.state.codes.has(code)) {
+            this.state.codes.add(code);
+            this.fire('down', code);
+         }
+      });
+   }
+   active () {
+      return this.state.codes.size > 0;
+   }
+}
+
+class XMixer {
+   context: AudioContext;
+   effects: XEffect[];
+   input: GainNode;
+   output: GainNode;
+   constructor (context: AudioContext, effects = [] as XEffect[]) {
+      this.context = context;
+      this.effects = effects;
+      this.input = context.createGain();
+      this.output = context.createGain();
+      this.refresh();
+   }
+   refresh () {
+      for (const [ index, controller ] of [ this.input, ...this.effects ].entries()) {
+         controller.disconnect();
+         if (index === this.effects.length) {
+            controller.connect(this.output);
+         } else if (controller instanceof XEffect) {
+            controller.connect(this.effects[index]);
+         } else {
+            controller.connect(this.effects[index].dry);
+            controller.connect(this.effects[index].processor);
+         }
+      }
+   }
+}
+
+class XModule<A, B extends any[]> {
+   name: string;
+   script: (...args: B) => Promise<A>;
+   promise = void 0 as Promise<A> | void;
+   constructor (name: string, script: (...args: B) => Promise<A>) {
+      this.name = name;
+      this.script = script;
+   }
+   import (...args: B) {
+      X.status(`IMPORT MODULE: ${this.name}`, { color: '#07f' });
+      return (this.promise ??= new Promise<A>(async resolve => {
+         try {
+            resolve(await this.script(...args));
+            X.status(`MODULE INITIALIZED: ${this.name}`, { color: '#0f0' });
+         } catch (error) {
+            X.status(`MODULE ERROR: ${this.name}`, { color: '#f00' });
+            console.error(error);
+         }
+      }));
+   }
+}
+
+class XNavigator<A extends string = string> extends XHost<
+   XKeyed<[XAtlas<A>, XNavigatorKey<A>, XNavigator<A> | void], 'from' | 'to'> & { move: [XAtlas<A>, XNavigator<A>] }
+> {
+   flip: XProvider<boolean, [XNavigator<A>, XAtlas<A>]>;
+   grid: XProvider<XBasic[][], [XNavigator<A>, XAtlas<A> | void]>;
+   next: XProvider<XNavigatorKey<A>, [XNavigator<A>, XAtlas<A>]>;
+   objects: XObject[];
+   position: X2;
+   prev: XProvider<XNavigatorKey<A>, [XNavigator<A>, XAtlas<A>]>;
+   constructor ({
+      flip = false,
+      grid = [],
+      next = void 0,
+      objects = [],
+      position: { x = 0, y = 0 } = {},
+      prev = void 0
+   }: XNavigatorProperties<A> = {}) {
+      super();
+      this.flip = flip;
+      this.grid = grid;
+      this.next = next;
+      this.objects = objects.map(object => (object instanceof XObject ? object : new XObject(object)));
+      this.position = { x, y };
+      this.prev = prev;
+   }
+   attach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never) {
+      renderer.attach(layer, ...this.objects);
+   }
+   detach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never) {
+      renderer.detach(layer, ...this.objects);
+   }
+   selection () {
+      return (X.provide(this.grid, this)[this.position.x] || [])[this.position.y];
+   }
+}
+
+class XNumber {
+   value: number;
+   constructor (value = 0) {
+      this.value = value;
+   }
+   modulate (duration: number, ...points: number[]) {
+      const base = X.time;
+      const value = this.value;
+      return new Promise<void>(resolve => {
+         let active = true;
+         X.cache.modulationTasks.get(this)?.cancel();
+         X.cache.modulationTasks.set(this, {
+            cancel () {
+               active = false;
+            }
+         });
+         const listener = () => {
+            if (active) {
+               const elapsed = X.time - base;
+               if (elapsed < duration) {
+                  this.value = X.math.bezier(elapsed / duration, value, ...points);
+               } else {
+                  X.cache.modulationTasks.delete(this);
+                  this.value = points.length > 0 ? points[points.length - 1] : value;
+                  X.timer.off('tick', listener);
+                  resolve();
+               }
+            } else {
+               X.timer.off('tick', listener);
+            }
+         };
+         X.timer.on('tick', listener);
+      });
    }
 }
 
@@ -331,33 +678,26 @@ class XObject extends XHost<{ tick: [] }> {
    compute () {
       return X.zero;
    }
-   draw(
-      renderer: PRenderer | PCanvasRenderer,
-      transform: XTransform,
-      [ quality, zoom ]: XFactor,
-      style: XStyle,
-      debug: boolean
-   ): void;
+   draw(renderer: PRenderer | PCanvasRenderer, transform: XTransform, [ quality, zoom ]: XFactor, style: XStyle): void;
    draw () {}
    render (
       renderer: PRenderer | PCanvasRenderer,
       camera: X2,
       transform: XTransform,
       [ quality, zoom ]: XFactor,
-      style: XStyle,
-      debug: boolean
+      style: XStyle
    ) {
       if (this.gravity.extent.value !== 0) {
          Object.assign(
             this.velocity,
-            this.velocity.endpoint(this.gravity.angle.value, this.gravity.extent.value).value()
+            this.velocity.endpoint(this.gravity.angle.value, this.gravity.extent.value * X.speed.value).value()
          );
       }
       if (this.friction.value !== 1) {
-         Object.assign(this.velocity, this.velocity.divide(this.friction.value).value());
+         Object.assign(this.velocity, this.velocity.divide((this.friction.value - 1) * X.speed.value + 1).value());
       }
       if (this.velocity.x !== 0 || this.velocity.y !== 0) {
-         Object.assign(this.position, this.position.add(this.velocity));
+         Object.assign(this.position, this.position.add(this.velocity.multiply(X.speed.value)));
       }
       this.fire('tick');
       const subalpha = style.globalAlpha * Math.min(Math.max(this.alpha.value, 0), 1);
@@ -386,126 +726,12 @@ class XObject extends XHost<{ tick: [] }> {
             direction: this.text.direction ?? style.direction,
             font: this.text.font ?? style.font
          };
-         subalpha === 0 || this.draw(renderer, subtransform, [ quality, zoom ], substyle, debug);
+         subalpha === 0 || this.draw(renderer, subtransform, [ quality, zoom ], substyle);
          if (this.objects.length > 0) {
             for (const object of this.objects) {
-               object.render(renderer, camera, subtransform, [ quality, zoom ], substyle, debug);
+               object.render(renderer, camera, subtransform, [ quality, zoom ], substyle);
             }
          }
-      }
-   }
-}
-
-class XAsset<A = any> extends XHost<{ load: []; unload: [] }> {
-   loader: () => Promise<A>;
-   source: string;
-   state = { value: void 0 as A | void };
-   unloader: () => Promise<void>;
-   get value () {
-      const value = this.state.value;
-      if (value === void 0) {
-         throw `The asset of "${this.source}" is not currently loaded!`;
-      } else {
-         return value;
-      }
-   }
-   constructor ({
-      loader,
-      source,
-      unloader
-   }: {
-      loader: () => Promise<A>;
-      source: string;
-      unloader: () => Promise<void>;
-   }) {
-      super();
-      this.loader = loader;
-      this.source = source;
-      this.unloader = unloader;
-   }
-   async load (force?: boolean) {
-      if (force || this.state.value === void 0) {
-         this.state.value = await this.loader();
-         this.fire('load');
-      }
-   }
-   async unload (force?: boolean) {
-      if (force || this.state.value !== void 0) {
-         this.state.value = await this.unloader();
-         this.fire('unload');
-      }
-   }
-}
-
-class XAtlas<A extends string = string> {
-   navigators: XKeyed<XNavigator<A>, A>;
-   state = { navigator: null as XNavigatorKey<A> };
-   constructor ({ navigators = {} as XKeyed<XNavigator<A>, A> }: XAtlasProperties<A> = {}) {
-      this.navigators = navigators;
-   }
-   attach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never, ...navigators: A[]) {
-      for (const navigator of navigators) {
-         navigator in this.navigators && this.navigators[navigator].attach(renderer, layer);
-      }
-   }
-   detach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never, ...navigators: A[]) {
-      for (const navigator of navigators) {
-         navigator in this.navigators && this.navigators[navigator].detach(renderer, layer);
-      }
-   }
-   navigator () {
-      return this.state.navigator ? this.navigators[this.state.navigator] : void 0;
-   }
-   seek ({ x = 0, y = 0 }: XPrimitive<X2> = {}) {
-      const navigator = this.navigator();
-      if (navigator) {
-         const origin = navigator.selection();
-         const row = X.provide(navigator.grid, navigator, this);
-         const flip = X.provide(navigator.flip, navigator, this);
-         navigator.position.x = Math.min(Math.max(navigator.position.x, 0), row.length - 1);
-         navigator.position.x += flip ? y : x;
-         if (row.length - 1 < navigator.position.x) {
-            navigator.position.x = 0;
-         } else if (navigator.position.x < 0) {
-            navigator.position.x = row.length - 1;
-         }
-         const column = row[navigator.position.x] || [];
-         navigator.position.y = Math.min(Math.max(navigator.position.y, 0), column.length - 1);
-         navigator.position.y += flip ? x : y;
-         if (column.length - 1 < navigator.position.y) {
-            navigator.position.y = 0;
-         } else if (navigator.position.y < 0) {
-            navigator.position.y = column.length - 1;
-         }
-         origin === navigator.selection() || navigator.fire('move', this, navigator);
-      }
-   }
-   navigate (action: 'next' | 'prev') {
-      switch (action) {
-         case 'next':
-         case 'prev':
-            const navigator = this.navigator();
-            if (navigator) {
-               this.switch(X.provide(navigator[action], navigator, this) as XNavigatorKey<A>);
-            } else {
-               this.switch(null);
-            }
-      }
-   }
-   switch (name: XNavigatorKey<A>) {
-      if (name !== void 0) {
-         let next: XNavigator<A> | null = null;
-         if (typeof name === 'string') {
-            if (name in this.navigators) {
-               next = this.navigators[name];
-            } else {
-               return;
-            }
-         }
-         const navigator = this.navigator();
-         navigator && navigator.fire('to', this, name, navigator);
-         next && next.fire('from', this, this.state.navigator, navigator);
-         this.state.navigator = name;
       }
    }
 }
@@ -523,36 +749,6 @@ class XHitbox extends XObject {
    }
    compute () {
       return this.size;
-   }
-   draw (
-      renderer: PRenderer | PCanvasRenderer,
-      [ position, rotation, scale ]: XTransform,
-      [ quality, zoom ]: XFactor,
-      style: XStyle,
-      debug: boolean
-   ) {
-      // debug
-      if (debug && this.state.dimensions !== void 0) {
-         const vertices = this.vertices();
-         const graphics = new PIXI.Graphics();
-         graphics.lineStyle({
-            alpha: 0.5,
-            color: parseInt('ffffff', 16),
-            width: 1
-         });
-         for (const [ b1, b2 ] of [
-            [ vertices[0], vertices[1] ],
-            [ vertices[1], vertices[2] ],
-            [ vertices[2], vertices[3] ],
-            [ vertices[3], vertices[0] ]
-         ]) {
-            graphics.beginFill(0, 0);
-            graphics.moveTo(b1.x, b1.y);
-            graphics.lineTo(b2.x, b2.y);
-            graphics.endFill();
-         }
-         renderer.render(graphics);
-      }
    }
    region (): XRegion {
       const vertices = this.vertices();
@@ -574,110 +770,124 @@ class XHitbox extends XObject {
    }
 }
 
-class XInput extends XHost<XKeyed<[string | number], 'down' | 'up'>> {
-   state = { codes: new Set<string | number>() };
-   constructor ({ codes = [], target = window as any, transformer }: XInputProperties = {}) {
-      super();
-      target.addEventListener('keyup', ({ key }) => {
-         transformer && (key = transformer(key));
-         if (codes.includes(key) && this.state.codes.has(key)) {
-            this.state.codes.delete(key);
-            this.fire('up', key);
-         }
-      });
-      target.addEventListener('keydown', ({ key }) => {
-         transformer && (key = transformer(key));
-         if (codes.includes(key) && !this.state.codes.has(key)) {
-            this.state.codes.add(key);
-            this.fire('down', key);
-         }
-      });
-      target.addEventListener('mouseup', ({ button }) => {
-         if (codes.includes(button) && !this.state.codes.has(button)) {
-            this.state.codes.add(button);
-            this.fire('up', button);
-         }
-      });
-      target.addEventListener('mousedown', ({ button }) => {
-         if (codes.includes(button) && !this.state.codes.has(button)) {
-            this.state.codes.add(button);
-            this.fire('down', button);
-         }
+class XEntity extends XHitbox {
+   face: XCardinal = 'down';
+   sprites: XKeyed<XSprite, XCardinal>;
+   step: number;
+   get sprite () {
+      return this.sprites[this.face];
+   }
+   constructor (properties: XEntityProperties = {}) {
+      super(properties);
+      (({
+         sprites: { down = void 0, left = void 0, right = void 0, up = void 0 } = {},
+         step = 1
+      }: XEntityProperties = {}) => {
+         this.sprites = {
+            down: down instanceof XSprite ? down : new XSprite(down),
+            left: left instanceof XSprite ? left : new XSprite(left),
+            right: right instanceof XSprite ? right : new XSprite(right),
+            up: up instanceof XSprite ? up : new XSprite(up)
+         };
+         this.step = step;
+      })(properties);
+      this.on('tick', () => {
+         this.objects[0] = this.sprites[this.face];
       });
    }
-   active () {
-      return this.state.codes.size > 0;
+   move<A extends string> (
+      offset: X2,
+      renderer?: XRenderer<A>,
+      key?: A,
+      keys: A[] = [],
+      filter?: XProvider<boolean, [XHitbox]>
+   ) {
+      const source = this.position.value();
+      const hitboxes = filter && renderer ? keys.flatMap(key => renderer.calculate(key, filter)) : [];
+      for (const axis of [ 'x', 'y' ] as ['x', 'y']) {
+         const distance = offset[axis];
+         if (distance !== 0) {
+            this.position[axis] += distance;
+            const hits = renderer ? renderer.detect(key, this, ...hitboxes) : [];
+            if (hits.length > 0) {
+               const single = (distance / Math.abs(distance)) * this.step;
+               while (this.position[axis] !== source[axis] && renderer!.detect(key, this, ...hits).length > 0) {
+                  this.position[axis] -= single;
+               }
+            }
+         }
+      }
+      if (this.position.x === source.x && this.position.y === source.y) {
+         if (offset.y < 0) {
+            this.face = 'up';
+         } else if (offset.y > 0) {
+            this.face = 'down';
+         } else if (offset.x < 0) {
+            this.face = 'left';
+         } else if (offset.x > 0) {
+            this.face = 'right';
+         }
+         for (const sprite of Object.values(this.sprites)) {
+            sprite.reset();
+         }
+         return false;
+      } else {
+         if (this.position.y < source.y) {
+            this.face = 'up';
+         } else if (this.position.y > source.y) {
+            this.face = 'down';
+         } else if (this.position.x < source.x) {
+            this.face = 'left';
+         } else if (this.position.x > source.x) {
+            this.face = 'right';
+         }
+         this.sprite.enable();
+         return true;
+      }
    }
-}
-
-class XNavigator<A extends string = string> extends XHost<
-   XKeyed<[XAtlas<A>, XNavigatorKey<A>, XNavigator<A> | void], 'from' | 'to'> & { move: [XAtlas<A>, XNavigator<A>] }
-> {
-   flip: XProvider<boolean, [XNavigator<A>, XAtlas<A>]>;
-   grid: XProvider<XBasic[][], [XNavigator<A>, XAtlas<A> | void]>;
-   next: XProvider<XNavigatorKey<A>, [XNavigator<A>, XAtlas<A>]>;
-   objects: XObject[];
-   position: X2;
-   prev: XProvider<XNavigatorKey<A>, [XNavigator<A>, XAtlas<A>]>;
-   constructor ({
-      flip = false,
-      grid = [],
-      next = void 0,
-      objects = [],
-      position: { x = 0, y = 0 } = {},
-      prev = void 0
-   }: XNavigatorProperties<A> = {}) {
-      super();
-      this.flip = flip;
-      this.grid = grid;
-      this.next = next;
-      this.objects = objects.map(object => (object instanceof XObject ? object : new XObject(object)));
-      this.position = { x, y };
-      this.prev = prev;
-   }
-   attach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never) {
-      renderer.attach(layer, ...this.objects);
-   }
-   detach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never) {
-      renderer.detach(layer, ...this.objects);
-   }
-   selection () {
-      return (X.provide(this.grid, this)[this.position.x] || [])[this.position.y];
-   }
-}
-
-class XNumber {
-   value: number;
-   constructor (value = 0) {
-      this.value = value;
-   }
-   modulate (duration: number, ...points: number[]) {
-      const base = X.time;
-      const value = this.value;
-      return new Promise<void>(resolve => {
-         let active = true;
-         X.cache.modulationTasks.get(this)?.cancel();
-         X.cache.modulationTasks.set(this, {
-            cancel () {
-               active = false;
+   async walk<A extends string> (renderer: XRenderer<A>, key: A, speed: number, ...points: Partial<X2>[]) {
+      await renderer.on('tick');
+      for (const sprite of Object.values(this.sprites)) {
+         sprite.steps = Math.round(15 / speed);
+      }
+      for (const { x = this.position.x, y = this.position.y } of points) {
+         const dirX = x - this.position.x < 0 ? -1 : 1;
+         const dirY = y - this.position.y < 0 ? -1 : 1;
+         await X.chain<void, Promise<void>>(void 0, async (z, next) => {
+            const diffX = Math.abs(x - this.position.x);
+            const diffY = Math.abs(y - this.position.y);
+            this.move(
+               {
+                  x: (diffX === 0 ? 0 : diffX < speed ? diffX : speed) * dirX,
+                  y: (diffY === 0 ? 0 : diffY < speed ? diffY : speed) * dirY
+               },
+               renderer,
+               key
+            );
+            if (diffX > 0 || diffY > 0) {
+               await renderer.on('tick');
+               await next();
             }
          });
-         const listener = () => {
-            if (active) {
-               const elapsed = X.time - base;
-               if (elapsed < duration) {
-                  this.value = X.math.bezier(elapsed / duration, value, ...points);
-               } else {
-                  X.cache.modulationTasks.delete(this);
-                  this.value = points.length > 0 ? points[points.length - 1] : value;
-                  X.timer.off('tick', listener);
-                  resolve();
-               }
-            } else {
-               X.timer.off('tick', listener);
-            }
-         };
-         X.timer.on('tick', listener);
+      }
+   }
+}
+
+class XCharacter extends XEntity {
+   key: string;
+   talk = false;
+   preset: XCharacterPreset;
+   constructor (properties: XCharacterProperties) {
+      super(properties);
+      (({ key, preset }: XCharacterProperties) => {
+         this.key = key;
+         this.preset = preset;
+      })(properties);
+      this.on('tick', {
+         priority: -1,
+         listener: () => {
+            this.sprites = this.talk ? this.preset.talk : this.preset.walk;
+         }
       });
    }
 }
@@ -697,6 +907,76 @@ class XPath extends XObject {
    }
    draw (renderer: PRenderer | PCanvasRenderer, transform: XTransform, [ quality, zoom ]: XFactor, style: XStyle) {
       this.tracer(renderer, transform, [ quality, zoom ], style);
+   }
+}
+
+class XPlayer extends XEntity {
+   extent: XVector;
+   walking = false;
+   constructor (properties: XPlayerProperties = {}) {
+      super(properties);
+      (({ extent: { x: extent_x = 0, y: extent_y = 0 } = {} }: XPlayerProperties = {}) => {
+         this.extent = new XVector(extent_x, extent_y);
+      })(properties);
+      this.on('tick').then(() => {
+         this.objects[1] = new XHitbox().wrapOn('tick', self => () => {
+            self.anchor.x = this.face === 'left' ? 1 : this.face === 'right' ? -1 : 0;
+            self.anchor.y = this.face === 'up' ? 1 : this.face === 'down' ? -1 : 0;
+            self.size.x = this.face === 'left' || this.face === 'right' ? this.extent.y : this.extent.x;
+            self.size.y = this.face === 'down' || this.face === 'up' ? this.extent.y : this.extent.x;
+         });
+      });
+   }
+   async walk<A extends string> (renderer: XRenderer<A>, key: A, speed: number, ...targets: Partial<X2>[]) {
+      this.walking = true;
+      await super.walk(renderer, key, speed, ...targets);
+      this.walking = false;
+   }
+}
+
+class XRandom {
+   base: number;
+   constructor (
+      seed: string,
+      base = (() => {
+         let h = 1779033703 ^ seed.length;
+         for (let i = 0; i < seed.length; i++) {
+            (h = Math.imul(h ^ seed.charCodeAt(i), 3432918353)), (h = (h << 13) | (h >>> 19));
+         }
+         let [ a, b, c, d ] = X.populate(4, () => {
+            h = Math.imul(h ^ (h >>> 16), 2246822507);
+            h = Math.imul(h ^ (h >>> 13), 3266489909);
+            return (h ^= h >>> 16) >>> 0;
+         });
+         a >>>= 0;
+         b >>>= 0;
+         c >>>= 0;
+         d >>>= 0;
+         let t = (a + b) | 0;
+         a = b ^ (b >>> 9);
+         b = (c + (c << 3)) | 0;
+         c = (c << 21) | (c >>> 11);
+         d = (d + 1) | 0;
+         t = (t + d) | 0;
+         c = (c + t) | 0;
+         return (t >>> 0) / 4294967296;
+      })()
+   ) {
+      this.base = base;
+   }
+   step () {
+      let hash = (this.base += 0x6d2b79f5);
+      hash = Math.imul(hash ^ (hash >>> 15), hash | 1);
+      hash ^= hash + Math.imul(hash ^ (hash >>> 7), hash | 61);
+      return ((hash ^ (hash >>> 14)) >>> 0) / 4294967296;
+   }
+   next (threshold = 0) {
+      const base = this.base;
+      let step = this.step();
+      while (Math.abs(this.base - base) < threshold) {
+         step = this.step();
+      }
+      return step;
    }
 }
 
@@ -756,6 +1036,7 @@ class XRectangle extends XObject {
             }
          }
          renderer.render(rectangle.drawRect(0, 0, size.x, size.y).endFill());
+         rectangle.destroy();
       }
    }
 }
@@ -764,7 +1045,6 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
    alpha: XNumber;
    camera: XVector;
    container: HTMLElement;
-   debug: boolean;
    framerate: number;
    layers: XKeyed<XRendererLayer, A>;
    region: XRegion;
@@ -788,7 +1068,6 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
       auto = false,
       camera: { x: camera_x = 0, y: camera_y = 0 } = {},
       container = document.body,
-      debug = false,
       framerate = 30,
       layers = {},
       region: [
@@ -810,7 +1089,6 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
       this.alpha = new XNumber(alpha);
       this.camera = new XVector(camera_x, camera_y);
       this.container = container;
-      this.debug = debug;
       this.framerate = framerate;
       this.layers = Object.fromEntries(
          Object.entries(layers).map(([ key, value ]) => {
@@ -1062,7 +1340,7 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
       const shakeY = this.shake.value ? this.shake.value * (Math.random() - 0.5) : 0;
       for (const key in this.layers) {
          const { modifiers, objects, renderer } = this.layers[key];
-         if (objects.length > 0 && (update || !modifiers.includes('ambient'))) {
+         if (objects.length > 0 && (update || this.shake.value > 0 || !modifiers.includes('ambient'))) {
             const center = this.size.divide(2);
             const statik = modifiers.includes('static');
             this.reset(key);
@@ -1082,32 +1360,25 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
                new XVector(this.quality.value * zoom)
             ];
             for (const object of objects) {
-               object.render(
-                  renderer,
-                  camera,
-                  transform,
-                  [ this.quality.value * zoom, zoom ],
-                  {
-                     globalAlpha: 1,
-                     globalCompositeOperation: 'source-over',
-                     fillStyle: 'transparent',
-                     lineCap: 'butt',
-                     lineDashOffset: 0,
-                     lineJoin: 'miter',
-                     miterLimit: 10,
-                     lineWidth: 1,
-                     shadowBlur: 0,
-                     shadowColor: 'transparent',
-                     shadowOffsetX: 0,
-                     shadowOffsetY: 0,
-                     strokeStyle: 'transparent',
-                     textAlign: 'start',
-                     textBaseline: 'alphabetic',
-                     direction: 'ltr',
-                     font: '10px monospace'
-                  },
-                  this.debug
-               );
+               object.render(renderer, camera, transform, [ this.quality.value * zoom, zoom ], {
+                  globalAlpha: 1,
+                  globalCompositeOperation: 'source-over',
+                  fillStyle: 'transparent',
+                  lineCap: 'butt',
+                  lineDashOffset: 0,
+                  lineJoin: 'miter',
+                  miterLimit: 10,
+                  lineWidth: 1,
+                  shadowBlur: 0,
+                  shadowColor: 'transparent',
+                  shadowOffsetX: 0,
+                  shadowOffsetY: 0,
+                  strokeStyle: 'transparent',
+                  textAlign: 'start',
+                  textBaseline: 'alphabetic',
+                  direction: 'ltr',
+                  font: '10px monospace'
+               });
             }
          }
       }
@@ -1156,8 +1427,7 @@ class XSprite extends XObject {
       renderer: PRenderer | PCanvasRenderer,
       [ position, rotation, scale ]: XTransform,
       [ quality, zoom ]: XFactor,
-      style: XStyle,
-      debug: boolean
+      style: XStyle
    ) {
       const texture = this.frames[this.state.index];
       if (texture && texture.state.value) {
@@ -1190,36 +1460,19 @@ class XSprite extends XObject {
          // render
          (GL && rotation % 90 === 0) || renderer.render(graphics);
          renderer.render(sprite);
-
-         // debug
-         /*
-         if (debug) {
-            const graphics = new PIXI.Graphics();
-            graphics.position.set(sprite.position.x, sprite.position.y);
-            graphics.pivot.set(w * a, h * b);
-            graphics.scale.set(scale.x, scale.y);
-            graphics
-               .lineStyle({
-                  alpha: 0.5,
-                  color: parseInt('ffffff', 16),
-                  width: 1
-               })
-               .beginFill(0, 0)
-               .drawRect(0, 0, w, h)
-               .endFill();
-            renderer.render(graphics);
-         }
-         */
+         sprite.destroy();
+         graphics.destroy();
       }
-      if (this.steps <= ++this.state.step) {
+      if (Math.round(this.steps / X.speed.value) <= ++this.state.step) {
          this.state.step = 0;
          if (this.state.active && this.frames.length <= ++this.state.index) {
             this.state.index = 0;
          }
       }
    }
-   enable () {
+   enable (steps?: number) {
       this.state.active = true;
+      steps && (this.steps = steps);
       return this;
    }
    async load () {
@@ -1235,10 +1488,9 @@ class XSprite extends XObject {
          const sizeX = Math.round(max?.x ?? sprite.width) - originX;
          const sizeY = Math.round(max?.y ?? sprite.height) - originY;
          const pixels = [
-            ...new (GL ? PIXI.Extract : PIXI.CanvasExtract)(X.shader)
-               .pixels(sprite)
-               .slice((originX + originY * sprite.width) * 4)
+            ...(X.shader.plugins.extract as PExtract).pixels(sprite).slice((originX + originY * sprite.width) * 4)
          ];
+         sprite.destroy();
          while (colors.length < sizeY) {
             const subcolors: XColor[] = [];
             while (subcolors.length < sizeX) {
@@ -1256,6 +1508,195 @@ class XSprite extends XObject {
    }
    async unload () {
       await Promise.all(this.frames.map(asset => asset && asset.unload()));
+   }
+}
+
+class XAnimation extends XSprite {
+   subcrop: XKeyed<number, 'bottom' | 'left' | 'right' | 'top'>;
+   framerate: number;
+   resources: XAnimationResources | null;
+   state: XSprite['state'] & { previous: number | null } = {
+      index: 0,
+      active: this.state.active,
+      step: 0,
+      previous: null as number | null
+   };
+   stepper: boolean;
+   constructor (properties: XAnimationProperties) {
+      super(properties);
+      (({
+         subcrop: { left = 0, right = 0, bottom = 0, top = 0 } = {},
+         framerate = 30,
+         resources,
+         stepper = true
+      }: XAnimationProperties) => {
+         this.subcrop = { left, right, bottom, top };
+         this.framerate = framerate;
+         this.resources = resources || null;
+         this.stepper = stepper;
+      })(properties);
+   }
+   refresh () {
+      this.state.previous = null;
+      this.compute();
+      return this;
+   }
+   compute () {
+      if (this.resources && this.resources.state.value) {
+         const frames = this.resources.value[0].value.frames;
+         const update = this.state.index !== this.state.previous;
+         if (update) {
+            this.state.previous = this.state.index;
+         }
+         const {
+            duration,
+            frame: { x, y, w, h }
+         } = frames[this.state.index];
+         const sx = (this.subcrop.left < 0 ? w : 0) + this.subcrop.left;
+         const sy = (this.subcrop.top < 0 ? h : 0) + this.subcrop.top;
+         const sw = (this.subcrop.right < 0 ? 0 : w) - this.subcrop.right - sx;
+         const sh = (this.subcrop.bottom < 0 ? 0 : h) - this.subcrop.bottom - sy;
+         this.crop = { left: x + sx, top: y + sy, right: -(x + sx + sw), bottom: -(y + sy + sh) };
+         if (update) {
+            const content = this.resources.value[1];
+            this.frames = X.populate(frames.length, () => content);
+            if (this.stepper) {
+               this.steps = Math.round(duration / (1000 / this.framerate));
+            }
+         }
+         if (frames.length > 0) {
+            return new XVector(sw, sh);
+         } else {
+            return new XVector();
+         }
+      } else {
+         return new XVector();
+      }
+   }
+   draw (renderer: PRenderer | PCanvasRenderer, transform: XTransform, [ quality, zoom ]: XFactor, style: XStyle) {
+      this.compute();
+      super.draw(renderer, transform, [ quality, zoom ], style);
+   }
+   update (resources: XAnimationResources) {
+      this.resources = resources;
+      if (this.state.active) {
+         return this.reset().refresh().enable();
+      } else {
+         return this.reset().refresh();
+      }
+   }
+   static resources (dataSource: string, imageSource: string): XAnimationResources {
+      return X.inventory(X.dataAsset(dataSource), X.imageAsset(imageSource));
+   }
+}
+
+class XVector {
+   x: number;
+   y: number;
+   constructor();
+   constructor(a: number | X2);
+   constructor(x: number, y: number);
+   constructor (a: number | X2 = 0, b = a as number) {
+      if (typeof a === 'number') {
+         this.x = a;
+         this.y = b;
+      } else {
+         this.x = a.x || 0;
+         this.y = a.y || 0;
+      }
+   }
+   add(a: number | X2): XVector;
+   add(x: number, y: number): XVector;
+   add (a: number | X2, b = a as number) {
+      if (typeof a === 'number') {
+         return new XVector(this.x + a, this.y + b);
+      } else {
+         return this.add(a.x, a.y);
+      }
+   }
+   clamp (min: X2, max: X2) {
+      return new XVector(Math.min(Math.max(this.x, min.x), max.x), Math.min(Math.max(this.y, min.y), max.y));
+   }
+   clone () {
+      return new XVector(this);
+   }
+   angle (vector: X2) {
+      return ((180 / Math.PI) * Math.atan2(this.y - vector.y, this.x - vector.x) + 360) % 360;
+   }
+   extent (vector: X2) {
+      return Math.sqrt((vector.x - this.x) ** 2 + (vector.y - this.y) ** 2);
+   }
+   divide(a: number | X2): XVector;
+   divide(x: number, y: number): XVector;
+   divide (a: number | X2, b = a as number) {
+      if (typeof a === 'number') {
+         return new XVector(this.x / a, this.y / b);
+      } else {
+         return this.divide(a.x, a.y);
+      }
+   }
+   endpoint (angle: number, extent: number) {
+      const rads = Math.PI - (((angle + 90) % 360) * Math.PI) / 180;
+      return new XVector(this.x + extent * Math.sin(rads), this.y + extent * Math.cos(rads));
+   }
+   modulate (duration: number, ...points: Partial<X2>[]) {
+      const x = this.x;
+      const y = this.y;
+      const base = X.time;
+      return new Promise<void>(resolve => {
+         let active = true;
+         X.cache.modulationTasks.get(this)?.cancel();
+         X.cache.modulationTasks.set(this, {
+            cancel () {
+               active = false;
+            }
+         });
+         const listener = () => {
+            if (active) {
+               const elapsed = X.time - base;
+               if (elapsed < duration) {
+                  this.x = X.math.bezier(elapsed / duration, x, ...points.map(point => point.x ?? x));
+                  this.y = X.math.bezier(elapsed / duration, y, ...points.map(point => point.y ?? y));
+               } else {
+                  X.cache.modulationTasks.delete(this);
+                  this.x = points.length > 0 ? points[points.length - 1].x ?? x : x;
+                  this.y = points.length > 0 ? points[points.length - 1].y ?? y : y;
+                  X.timer.off('tick', listener);
+                  resolve();
+               }
+            } else {
+               X.timer.off('tick', listener);
+            }
+         };
+         X.timer.on('tick', listener);
+      });
+   }
+   multiply(a: number | X2): XVector;
+   multiply(x: number, y: number): XVector;
+   multiply (a: number | X2, b = a as number) {
+      if (typeof a === 'number') {
+         return new XVector(this.x * a, this.y * b);
+      } else {
+         return this.multiply(a.x, a.y);
+      }
+   }
+   round (base?: number): XVector {
+      return base ? this.multiply(base).round().divide(base) : new XVector(Math.round(this.x), Math.round(this.y));
+   }
+   shift (angle: number, extent: number, origin = X.zero) {
+      return origin.endpoint(this.angle(origin) + angle, this.extent(origin) + extent);
+   }
+   subtract(a: number | X2): XVector;
+   subtract(x: number, y: number): XVector;
+   subtract (a: number | X2, b = a as number) {
+      if (typeof a === 'number') {
+         return new XVector(this.x - a, this.y - b);
+      } else {
+         return this.subtract(a.x, a.y);
+      }
+   }
+   value () {
+      return { x: this.x, y: this.y };
    }
 }
 
@@ -1403,117 +1844,8 @@ class XText extends XObject {
          }
       }
       renderer.render(container);
+      container.destroy({ children: true });
       Object.assign(style, state);
-   }
-}
-
-class XVector {
-   x: number;
-   y: number;
-   constructor();
-   constructor(a: number | X2);
-   constructor(x: number, y: number);
-   constructor (a: number | X2 = 0, b = a as number) {
-      if (typeof a === 'number') {
-         this.x = a;
-         this.y = b;
-      } else {
-         this.x = a.x || 0;
-         this.y = a.y || 0;
-      }
-   }
-   add(a: number | X2): XVector;
-   add(x: number, y: number): XVector;
-   add (a: number | X2, b = a as number) {
-      if (typeof a === 'number') {
-         return new XVector(this.x + a, this.y + b);
-      } else {
-         return this.add(a.x, a.y);
-      }
-   }
-   clamp (min: X2, max: X2) {
-      return new XVector(Math.min(Math.max(this.x, min.x), max.x), Math.min(Math.max(this.y, min.y), max.y));
-   }
-   clone () {
-      return new XVector(this);
-   }
-   angle (vector: X2) {
-      return ((180 / Math.PI) * Math.atan2(this.y - vector.y, this.x - vector.x) + 360) % 360;
-   }
-   extent (vector: X2) {
-      return Math.sqrt((vector.x - this.x) ** 2 + (vector.y - this.y) ** 2);
-   }
-   divide(a: number | X2): XVector;
-   divide(x: number, y: number): XVector;
-   divide (a: number | X2, b = a as number) {
-      if (typeof a === 'number') {
-         return new XVector(this.x / a, this.y / b);
-      } else {
-         return this.divide(a.x, a.y);
-      }
-   }
-   endpoint (angle: number, extent: number) {
-      const rads = Math.PI - (((angle + 90) % 360) * Math.PI) / 180;
-      return new XVector(this.x + extent * Math.sin(rads), this.y + extent * Math.cos(rads));
-   }
-   modulate (duration: number, ...points: X2[]) {
-      const x = this.x;
-      const y = this.y;
-      const base = X.time;
-      return new Promise<void>(resolve => {
-         let active = true;
-         X.cache.modulationTasks.get(this)?.cancel();
-         X.cache.modulationTasks.set(this, {
-            cancel () {
-               active = false;
-            }
-         });
-         const listener = () => {
-            if (active) {
-               const elapsed = X.time - base;
-               if (elapsed < duration) {
-                  this.x = X.math.bezier(elapsed / duration, x, ...points.map(point => point.x));
-                  this.y = X.math.bezier(elapsed / duration, y, ...points.map(point => point.y));
-               } else {
-                  X.cache.modulationTasks.delete(this);
-                  this.x = points.length > 0 ? points[points.length - 1].x : x;
-                  this.y = points.length > 0 ? points[points.length - 1].y : y;
-                  X.timer.off('tick', listener);
-                  resolve();
-               }
-            } else {
-               X.timer.off('tick', listener);
-            }
-         };
-         X.timer.on('tick', listener);
-      });
-   }
-   multiply(a: number | X2): XVector;
-   multiply(x: number, y: number): XVector;
-   multiply (a: number | X2, b = a as number) {
-      if (typeof a === 'number') {
-         return new XVector(this.x * a, this.y * b);
-      } else {
-         return this.multiply(a.x, a.y);
-      }
-   }
-   round (base?: number): XVector {
-      return base ? this.multiply(base).round().divide(base) : new XVector(Math.round(this.x), Math.round(this.y));
-   }
-   shift (angle: number, extent: number, origin = X.zero) {
-      return origin.endpoint(this.angle(origin) + angle, this.extent(origin) + extent);
-   }
-   subtract(a: number | X2): XVector;
-   subtract(x: number, y: number): XVector;
-   subtract (a: number | X2, b = a as number) {
-      if (typeof a === 'number') {
-         return new XVector(this.x - a, this.y - b);
-      } else {
-         return this.subtract(a.x, a.y);
-      }
-   }
-   value () {
-      return { x: this.x, y: this.y };
    }
 }
 
@@ -1607,7 +1939,7 @@ const X = {
       color: {} as XKeyed<XColor>,
       datas: {} as XKeyed<Promise<XBasic>>,
       dataAssets: {} as XKeyed<XData[]>,
-      fonts: {} as XKeyed<PBitmapFont>,
+      fonts: {} as XKeyed<{ time: number; value: PBitmapFont }>,
       images: {} as XKeyed<Promise<PBaseTexture>>,
       imageAssets: {} as XKeyed<XImage[]>,
       textMetrics: {} as XKeyed<X2>,
@@ -1634,13 +1966,6 @@ const X = {
          color.length === 3 && color.push(1);
          return (X.cache.color[input] = color as XColor);
       }
-   },
-   context (canvas: HTMLCanvasElement, width = 1, height = 1) {
-      return Object.assign(Object.assign(canvas, { width, height }).getContext('2d'), {
-         fillStyle: 'transparent',
-         imageSmoothingEnabled: false,
-         strokeStyle: 'transparent'
-      });
    },
    daemon (
       audio: XAudio,
@@ -1733,17 +2058,22 @@ const X = {
    font (style: PTextStyle, charset: string, quality = 1) {
       const key = `${Object.values(style).join('\x00')}\x00${charset}\x00${quality}`;
       if (key in X.cache.fonts) {
-         return X.cache.fonts[key];
+         const font = X.cache.fonts[key];
+         font.time = X.time;
+         return font.value;
       } else {
          const size =
             typeof style.fontSize === 'number' ? style.fontSize : +style.fontSize.replace(/(px|pt|em|%)/g, '');
-         return (X.cache.fonts[key] = PIXI.BitmapFont.from(key, style, {
-            chars: charset.split(''),
-            padding: 0,
-            resolution: quality,
-            textureHeight: Math.max(size * quality * 1.25, 100),
-            textureWidth: Math.max(size * quality * 1.25, 100)
-         }));
+         return (X.cache.fonts[key] = {
+            time: X.time,
+            value: PIXI.BitmapFont.from(key, style, {
+               chars: charset.split(''),
+               padding: 0,
+               resolution: quality,
+               textureHeight: Math.max(size * quality * 1.25, 100),
+               textureWidth: Math.max(size * quality * 1.25, 100)
+            })
+         }).value;
       }
    },
    hex (color: XColor, alpha = false) {
@@ -1751,6 +2081,13 @@ const X = {
          .slice(0, alpha ? 4 : 3)
          .map(value => value.toString(16).padStart(2, '0'))
          .join('');
+   },
+   hyperpromise<A = void> () {
+      let hyperresolve: (value: A | PromiseLike<A>) => void;
+      const promise = new Promise<A>(resolve => {
+         hyperresolve = resolve;
+      });
+      return { promise, resolve: hyperresolve! };
    },
    image (source: string) {
       if (source in X.cache.images) {
@@ -1772,14 +2109,8 @@ const X = {
             if (image.width === 0 || image.height === 0) {
                image = PIXI.BaseTexture.from(await createImageBitmap(new ImageData(1, 1)));
             } else if (shader) {
-               X.shader.view.height = image.height;
-               X.shader.view.width = image.width;
                const sprite = PIXI.Sprite.from(image);
-               sprite.scale.y = -1;
-               sprite.anchor.y = 1;
-               X.shader.render(sprite);
-               const data = new Uint8ClampedArray(new (GL ? PIXI.Extract : PIXI.CanvasExtract)(X.shader).pixels());
-               X.shader.clear();
+               const data = new Uint8ClampedArray((X.shader.plugins.extract as PExtract).pixels(sprite));
                sprite.destroy();
                const x4 = image.width * 4;
                const index = { x: -1, y: -1 };
@@ -1819,6 +2150,12 @@ const X = {
       });
       return asset;
    },
+   async import (source: string) {
+      return (await fetch(source)).text();
+   },
+   async importJSON<X> (source: string) {
+      return (await fetch(source)).json() as Promise<X>;
+   },
    inventory<A extends XAsset[]> (...assets: A): XInventory<A> {
       return new XAsset({
          async loader () {
@@ -1838,6 +2175,17 @@ const X = {
                  ...points.slice(0, -1).map((point, index) => point * (1 - value) + points[index + 1] * value)
               )
             : points[0] || 0;
+      },
+      cardinal (angle: number): XCardinal {
+         if (angle < 45 || angle > 315) {
+            return 'left';
+         } else if (angle <= 135) {
+            return 'up';
+         } else if (angle < 225) {
+            return 'right';
+         } else {
+            return 'down';
+         }
       },
       format (value: number) {
          return Math.round(value);
@@ -1888,12 +2236,6 @@ const X = {
          }
       });
    },
-   provide<A extends XProvider<unknown, unknown[]>> (
-      provider: A,
-      ...args: A extends XProvider<any, infer B> ? B : never
-   ): A extends XProvider<infer B, any[]> ? B : never {
-      return typeof provider === 'function' ? X.provide(provider(...args)) : provider;
-   },
    pause (duration = 0) {
       if (duration === Infinity) {
          return new Promise<void>(resolve => {});
@@ -1905,12 +2247,70 @@ const X = {
          });
       }
    },
+   populate<A extends (index: number) => any>(size: number, provider: A) {
+      let index = 0;
+      const array = [] as ReturnType<A>[];
+      while (index < size) {
+         array.push(provider(index++));
+      }
+      return array;
+   },
+   provide<A extends XProvider<unknown, unknown[]>> (
+      provider: A,
+      ...args: A extends XProvider<any, infer B> ? B : never
+   ): A extends XProvider<infer B, any[]> ? B : never {
+      return typeof provider === 'function' ? X.provide(provider(...args)) : provider;
+   },
    shader: new (GL ? PIXI.Renderer : PIXI.CanvasRenderer)({
       antialias: false,
       backgroundAlpha: 0,
       clearBeforeRender: false
    }) as PRenderer & PCanvasRenderer,
-   speed: 1,
+   sound: {
+      convolver (context: AudioContext, duration: number, ...pattern: number[]) {
+         const convolver = context.createConvolver();
+         convolver.buffer = X.sound.impulse(context, duration, ...pattern);
+         return convolver;
+      },
+      filter (context: AudioContext, type: BiquadFilterType, frequency: number) {
+         const filter = context.createBiquadFilter();
+         filter.type = type;
+         filter.frequency.value = frequency;
+         return filter;
+      },
+      impulse (context: AudioContext, duration: number, ...pattern: number[]) {
+         let index = -1;
+         const size = context.sampleRate * duration;
+         const buffer = context.createBuffer(2, size, context.sampleRate);
+         while (++index < size) {
+            let channel = 0;
+            while (channel < buffer.numberOfChannels) {
+               try {
+                  const data = buffer.getChannelData(channel++);
+                  data[index] = (Math.random() * 2 - 1) * X.math.bezier(index / size, ...pattern);
+                  data[index] = (Math.random() * 2 - 1) * X.math.bezier(index / size, ...pattern);
+               } catch (error) {}
+            }
+         }
+         return buffer;
+      }
+   },
+   speed: new XNumber(1),
+   status (
+      text: string,
+      {
+         backgroundColor = '#000',
+         color = '#fff',
+         fontFamily = 'Courier New',
+         fontSize = '16px',
+         padding = '4px 8px'
+      } = {}
+   ) {
+      console.log(
+         `%c${text}`,
+         `background-color:${backgroundColor};color:${color};font-family:${fontFamily};font-size:${fontSize};padding:${padding};`
+      );
+   },
    stringify (value: any) {
       return JSON.stringify(value, (key, value) => {
          if (value === Infinity) {
@@ -1935,18 +2335,40 @@ const X = {
       const host = new XHost<{ init: []; tick: [number] }>();
       host.on('init').then(() => {
          setInterval(() => {
-            X.time += 5 * X.speed;
-            X.timer.fire('tick', 5 * X.speed);
+            X.time += 5 * X.speed.value;
+            X.timer.fire('tick', 5 * X.speed.value);
+            for (const key in X.cache.fonts) {
+               X.time - X.cache.fonts[key].time > 30e3 && delete X.cache.fonts[key];
+            }
          }, 5);
       });
       return host;
    })(),
+   weighted<A extends string> (input: XProvider<[A, number][]>, modifier = Math.random()) {
+      const weights = X.provide(input);
+      let total = 0;
+      for (const entry of weights) {
+         total += entry[1];
+      }
+      const value = modifier * total;
+      for (const entry of weights) {
+         if (value > (total -= entry[1])) {
+            return entry[0];
+         }
+      }
+   },
+   when (condition: () => boolean) {
+      return X.chain<void, Promise<void>>(void 0, async (v, n) => {
+         await X.timer.on('tick');
+         condition() || (await n());
+      });
+   },
    zero: new XVector()
 };
 
 PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
 PIXI.settings.ROUND_PIXELS = false;
-PIXI.settings.RESOLUTION = devicePixelRatio;
+PIXI.settings.RESOLUTION = 1;
 
 Object.assign(AudioParam.prototype, {
    modulate (duration: number, ...points: number[]) {
