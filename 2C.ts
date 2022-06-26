@@ -25,77 +25,198 @@ type PResource = import('pixi.js-legacy').Resource;
 type PTextStyle = import('pixi.js-legacy').TextStyle;
 type PTexture = import('pixi.js-legacy').Texture<PResource>;
 
-type X2 = { x: number; y: number };
-
-type XAnimationData<A extends string = string> = {
-   frames: { duration: number; frame: { x: number; y: number; w: number; h: number } }[];
-   meta: { frameTags: { name: A; from: number; to: number }[]; size: { w: number; h: number } };
+/** A raw vector. */
+type X2 = {
+   /** The vector's X-value. */
+   x: number;
+   /** The vector's Y-value. */
+   y: number;
 };
 
+/** The data structure of animation resources. */
+type XAnimationData<A extends string = string> = {
+   /** The animation's frame data. */
+   frames: {
+      /** The frame's duration. */
+      duration: number;
+      /** The frame's base position and size. */
+      frame: {
+         /** The frame's base X-coordinate. */
+         x: number;
+         /** The frame's base Y-coordinate. */
+         y: number;
+         /** The frame's width. */
+         w: number;
+         /** The frame's height. */
+         h: number;
+      };
+   }[];
+   /** The animation's metadata. */
+   meta: {
+      /** The animation's tags. */
+      frameTags: {
+         /** The tag's name. */
+         name: A;
+         /** The tag's first frame index. */
+         from: number;
+         /** The tag's last frame index. */
+         to: number;
+      }[];
+      /** The animation's size. */
+      size: {
+         /** The animation's width. */
+         w: number;
+         /** The animation's height. */
+         h: number;
+      };
+   };
+};
+
+/** Properties for the `XAnimation` class. */
 type XAnimationProperties = XNot<XSpriteProperties, 'crop' | 'frames' | 'steps'> & {
-   subcrop?: Partial<XKeyed<number, 'bottom' | 'left' | 'right' | 'top'>>;
+   /** Determines the animation's crop area. Refer to XSprite's `crop` for more information. */
+   subcrop?: Partial<XKeyed<number, XSide>>;
+   /** The framerate used to calculate the animation's frame timings. Defaults to `30`. */
    framerate?: number;
+   /** The animation's resources. */
    resources?: XAnimationResources | null;
+   /** Disables frame timing calculations for this animation. Defaults to `false`. */
    stepper?: boolean;
 };
 
+/**
+ * An animation's resources.
+ * @example
+ * const resources = X.inventory(X.dataAsset('animation-data.json'), X.imageAsset('animation.png')) as XAnimationResources
+ */
 type XAnimationResources = XInventory<[XData<XAnimationData>, XImage]>;
-type XAtlasProperties<A extends string = string> = { navigators?: XKeyed<XNavigator<A>, A> | void } | void;
+
+/** Properties for the `XAtlas` class. */
+type XAtlasProperties<A extends string = string> = {
+   /** The navigators available to this atlas. */
+   navigators?: XKeyed<XNavigator<A>, A> | void;
+} | void;
+
+/** An audio asset. */
 type XAudio = XAsset<AudioBuffer>;
-type XBasic = { [k: string]: XBasic } | XBasic[] | string | number | boolean | null | undefined | void;
+
+/** Serializable data. */
+type XBasic =
+   | {
+        [k: string]: XBasic;
+     }
+   | XBasic[]
+   | string
+   | number
+   | boolean
+   | null
+   | undefined
+   | void;
+
+/** A cardinal direction. */
 type XCardinal = 'down' | 'left' | 'right' | 'up';
+
+/** A character object's preset. */
 type XCharacterPreset = XKeyed<XKeyed<XSprite, 'down' | 'left' | 'up' | 'right'>, 'walk' | 'talk'>;
 
+/** Properties for the `XCharacter` class. */
 type XCharacterProperties = XNot<XEntityProperties, 'sprites'> & {
+   /** The character's preset. */
    preset: XCharacterPreset;
+   /** The character's key, useful for dialogue animations and object filtering. */
    key: string;
 };
 
+/** Color data, in the form of `[R (0-255), G (0-255), B (0-255), A (0-1)]`. */
 type XColor = [number, number, number, number];
 
+/** An audio daemon. This is the preferred way to play audio. */
 type XDaemon = {
+   /** The daemon's audio asset. */
    audio: XAudio;
+   /** The context used to play the audio. */
    context: AudioContext;
+   /** The default gain value for all created instances. */
    gain: number;
+   /** The default loop value for all created instances. */
    loop: boolean;
-   instance(offset?: number, store?: boolean): XInstance;
+   /** Creates an instance and plays the audio. */
+   instance(
+      /** The start time offset in seconds. Defaults to `0`. */
+      offset?: number,
+      /** Store this instance in its daemon's `instances` array. Defaults to `false`. */
+      store?: boolean
+   ): XInstance;
+   /** An array of stored instances. Instances in this array should not be removed directly -- instead, call the `stop` method on each instance you want to remove. */
    instances: XInstance[];
+   /** The default rate vale for all created instances. */
    rate: number;
+   /** This daemon's audio router. */
    router: XRouter;
 };
 
+/** A data asset. */
 type XData<A extends XBasic = XBasic> = XAsset<A>;
+
+/** Excludes `null`, `undefined`, and `void` from the given type. */
 type XDefined<A> = Exclude<A, null | undefined | void>;
+
+/** Properties for the `XEntity` class. */
 type XEntityProperties = XNot<XHitboxProperties, 'objects'> & XProperties<XEntity, 'sprites' | 'step'>;
+
+/** Factor data, in the form of `[quality, zoom]`. These properties are generally extrapolated from an `XRenderer`. */
 type XFactor = [number, number];
+
+/** An `XHost` event handler. */
 type XHandler<A extends any[] = any> = ((...data: A) => any) | { listener: (...data: A) => any; priority: number };
+
+/** Properties for the `XHitbox` class. */
 type XHitboxProperties = XObjectProperties & XProperties<XHitbox, 'size'>;
+
+/** An image asset. */
 type XImage = XAsset<PBaseTexture>;
 
+/** Properties for the `XInput` class. */
 type XInputProperties = {
-   codes?: (string | number)[];
+   /** The keycodes to listen for. */
+   codes?: string[];
+   /** The element to attach event listeners to. Defaults to `window`. */
    target?: HTMLElement;
-   transformer?: (key: string) => string;
 } | void;
 
+/** An audio instance created by an audio daemon. */
 type XInstance = {
+   /** The instance's context. */
    context: AudioContext;
+   /** The instance's parent daemon. */
    daemon: XDaemon;
+   /** While true, the audio will loop back to the start upon ending. In practice, it's better to set this value as a default in the instance's daemon. */
    loop: boolean;
+   /** The instance's current volume. */
    gain: AudioParam;
+   /** The instance's current playback speed. This value also affects the pitch of the audio since it changes the sampling rate. */
    rate: AudioParam;
+   /** Stops the audio instance and removes it from its daemon's `instances` array if previously stored there. */
    stop(): void;
 };
 
+/** Groups assets together so they can be batch-loaded and batch-unloaded. */
 type XInventory<A extends XAsset[] = XAsset[]> = XAsset<A>;
+
+/** An object with strictly-defined keys. */
 type XKeyed<A = any, B extends string = any> = { [x in B]: A };
+
+/** A valid navigator key, used in `XAtlas` navigation functions. */
 type XNavigatorKey<A extends string = string> = A | null | undefined | void;
 
+/** Properties for the `XNavigator` class. */
 type XNavigatorProperties<A extends string = string> = XProperties<XNavigator<A>, 'objects' | 'position'> &
    ({ [x in 'flip' | 'grid' | 'next' | 'prev']?: XNavigator<A>[x] | void } | void);
 
+/** Excludes keys from an object. */
 type XNot<A, B extends string> = { [x in Exclude<keyof XDefined<A>, B>]?: XDefined<A>[x] };
 
+/** Properties for the `XObject` class. */
 type XObjectProperties = XProperties<
    XObject,
    | 'alpha'
@@ -118,9 +239,13 @@ type XObjectProperties = XProperties<
    | 'velocity'
 >;
 
+/** Properties for the `XPath` class. */
 type XPathProperties = XObjectProperties & XProperties<XPath, 'size'> & ({ tracer?: XTracer | void } | void);
+
+/** Properties for the `XPlayer` class. */
 type XPlayerProperties = XEntityProperties & XProperties<XPlayer, 'extent'>;
 
+/** Recursively converts common engine components into their primitive forms where possible. */
 type XPrimitive<A> = A extends string | number | boolean | null | undefined
    ? A | void
    : A extends XAudio
@@ -145,33 +270,60 @@ type XPrimitive<A> = A extends string | number | boolean | null | undefined
    ? Partial<{ [x in keyof A]?: XPrimitive<A[x]> }> | void
    : never;
 
+/** Extrapolates a properties object. */
 type XProperties<A extends XKeyed, B extends keyof A> = XPrimitive<{ [x in B]: A[x] }>;
+
+/** A type, a function returning said type, a function returning said function, and so on. */
 type XProvider<A, B extends any[] = []> = A | ((...args: B) => XProvider<A>);
+
+/** A min-max region, in the form of `[{ x: minX, y: minY }, { x: maxX, y: maxY }]`. Used for camera boundaries and collision detection. */
 type XRegion = [X2, X2];
+
+/** Properties for the `XRectangle` class. */
 type XRectangleProperties = XObjectProperties & XProperties<XRectangle, 'size'>;
 
+/** A rendering layer. */
 type XRendererLayer = {
+   /** The canvas targeted by the layer. */
    canvas: HTMLCanvasElement;
+   /** The layer's modifiers. */
    modifiers: XRendererLayerModifier[];
+   /** The objects currently present on the layer. */
    objects: XObject[];
+   /** The layer's internal renderer. */
    renderer: PRenderer | PCanvasRenderer | PCanvasRenderer;
 };
 
+/** A layer modifier. `ambient` prevents the layer from updating unless the renderer's camera, scale, canvas size, or quality value changes. `static` makes the layer ignore the camera position. `vertical` will automatically sort the layer's objects by their `Y` position (overridable with `priority`) before each frame. */
 type XRendererLayerModifier = 'ambient' | 'static' | 'vertical';
 
+/** Properties for the `XRenderer` class. */
 type XRendererProperties<A extends string = string> = XProperties<
    XRenderer<A>,
    'alpha' | 'camera' | 'container' | 'framerate' | 'region' | 'shake' | 'size' | 'quality' | 'zoom'
 > &
    ({ auto?: boolean | void; layers?: Partial<XKeyed<XRendererLayerModifier[], A>> | void } | void);
 
+/** Extrapolates a promise result. */
 type XResult<A> = A extends () => Promise<infer B> ? B : never;
+
+/** An audio router. Useful for adding effects to audio before they reach the context. */
 type XRouter = (context: AudioContext, input: GainNode) => void;
 
+/** A rectangular side. */
+type XSide = 'bottom' | 'left' | 'right' | 'top';
+
+/** Properties for the `XSprite` class. */
 type XSpriteProperties = XObjectProperties &
    XProperties<XSprite, 'crop' | 'step' | 'steps'> &
-   ({ auto?: boolean | void; frames?: (XImage | null)[] } | void);
+   ({
+      /** Enables the sprite upon creation. Defaults to `false`. */
+      auto?: boolean | void;
+      /** An array of image assets to use as frames. */
+      frames?: (XImage | null)[];
+   } | void);
 
+/** Rendering style, used during the rendering loop to determine colors, lines, and other variables in rendered objects. In practice, this object is not modified directly, but rather by properties on rendered objects such as `fill`, `text.font`, and `line.width`, among others. */
 type XStyle = {
    globalAlpha: number;
    globalCompositeOperation: GlobalCompositeOperation;
@@ -192,34 +344,50 @@ type XStyle = {
    font: string;
 };
 
+/** Properties for the `XText` class. */
 type XTextProperties = XObjectProperties & XProperties<XText, 'cache' | 'charset' | 'content' | 'spacing'>;
+
+/** A tracer function, used in the rendering of `XPath` objects. */
 type XTracer = (
+   /** The internal renderer of the path. */
    renderer: PRenderer | PCanvasRenderer,
+   /** The current transform at render time. */
    transform: XTransform,
+   /** The current quality and zoom at render time. */
    [ quality, zoom ]: XFactor,
+   /** The current style at render time. This object should not be modified during rendering. */
    style: XStyle
 ) => void;
+
+/** Transform data, in the form of `[{ x: positionX, y: positionY }, rotation, { x: scaleX, y: scaleY }]` */
 type XTransform = [XVector, number, XVector];
 
+/** The atlas system is used primarily to create a system of navigable menus. Each navigator in the atlas's `navigators` object serves as a menu which can be switched to, attached to a renderer, or detached from a renderer. When a navigator is switched to, it becomes the active navigator and will accept throughput from calls to the atlas's `seek` and `navigate` methods. Attaching and detaching navigators iterates over their `objects` array and calls the target renderer's `attach` or `detach` method respectively with the given objects. */
 class XAtlas<A extends string = string> {
+   /** The navigators available to this atlas. */
    navigators: XKeyed<XNavigator<A>, A>;
+   /** The atlas's state, containing the currently active navigator. */
    state = { navigator: null as XNavigatorKey<A> };
    constructor ({ navigators = {} as XKeyed<XNavigator<A>, A> }: XAtlasProperties<A> = {}) {
       this.navigators = navigators;
    }
+   /** Attaches navigators to a renderer. */
    attach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never, ...navigators: A[]) {
       for (const navigator of navigators) {
          navigator in this.navigators && this.navigators[navigator].attach(renderer, layer);
       }
    }
+   /** Detaches navigators from a renderer. */
    detach<B extends XRenderer> (renderer: B, layer: B extends XRenderer<infer C> ? C : never, ...navigators: A[]) {
       for (const navigator of navigators) {
          navigator in this.navigators && this.navigators[navigator].detach(renderer, layer);
       }
    }
+   /** Returns the current navigator. */
    navigator () {
       return this.state.navigator ? this.navigators[this.state.navigator] : void 0;
    }
+   /** Moves the position on the current navigator by the specified values. If the resulting position exceeds the navigator's current grid bounds, the position value is looped around. */
    seek ({ x = 0, y = 0 }: XPrimitive<X2> = {}) {
       const navigator = this.navigator();
       if (navigator) {
@@ -244,6 +412,7 @@ class XAtlas<A extends string = string> {
          origin === navigator.selection() || navigator.fire('move', this, navigator);
       }
    }
+   /** Triggers the `next` or `prev` methods on the current navigator and switches to their returned value. If the returned value is `void`, the current navigator will remain unchanged. */
    navigate (action: 'next' | 'prev') {
       switch (action) {
          case 'next':
@@ -256,6 +425,7 @@ class XAtlas<A extends string = string> {
             }
       }
    }
+   /** Directly switches to a given navigator by it's key. Switching to `void` has no effect, and switching to `null` un-sets the atlas's current navigator. */
    switch (name: XNavigatorKey<A>) {
       if (name !== void 0) {
          let next: XNavigator<A> | null = null;
@@ -1380,7 +1550,7 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
 }
 
 class XSprite extends XObject {
-   crop: XKeyed<number, 'bottom' | 'left' | 'right' | 'top'>;
+   crop: XKeyed<number, XSide>;
    frames: (XImage | null)[];
    step: number;
    steps: number;
@@ -1506,7 +1676,7 @@ class XSprite extends XObject {
 }
 
 class XAnimation extends XSprite {
-   subcrop: XKeyed<number, 'bottom' | 'left' | 'right' | 'top'>;
+   subcrop: XKeyed<number, XSide>;
    framerate: number;
    resources: XAnimationResources | null;
    state: XSprite['state'] & { previous: number | null } = {
@@ -2371,6 +2541,6 @@ PIXI.settings.RESOLUTION = 1;
 
 AudioParam.prototype.modulate = function (duration: number, ...points: number[]) {
    return XNumber.prototype.modulate.call(this, duration, ...points);
-}
+};
 
 X.timer.fire('init');

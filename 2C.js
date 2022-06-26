@@ -10,24 +10,30 @@
 //   ##########  ########   ########      ###     ##########   //
 //                                                             //
 //// needs more optimizating ////////////////////////////////////
+/** The atlas system is used primarily to create a system of navigable menus. Each navigator in the atlas's `navigators` object serves as a menu which can be switched to, attached to a renderer, or detached from a renderer. When a navigator is switched to, it becomes the active navigator and will accept throughput from calls to the atlas's `seek` and `navigate` methods. Attaching and detaching navigators iterates over their `objects` array and calls the target renderer's `attach` or `detach` method respectively with the given objects. */
 class XAtlas {
     constructor({ navigators = {} } = {}) {
+        /** The atlas's state, containing the currently active navigator. */
         this.state = { navigator: null };
         this.navigators = navigators;
     }
+    /** Attaches navigators to a renderer. */
     attach(renderer, layer, ...navigators) {
         for (const navigator of navigators) {
             navigator in this.navigators && this.navigators[navigator].attach(renderer, layer);
         }
     }
+    /** Detaches navigators from a renderer. */
     detach(renderer, layer, ...navigators) {
         for (const navigator of navigators) {
             navigator in this.navigators && this.navigators[navigator].detach(renderer, layer);
         }
     }
+    /** Returns the current navigator. */
     navigator() {
         return this.state.navigator ? this.navigators[this.state.navigator] : void 0;
     }
+    /** Moves the position on the current navigator by the specified values. If the resulting position exceeds the navigator's current grid bounds, the position value is looped around. */
     seek({ x = 0, y = 0 } = {}) {
         const navigator = this.navigator();
         if (navigator) {
@@ -54,6 +60,7 @@ class XAtlas {
             origin === navigator.selection() || navigator.fire('move', this, navigator);
         }
     }
+    /** Triggers the `next` or `prev` methods on the current navigator and switches to their returned value. If the returned value is `void`, the current navigator will remain unchanged. */
     navigate(action) {
         switch (action) {
             case 'next':
@@ -67,6 +74,7 @@ class XAtlas {
                 }
         }
     }
+    /** Directly switches to a given navigator by it's key. Switching to `void` has no effect, and switching to `null` un-sets the atlas's current navigator. */
     switch(name) {
         if (name !== void 0) {
             let next = null;
