@@ -3,14 +3,12 @@
    "devDependencies": {
       "pixi.js-legacy": "6.3.2",
       "typedoc": "0.22.18",
-      "typedoc-github-wiki-theme": "1.0.1",
-      "typedoc-plugin-markdown": "3.12.1",
+      "typedoc-theme-oxide": "0.1.6",
       "typescript": "4.7.2"
    },
    "displayName": "2CUTE",
    "name": "2cute",
    "scripts": {
-      "compile": "tsc --watch",
-      "doc": "typedoc --theme github-wiki --githubPages false --publicPath ./ 2C.ts"
+      "dist": "tsc && typedoc --theme oxide 2C.ts"
    }
 }
