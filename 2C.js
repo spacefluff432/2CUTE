@@ -93,18 +93,29 @@ class XAtlas {
         }
     }
 }
+/** A simple map-based cache system. */
 class XCache extends Map {
-    constructor(compute) {
+    constructor(
+    /** The function used to compute a new value. */
+    compute) {
         super();
         this.compute = compute;
     }
+    /** Retrieves or computes a value in the cache. */
     of(object) {
         this.has(object) || this.set(object, this.compute(object));
         return this.get(object);
     }
 }
+/** An audio effect container with a dry/wet gain setup. Input should be fed into the `dry` and `wet` gain nodes, and output should be taken from the `output` gain node. */
 class XEffect {
-    constructor(context, processor, value = 1) {
+    constructor(
+    /** The effect's audio context. */
+    context, 
+    /** The effect processor, such as a convolver node, panner node, or filter node. */
+    processor, 
+    /** The wet gain node's value. When modified, the dry gain value is set to the inverse of this value. */
+    value = 1) {
         this.context = context;
         this.processor = processor;
         this.dry = context.createGain();
@@ -114,12 +125,14 @@ class XEffect {
         this.processor.connect(this.wet).connect(this.output);
         this.value = value;
     }
+    /** The wet gain node's value. When modified, the dry gain value is set to the inverse of this value. */
     get value() {
         return this.wet.gain.value;
     }
     set value(value) {
         this.dry.gain.value = 1 - (this.wet.gain.value = value);
     }
+    /** A helper function which connects this effect's output to another effect, audio node, or audio context. */
     connect(target) {
         if (target instanceof AudioContext) {
             this.output.connect(target.destination);
@@ -132,6 +145,7 @@ class XEffect {
             this.output.connect(target.processor);
         }
     }
+    /** A helper function which disconnects this effect's output from another previously connected effect, audio node, or audio context. */
     disconnect(target) {
         if (target instanceof AudioContext) {
             this.output.disconnect(target.destination);
@@ -147,15 +161,23 @@ class XEffect {
             this.output.disconnect();
         }
     }
+    /** Modulates this effect's value over a period of time. See `XNumber.modulate` for specifics. */
     modulate(duration, ...points) {
         return XNumber.prototype.modulate.call(this, duration, ...points);
     }
 }
+/** An event host, capable of firing one-time and repeating events to listeners with variable priorities. */
 class XHost {
     constructor() {
+        /** The events stored in the event host. This should not be modified directly. */
         this.events = {};
     }
-    fire(name, ...data) {
+    /** Fires an event. */
+    fire(
+    /** The event's name. */
+    name, 
+    /** The data to pass into each listener. */
+    ...data) {
         const list = this.events[name];
         if (list) {
             return [...list.values()].map(handler => {
@@ -166,7 +188,12 @@ class XHost {
             return [];
         }
     }
-    off(name, handler) {
+    /** Detaches an event handler from an event. */
+    off(
+    /** The name of the event to detach the handler from. */
+    name, 
+    /** The handler to detach. */
+    handler) {
         const list = this.events[name];
         if (list) {
             const index = list.indexOf(handler);
@@ -197,18 +224,26 @@ class XHost {
             return this;
         }
     }
-    wrapOn(name, provider) {
+    /** Passes `this` into a provider function, which is expected to return a listener. Useful for situations where there is no external variable for the host object to reference in the event listener. */
+    wrapOn(
+    /** The name of the event. */
+    name, 
+    /** A function which returns an event listener. */
+    provider) {
         return this.on(name, provider(this));
     }
 }
+/** An asset, consisting of a loader, unloader, and source string for clarity in errors. */
 class XAsset extends XHost {
     constructor({ loader, source, unloader }) {
         super();
+        /** The state of the asset, containing the current loaded value, if any. */
         this.state = { value: void 0 };
         this.loader = loader;
         this.source = source;
         this.unloader = unloader;
     }
+    /** Gets the value if defined, or throws an error stating the asset must be loaded. If you prefer not to recieve an error, check if `state.value` is defined before accessing this property. */
     get value() {
         const value = this.state.value;
         if (value === void 0) {
@@ -218,22 +253,29 @@ class XAsset extends XHost {
             return value;
         }
     }
-    async load(force) {
+    /** Requests for the asset to be loaded. */
+    async load(
+    /** Forcefully re-load the asset, even if it is already available. Defaults to `false`. */
+    force) {
         if (force || this.state.value === void 0) {
             this.state.value = await this.loader();
             this.fire('load');
         }
     }
-    async unload(force) {
+    /** Requests for the asset to be unloaded. */
+    async unload(
+    /** Forcefully re-unload the asset, even if it is not already available. Defaults to `false`. */ force) {
         if (force || this.state.value !== void 0) {
             this.state.value = await this.unloader();
             this.fire('unload');
         }
     }
 }
+/** Handles keyboard input from multiple key codes. If a key is held while the window or tab is switched, stuck-key glitches may occur. There are a few potential fixes for this which you may want to consider implementing in your own code when using this class. If you choose to do so, remember that all active keys can be cleared with `state.codes.clear`. */
 class XInput extends XHost {
     constructor({ codes = [], target = window } = {}) {
         super();
+        /** The input's state, containing all currently active codes. */
         this.state = { codes: new Set() };
         target.addEventListener('keyup', ({ code }) => {
             if (codes.includes(code) && this.state.codes.has(code)) {
@@ -248,18 +290,25 @@ class XInput extends XHost {
             }
         });
     }
+    /** True if this key is currently active, in other words, if at least one key this input system listens for is pressed. */
     active() {
         return this.state.codes.size > 0;
     }
 }
+/** An audio mixer track, used to chain effects together. Remember that if the `effects` array is modified, you must call `refresh` to properly update the series of connections. */
 class XMixer {
-    constructor(context, effects = []) {
+    constructor(
+    /** The audio context used by this mixer. */
+    context, 
+    /** The effects present in this mixer's effect chain. */
+    effects = []) {
         this.context = context;
         this.effects = effects;
         this.input = context.createGain();
         this.output = context.createGain();
         this.refresh();
     }
+    /** Refreshes the connections between the input, output, and all effects in this mixer. */
     refresh() {
         for (const [index, controller] of [this.input, ...this.effects].entries()) {
             controller.disconnect();

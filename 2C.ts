@@ -444,31 +444,51 @@ class XAtlas<A extends string = string> {
    }
 }
 
+/** A simple map-based cache system. */
 class XCache<A, B> extends Map<A, B> {
+   /** The function used to compute a new value. */
    compute: (object: A) => B;
-   constructor (compute: (object: A) => B) {
+   constructor (
+      /** The function used to compute a new value. */
+      compute: (object: A) => B
+   ) {
       super();
       this.compute = compute;
    }
+   /** Retrieves or computes a value in the cache. */
    of (object: A) {
       this.has(object) || this.set(object, this.compute(object));
       return this.get(object) as B;
    }
 }
 
+/** An audio effect container with a dry/wet gain setup. Input should be fed into the `dry` and `wet` gain nodes, and output should be taken from the `output` gain node. */
 class XEffect {
+   /** The effect's audio context. */
    context: AudioContext;
+   /** The dry gain node, which controls the level of the raw audio throughput. */
    dry: GainNode;
+   /** The output node. */
    output: GainNode;
+   /** The effect processor, such as a convolver node, panner node, or filter node. */
    processor: AudioNode;
+   /** The wet gain node, which controls the gain of the effected audio. */
    wet: GainNode;
+   /** The wet gain node's value. When modified, the dry gain value is set to the inverse of this value. */
    get value () {
       return this.wet.gain.value;
    }
    set value (value) {
       this.dry.gain.value = 1 - (this.wet.gain.value = value);
    }
-   constructor (context: AudioContext, processor: AudioNode, value = 1) {
+   constructor (
+      /** The effect's audio context. */
+      context: AudioContext,
+      /** The effect processor, such as a convolver node, panner node, or filter node. */
+      processor: AudioNode,
+      /** The wet gain node's value. When modified, the dry gain value is set to the inverse of this value. */
+      value = 1
+   ) {
       this.context = context;
       this.processor = processor;
       this.dry = context.createGain();
@@ -478,6 +498,7 @@ class XEffect {
       this.processor.connect(this.wet).connect(this.output);
       this.value = value;
    }
+   /** A helper function which connects this effect's output to another effect, audio node, or audio context. */
    connect (target: XEffect | AudioNode | AudioContext) {
       if (target instanceof AudioContext) {
          this.output.connect(target.destination);
@@ -488,6 +509,7 @@ class XEffect {
          this.output.connect(target.processor);
       }
    }
+   /** A helper function which disconnects this effect's output from another previously connected effect, audio node, or audio context. */
    disconnect (target?: XEffect | AudioNode | AudioContext) {
       if (target instanceof AudioContext) {
          this.output.disconnect(target.destination);
@@ -500,14 +522,23 @@ class XEffect {
          this.output.disconnect();
       }
    }
+   /** Modulates this effect's value over a period of time. See `XNumber.modulate` for specifics. */
    modulate (duration: number, ...points: number[]) {
       return XNumber.prototype.modulate.call(this, duration, ...points);
    }
 }
 
+/** An event host, capable of firing one-time and repeating events to listeners with variable priorities. */
 class XHost<A extends XKeyed<any[]> = {}> {
+   /** The events stored in the event host. This should not be modified directly. */
    events: { [B in keyof A]?: XHandler<A[B]>[] } = {};
-   fire<B extends keyof A> (name: B, ...data: A[B]) {
+   /** Fires an event. */
+   fire<B extends keyof A> (
+      /** The event's name. */
+      name: B,
+      /** The data to pass into each listener. */
+      ...data: A[B]
+   ) {
       const list = this.events[name];
       if (list) {
          return [ ...list.values() ].map(handler => {
@@ -517,7 +548,13 @@ class XHost<A extends XKeyed<any[]> = {}> {
          return [];
       }
    }
-   off<B extends keyof A> (name: B, handler: XHandler<A[B]>) {
+   /** Detaches an event handler from an event. */
+   off<B extends keyof A> (
+      /** The name of the event to detach the handler from. */
+      name: B,
+      /** The handler to detach. */
+      handler: XHandler<A[B]>
+   ) {
       const list = this.events[name];
       if (list) {
          const index = list.indexOf(handler);
@@ -527,9 +564,25 @@ class XHost<A extends XKeyed<any[]> = {}> {
       }
       return this;
    }
-   on<B extends keyof A>(name: B): Promise<A[B]>;
-   on<B extends keyof A>(name: B, priority: number): Promise<A[B]>;
-   on<B extends keyof A>(name: B, listener: XHandler<A[B]>): this;
+   /** Attaches an event handler to an event. In this form, no handler is specified, and a promise which resolves when the event is next fired is returned. */
+   on<B extends keyof A>(
+      /** The name of the event. */
+      name: B
+   ): Promise<A[B]>;
+   /** Attaches an event handler to an event. In this form, no handler is specified, and a promise which resolves when the event is next fired is returned. */
+   on<B extends keyof A>(
+      /** The name of the event. */
+      name: B,
+      /** The priority to use for the internal promise-resolving handler. */
+      priority: number
+   ): Promise<A[B]>;
+   /** Attaches an event handler to an event. */
+   on<B extends keyof A>(
+      /** The name of the event. */
+      name: B,
+      /** The event handler to attach. */
+      listener: XHandler<A[B]>
+   ): this;
    on<B extends keyof A> (name: B, a2: number | XHandler<A[B]> = 0) {
       if (typeof a2 === 'number') {
          return new Promise(resolve => {
@@ -553,16 +606,31 @@ class XHost<A extends XKeyed<any[]> = {}> {
          return this;
       }
    }
-   wrapOn<B extends keyof A> (name: B, provider: (host: this) => XHandler<A[B]>) {
+   /** Passes `this` into a provider function, which is expected to return a listener. Useful for situations where there is no external variable for the host object to reference in the event listener. */
+   wrapOn<B extends keyof A> (
+      /** The name of the event. */
+      name: B,
+      /** A function which returns an event listener. */
+      provider: (
+         /** The host object. */
+         host: this
+      ) => XHandler<A[B]>
+   ) {
       return this.on(name, provider(this));
    }
 }
 
+/** An asset, consisting of a loader, unloader, and source string for clarity in errors. */
 class XAsset<A = any> extends XHost<{ load: []; unload: [] }> {
+   /** This asset's loader method. Returns a promise which resolves with the loaded value. */
    loader: () => Promise<A>;
+   /** This asset's source string. Used in thrown errors to help identify the faulty asset. */
    source: string;
+   /** The state of the asset, containing the current loaded value, if any. */
    state = { value: void 0 as A | void };
+   /** This asset's unloader, which unassigns the loaded value and returns a promise which resolves when the asset is fully unloaded. Certain assets, such as images and audios, use this function to perform necessary cleanup operations. */
    unloader: () => Promise<void>;
+   /** Gets the value if defined, or throws an error stating the asset must be loaded. If you prefer not to recieve an error, check if `state.value` is defined before accessing this property. */
    get value () {
       const value = this.state.value;
       if (value === void 0) {
@@ -576,8 +644,11 @@ class XAsset<A = any> extends XHost<{ load: []; unload: [] }> {
       source,
       unloader
    }: {
+      /** This asset's loader method. Returns a promise which resolves with the loaded value. */
       loader: () => Promise<A>;
+      /** This asset's source string. Used in thrown errors to help identify the faulty asset. */
       source: string;
+      /** This asset's unloader, which unassigns the loaded value and returns a promise which resolves when the asset is fully unloaded. Certain assets, such as images and audios, use this function to perform necessary cleanup operations. */
       unloader: () => Promise<void>;
    }) {
       super();
@@ -585,13 +656,20 @@ class XAsset<A = any> extends XHost<{ load: []; unload: [] }> {
       this.source = source;
       this.unloader = unloader;
    }
-   async load (force?: boolean) {
+   /** Requests for the asset to be loaded. */
+   async load (
+      /** Forcefully re-load the asset, even if it is already available. Defaults to `false`. */
+      force?: boolean
+   ) {
       if (force || this.state.value === void 0) {
          this.state.value = await this.loader();
          this.fire('load');
       }
    }
-   async unload (force?: boolean) {
+   /** Requests for the asset to be unloaded. */
+   async unload (
+      /** Forcefully re-unload the asset, even if it is not already available. Defaults to `false`. */ force?: boolean
+   ) {
       if (force || this.state.value !== void 0) {
          this.state.value = await this.unloader();
          this.fire('unload');
@@ -599,7 +677,9 @@ class XAsset<A = any> extends XHost<{ load: []; unload: [] }> {
    }
 }
 
+/** Handles keyboard input from multiple key codes. If a key is held while the window or tab is switched, stuck-key glitches may occur. There are a few potential fixes for this which you may want to consider implementing in your own code when using this class. If you choose to do so, remember that all active keys can be cleared with `state.codes.clear`. */
 class XInput extends XHost<XKeyed<[string], 'down' | 'up'>> {
+   /** The input's state, containing all currently active codes. */
    state = { codes: new Set<string>() };
    constructor ({ codes = [], target = window as any }: XInputProperties = {}) {
       super();
@@ -616,23 +696,35 @@ class XInput extends XHost<XKeyed<[string], 'down' | 'up'>> {
          }
       });
    }
+   /** True if this key is currently active, in other words, if at least one key this input system listens for is pressed. */
    active () {
       return this.state.codes.size > 0;
    }
 }
 
+/** An audio mixer track, used to chain effects together. Remember that if the `effects` array is modified, you must call `refresh` to properly update the series of connections. */
 class XMixer {
+   /** The audio context used by this mixer. */
    context: AudioContext;
+   /** The effects present in this mixer's effect chain. */
    effects: XEffect[];
+   /** The input node. */
    input: GainNode;
+   /** The output node. */
    output: GainNode;
-   constructor (context: AudioContext, effects = [] as XEffect[]) {
+   constructor (
+      /** The audio context used by this mixer. */
+      context: AudioContext,
+      /** The effects present in this mixer's effect chain. */
+      effects = [] as XEffect[]
+   ) {
       this.context = context;
       this.effects = effects;
       this.input = context.createGain();
       this.output = context.createGain();
       this.refresh();
    }
+   /** Refreshes the connections between the input, output, and all effects in this mixer. */
    refresh () {
       for (const [ index, controller ] of [ this.input, ...this.effects ].entries()) {
          controller.disconnect();
