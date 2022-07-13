@@ -284,6 +284,8 @@ type XRectangleProperties = XObjectProperties & XProperties<XRectangle, 'size'>;
 
 /** A rendering layer. */
 type XRendererLayer = {
+   /** The active state of this layer. */
+   active: boolean;
    /** The canvas targeted by the layer. */
    canvas: HTMLCanvasElement;
    /** The layer's modifiers. */
@@ -740,14 +742,23 @@ class XMixer {
    }
 }
 
+/** Can be exported from a file and then imported asynchronously and concurrently with `import`. */
 class XModule<A, B extends any[]> {
+   /** The display name of the module. */
    name: string;
+   /** The script which returns the promise for the module content. */
    script: (...args: B) => Promise<A>;
+   /** The cached promise, used by `import` internally. */
    promise = void 0 as Promise<A> | void;
-   constructor (name: string, script: (...args: B) => Promise<A>) {
+   constructor (
+      /** The display name of the module. */
+      name: string,
+      /** The script which returns the promise for the module content. */ script: (...args: B) => Promise<A>
+   ) {
       this.name = name;
       this.script = script;
    }
+   /** Imports the module. If already imported before, the same promise is returned. */
    import (...args: B) {
       X.status(`IMPORT MODULE: ${this.name}`, { color: '#07f' });
       return (this.promise ??= new Promise<A>(async resolve => {
@@ -1746,7 +1757,6 @@ class XSprite extends XObject {
          const pixels = [
             ...(X.shader.plugins.extract as PExtract).pixels(sprite).slice((originX + originY * sprite.width) * 4)
          ];
-         sprite.destroy();
          while (colors.length < sizeY) {
             const subcolors: XColor[] = [];
             while (subcolors.length < sizeX) {
@@ -1755,6 +1765,7 @@ class XSprite extends XObject {
             colors.push(subcolors);
             pixels.splice(0, (sprite.width - sizeY) * 4);
          }
+         sprite.destroy();
       }
       return colors;
    }
@@ -1833,7 +1844,7 @@ class XAnimation extends XSprite {
       this.compute();
       super.draw(renderer, transform, [ quality, zoom ], style);
    }
-   update (resources: XAnimationResources) {
+   update (resources: XAnimationResources | null) {
       this.resources = resources;
       if (this.state.active) {
          return this.reset().refresh().enable();
