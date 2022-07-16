@@ -1368,6 +1368,7 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
             return [
                key,
                {
+                  active: true,
                   canvas,
                   modifiers: value,
                   objects: [] as XObject[],
@@ -1606,8 +1607,8 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
       const shakeX = this.shake.value ? this.shake.value * (Math.random() - 0.5) : 0;
       const shakeY = this.shake.value ? this.shake.value * (Math.random() - 0.5) : 0;
       for (const key in this.layers) {
-         const { modifiers, objects, renderer } = this.layers[key];
-         if (objects.length > 0 && (update || this.shake.value > 0 || !modifiers.includes('ambient'))) {
+         const { active, modifiers, objects, renderer } = this.layers[key];
+         if (active && objects.length > 0 && (update || this.shake.value > 0 || !modifiers.includes('ambient'))) {
             const center = this.size.divide(2);
             const statik = modifiers.includes('static');
             this.reset(key);
@@ -1881,6 +1882,9 @@ class XVector {
          return this.add(a.x, a.y);
       }
    }
+   ceil (base?: number): XVector {
+      return base ? this.multiply(base).ceil().divide(base) : new XVector(Math.ceil(this.x), Math.ceil(this.y));
+   }
    clamp (min: X2, max: X2) {
       return new XVector(Math.min(Math.max(this.x, min.x), max.x), Math.min(Math.max(this.y, min.y), max.y));
    }
@@ -1889,9 +1893,6 @@ class XVector {
    }
    angle (vector: X2) {
       return ((180 / Math.PI) * Math.atan2(this.y - vector.y, this.x - vector.x) + 360) % 360;
-   }
-   extent (vector: X2) {
-      return Math.sqrt((vector.x - this.x) ** 2 + (vector.y - this.y) ** 2);
    }
    divide(a: number | X2): XVector;
    divide(x: number, y: number): XVector;
@@ -1905,6 +1906,12 @@ class XVector {
    endpoint (angle: number, extent: number) {
       const rads = Math.PI - (((angle + 90) % 360) * Math.PI) / 180;
       return new XVector(this.x + extent * Math.sin(rads), this.y + extent * Math.cos(rads));
+   }
+   extent (vector: X2) {
+      return Math.sqrt((vector.x - this.x) ** 2 + (vector.y - this.y) ** 2);
+   }
+   floor (base?: number): XVector {
+      return base ? this.multiply(base).floor().divide(base) : new XVector(Math.floor(this.x), Math.floor(this.y));
    }
    modulate (duration: number, ...points: Partial<X2>[]) {
       const x = this.x;
@@ -2258,7 +2265,6 @@ const X = {
             source.playbackRate.value = daemon.rate;
             daemon.router(context, gain);
             source.connect(gain);
-            source.start(0, offset);
             const instance = {
                context,
                daemon,
@@ -2271,12 +2277,19 @@ const X = {
                },
                rate: source.playbackRate,
                stop () {
-                  source.stop();
-                  source.disconnect();
-                  source.buffer = null;
-                  store && daemon.instances.splice(daemon.instances.indexOf(instance), 1);
+                  if (source.buffer) {
+                     source.stop();
+                     source.disconnect();
+                     source.buffer = null;
+                     store && daemon.instances.splice(daemon.instances.indexOf(instance), 1);
+                     gain.disconnect();
+                  }
                }
             };
+            source.addEventListener('ended', () => {
+               instance.loop || instance.stop();
+            });
+            source.start(0, offset);
             store && daemon.instances.push(instance);
             return instance;
          },
