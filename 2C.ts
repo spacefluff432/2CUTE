@@ -629,14 +629,14 @@ class XAsset<A = any> extends XHost<{ load: []; unload: [] }> {
    /** This asset's source string. Used in thrown errors to help identify the faulty asset. */
    source: string;
    /** The state of the asset, containing the current loaded value, if any. */
-   state = { value: void 0 as A | void };
+   state = { retainers: [] as XAsset[], value: void 0 as A | void };
    /** This asset's unloader, which unassigns the loaded value and returns a promise which resolves when the asset is fully unloaded. Certain assets, such as images and audios, use this function to perform necessary cleanup operations. */
    unloader: () => Promise<void>;
    /** Gets the value if defined, or throws an error stating the asset must be loaded. If you prefer not to recieve an error, check if `state.value` is defined before accessing this property. */
    get value () {
       const value = this.state.value;
       if (value === void 0) {
-         throw `The asset of "${this.source}" is not currently loaded!`;
+         throw new ReferenceError(`The asset of "${this.source}" is not currently loaded!`);
       } else {
          return value;
       }
@@ -660,19 +660,22 @@ class XAsset<A = any> extends XHost<{ load: []; unload: [] }> {
    }
    /** Requests for the asset to be loaded. */
    async load (
-      /** Forcefully re-load the asset, even if it is already available. Defaults to `false`. */
-      force?: boolean
+      /** The retainer to register. This will act as a secondary source of keeping the asset loaded. */
+      retainer: XAsset = this
    ) {
-      if (force || this.state.value === void 0) {
+      this.state.retainers.includes(retainer) || this.state.retainers.push(retainer);
+      if (this.state.value === void 0) {
          this.state.value = await this.loader();
          this.fire('load');
       }
    }
    /** Requests for the asset to be unloaded. */
    async unload (
-      /** Forcefully re-unload the asset, even if it is not already available. Defaults to `false`. */ force?: boolean
+      /** The retainer to unregister. All previously registered retainers must be passed through here to unload the asset. */
+      retainer: XAsset = this
    ) {
-      if (force || this.state.value !== void 0) {
+      this.state.retainers.includes(retainer) && this.state.retainers.splice(this.state.retainers.indexOf(retainer), 1);
+      if (this.state.value !== void 0 && this.state.retainers.length === 0) {
          this.state.value = await this.unloader();
          this.fire('unload');
       }
@@ -1677,15 +1680,18 @@ class XSprite extends XObject {
    }
    compute () {
       const texture = this.frames[this.state.index];
-      if (texture && texture.state.value) {
-         const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
-         const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
-         const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
-         const h = (this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom - y;
-         return new XVector(w, h);
-      } else {
-         return new XVector(0, 0);
+      if (texture) {
+         if (texture.state.value) {
+            const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
+            const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
+            const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
+            const h = (this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom - y;
+            return new XVector(w, h);
+         } else {
+            X.status(`Error: Cannot invoke the unloaded asset of "${texture.source}"`, X.preset.error);
+         }
       }
+      return new XVector(0, 0);
    }
    disable () {
       this.state.active = false;
@@ -1694,42 +1700,46 @@ class XSprite extends XObject {
    draw (
       renderer: PRenderer | PCanvasRenderer,
       [ position, rotation, scale ]: XTransform,
-      [ quality, zoom ]: XFactor,
+      [ quality ]: XFactor,
       style: XStyle
    ) {
       const texture = this.frames[this.state.index];
-      if (texture && texture.state.value) {
-         const r = (Math.PI / 180) * (rotation % 360);
-         const a = (this.anchor.x + 1) / 2;
-         const b = (this.anchor.y + 1) / 2;
-         const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
-         const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
-         const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
-         const h = (this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom - y;
-         const sprite = new PIXI.Sprite(X.cache.textures.get(texture)!);
-         sprite.anchor.set((x + w * a) / texture.value.width, (y + h * b) / texture.value.height);
-         sprite.position.set(position.x * quality, position.y * quality);
-         sprite.rotation = r;
-         sprite.scale.set(scale.x, scale.y);
-         sprite.alpha = style.globalAlpha;
-         sprite.blendMode = X.blend(style.globalCompositeOperation);
+      if (texture) {
+         if (texture.state.value) {
+            const r = (Math.PI / 180) * (rotation % 360);
+            const a = (this.anchor.x + 1) / 2;
+            const b = (this.anchor.y + 1) / 2;
+            const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
+            const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
+            const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
+            const h = (this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom - y;
+            const sprite = new PIXI.Sprite(X.cache.textures.get(texture)!);
+            sprite.anchor.set((x + w * a) / texture.value.width, (y + h * b) / texture.value.height);
+            sprite.position.set(position.x * quality, position.y * quality);
+            sprite.rotation = r;
+            sprite.scale.set(scale.x, scale.y);
+            sprite.alpha = style.globalAlpha;
+            sprite.blendMode = X.blend(style.globalCompositeOperation);
 
-         // mask setup
-         const graphics = new PIXI.Graphics();
-         graphics.position.set(sprite.position.x, sprite.position.y);
-         graphics.pivot.set(w * a, h * b);
-         graphics.rotation = r;
-         graphics.scale.set(scale.x, scale.y);
-         graphics.beginFill(0xffffff, 1).drawRect(0, 0, w, h).endFill();
-         const mask = new PIXI.MaskData(graphics);
-         mask.type = rotation % 90 === 0 ? PIXI.MASK_TYPES.SCISSOR : PIXI.MASK_TYPES.STENCIL;
-         sprite.mask = mask;
+            // mask setup
+            const graphics = new PIXI.Graphics();
+            graphics.position.set(sprite.position.x, sprite.position.y);
+            graphics.pivot.set(w * a, h * b);
+            graphics.rotation = r;
+            graphics.scale.set(scale.x, scale.y);
+            graphics.beginFill(0xffffff, 1).drawRect(0, 0, w, h).endFill();
+            const mask = new PIXI.MaskData(graphics);
+            mask.type = rotation % 90 === 0 ? PIXI.MASK_TYPES.SCISSOR : PIXI.MASK_TYPES.STENCIL;
+            sprite.mask = mask;
 
-         // render
-         (GL && rotation % 90 === 0) || renderer.render(graphics);
-         renderer.render(sprite);
-         sprite.destroy();
-         graphics.destroy();
+            // render
+            (GL && rotation % 90 === 0) || renderer.render(graphics);
+            renderer.render(sprite);
+            sprite.destroy();
+            graphics.destroy();
+         } else {
+            X.status(`Error: Cannot invoke the unloaded asset of "${texture.source}"`, X.preset.error);
+         }
       }
       if (Math.round(this.steps / X.speed.value) <= ++this.state.step) {
          this.state.step = 0;
@@ -1810,36 +1820,37 @@ class XAnimation extends XSprite {
       return this;
    }
    compute () {
-      if (this.resources && this.resources.state.value) {
-         const frames = this.resources.value[0].value.frames;
-         const update = this.state.index !== this.state.previous;
-         if (update) {
-            this.state.previous = this.state.index;
-         }
-         const {
-            duration,
-            frame: { x, y, w, h }
-         } = frames[this.state.index];
-         const sx = (this.subcrop.left < 0 ? w : 0) + this.subcrop.left;
-         const sy = (this.subcrop.top < 0 ? h : 0) + this.subcrop.top;
-         const sw = (this.subcrop.right < 0 ? 0 : w) - this.subcrop.right - sx;
-         const sh = (this.subcrop.bottom < 0 ? 0 : h) - this.subcrop.bottom - sy;
-         this.crop = { left: x + sx, top: y + sy, right: -(x + sx + sw), bottom: -(y + sy + sh) };
-         if (update) {
-            const content = this.resources.value[1];
-            this.frames = X.populate(frames.length, () => content);
-            if (this.stepper) {
-               this.steps = Math.round(duration / (1000 / this.framerate));
+      if (this.resources) {
+         if (this.resources.state.value) {
+            const frames = this.resources.value[0].value.frames;
+            const update = this.state.index !== this.state.previous;
+            if (update) {
+               this.state.previous = this.state.index;
             }
-         }
-         if (frames.length > 0) {
-            return new XVector(sw, sh);
+            const {
+               duration,
+               frame: { x, y, w, h }
+            } = frames[this.state.index];
+            const sx = (this.subcrop.left < 0 ? w : 0) + this.subcrop.left;
+            const sy = (this.subcrop.top < 0 ? h : 0) + this.subcrop.top;
+            const sw = (this.subcrop.right < 0 ? 0 : w) - this.subcrop.right - sx;
+            const sh = (this.subcrop.bottom < 0 ? 0 : h) - this.subcrop.bottom - sy;
+            this.crop = { left: x + sx, top: y + sy, right: -(x + sx + sw), bottom: -(y + sy + sh) };
+            if (update) {
+               const content = this.resources.value[1];
+               this.frames = X.populate(frames.length, () => content);
+               if (this.stepper) {
+                  this.steps = Math.round(duration / (1000 / this.framerate));
+               }
+            }
+            if (frames.length > 0) {
+               return new XVector(sw, sh);
+            }
          } else {
-            return new XVector();
+            X.status(`Error: Cannot invoke the unloaded asset of "${this.resources.source}"`, X.preset.error);
          }
-      } else {
-         return new XVector();
       }
+      return new XVector();
    }
    draw (renderer: PRenderer | PCanvasRenderer, transform: XTransform, [ quality, zoom ]: XFactor, style: XStyle) {
       this.compute();
@@ -2207,6 +2218,7 @@ const X = {
             return PIXI.BLEND_MODES.NORMAL;
       }
    },
+   buffer: new AudioBuffer({ length: 1, sampleRate: 3000 }),
    cache: {
       audios: {} as XKeyed<Promise<AudioBuffer>>,
       audioAssets: {} as XKeyed<XAudio[]>,
@@ -2218,7 +2230,8 @@ const X = {
       imageAssets: {} as XKeyed<XImage[]>,
       textMetrics: {} as XKeyed<X2>,
       textures: new Map<XImage, PTexture>(),
-      modulationTasks: new Map<AudioParam | XNumber | XVector, { cancel: () => void }>()
+      modulationTasks: new Map<AudioParam | XNumber | XVector, { cancel: () => void }>(),
+      when: [] as { condition: () => boolean; resolve: () => void }[]
    },
    chain<A, B> (input: A, handler: (input: A, loop: (input: A) => B) => B) {
       const loop = (input: A) => handler(input, loop);
@@ -2260,7 +2273,12 @@ const X = {
             const gain = context.createGain();
             const source = context.createBufferSource();
             gain.gain.value = daemon.gain;
-            source.buffer = daemon.audio.value;
+            if (daemon.audio.state.value) {
+               source.buffer = daemon.audio.value;
+            } else {
+               X.status(`Error: Cannot invoke the unloaded asset of "${daemon.audio.source}"`, X.preset.error);
+               source.buffer = X.buffer;
+            }
             source.loop = daemon.loop;
             source.playbackRate.value = daemon.rate;
             daemon.router(context, gain);
@@ -2437,15 +2455,16 @@ const X = {
       return (await fetch(source)).json() as Promise<X>;
    },
    inventory<A extends XAsset[]> (...assets: A): XInventory<A> {
-      return new XAsset({
+      const inventory = new XAsset({
          async loader () {
-            return await Promise.all(assets.map(asset => asset.load())).then(() => assets);
+            return await Promise.all(assets.map(asset => asset.load(inventory))).then(() => assets);
          },
-         source: assets.map(asset => asset.source).join('//'),
+         source: assets.map(asset => asset.source).join('\n'),
          async unloader () {
-            await Promise.all(assets.map(asset => asset.unload()));
+            await Promise.all(assets.map(asset => asset.unload(inventory)));
          }
-      });
+      }) as XInventory<A>;
+      return inventory;
    },
    math: {
       bezier (value: number, ...points: number[]): number {
@@ -2534,6 +2553,9 @@ const X = {
          array.push(provider(index++));
       }
       return array;
+   },
+   preset: {
+      error: { backgroundColor: '#f00', color: '#fff', fontSize: '12px' }
    },
    provide<A extends XProvider<unknown, unknown[]>> (
       provider: A,
@@ -2638,15 +2660,9 @@ const X = {
       }
    },
    when (condition: () => boolean) {
-      return new Promise<void>(resolve => {
-         const listener = () => {
-            if (condition()) {
-               resolve();
-               X.timer.off('tick', listener);
-            }
-         };
-         X.timer.on('tick', listener);
-      });
+      const { promise, resolve } = X.hyperpromise();
+      X.cache.when.push({ condition, resolve });
+      return promise;
    },
    zero: new XVector()
 };
@@ -2660,3 +2676,9 @@ AudioParam.prototype.modulate = function (duration: number, ...points: number[])
 };
 
 X.timer.fire('init');
+
+X.timer.on('tick', () => {
+   for (const check of X.cache.when) {
+      check.condition() && (void X.cache.when.splice(X.cache.when.indexOf(check), 1), check.resolve());
+   }
+});
