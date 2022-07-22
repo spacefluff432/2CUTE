@@ -1622,16 +1622,17 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
                );
             }
             const zoom = statik ? 1 : this.zoom.value;
+            const subcamera = camera.add(this.size.subtract(this.size.divide(zoom)).divide(2));
             const transform: XTransform = [
                new XVector(
-                  center.x + -(statik ? center.x : camera.x) + shakeX,
-                  center.y + -(statik ? center.y : camera.y) + shakeY
+                  center.x + -(statik ? center.x : subcamera.x) + shakeX,
+                  center.y + -(statik ? center.y : subcamera.y) + shakeY
                ),
                0,
                new XVector(this.quality.value * zoom)
             ];
             for (const object of objects) {
-               object.render(renderer, camera, transform, [ this.quality.value * zoom, zoom ], {
+               object.render(renderer, subcamera, transform, [ this.quality.value * zoom, zoom ], {
                   globalAlpha: 1,
                   globalCompositeOperation: 'source-over',
                   fillStyle: 'transparent',
