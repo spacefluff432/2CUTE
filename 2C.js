@@ -238,7 +238,7 @@ class XAsset extends XHost {
     constructor({ loader, source, unloader }) {
         super();
         /** The state of the asset, containing the current loaded value, if any. */
-        this.state = { value: void 0 };
+        this.state = { retainers: [], value: void 0 };
         this.loader = loader;
         this.source = source;
         this.unloader = unloader;
@@ -247,7 +247,7 @@ class XAsset extends XHost {
     get value() {
         const value = this.state.value;
         if (value === void 0) {
-            throw `The asset of "${this.source}" is not currently loaded!`;
+            throw new ReferenceError(`The asset of "${this.source}" is not currently loaded!`);
         }
         else {
             return value;
@@ -255,17 +255,20 @@ class XAsset extends XHost {
     }
     /** Requests for the asset to be loaded. */
     async load(
-    /** Forcefully re-load the asset, even if it is already available. Defaults to `false`. */
-    force) {
-        if (force || this.state.value === void 0) {
+    /** The retainer to register. This will act as a secondary source of keeping the asset loaded. */
+    retainer = this) {
+        this.state.retainers.includes(retainer) || this.state.retainers.push(retainer);
+        if (this.state.value === void 0) {
             this.state.value = await this.loader();
             this.fire('load');
         }
     }
     /** Requests for the asset to be unloaded. */
     async unload(
-    /** Forcefully re-unload the asset, even if it is not already available. Defaults to `false`. */ force) {
-        if (force || this.state.value !== void 0) {
+    /** The retainer to unregister. All previously registered retainers must be passed through here to unload the asset. */
+    retainer = this) {
+        this.state.retainers.includes(retainer) && this.state.retainers.splice(this.state.retainers.indexOf(retainer), 1);
+        if (this.state.value !== void 0 && this.state.retainers.length === 0) {
             this.state.value = await this.unloader();
             this.fire('unload');
         }
@@ -325,12 +328,18 @@ class XMixer {
         }
     }
 }
+/** Can be exported from a file and then imported asynchronously and concurrently with `import`. */
 class XModule {
-    constructor(name, script) {
+    constructor(
+    /** The display name of the module. */
+    name, 
+    /** The script which returns the promise for the module content. */ script) {
+        /** The cached promise, used by `import` internally. */
         this.promise = void 0;
         this.name = name;
         this.script = script;
     }
+    /** Imports the module. If already imported before, the same promise is returned. */
     import(...args) {
         var _a;
         X.status(`IMPORT MODULE: ${this.name}`, { color: '#07f' });
@@ -796,6 +805,7 @@ class XRenderer extends XHost {
             return [
                 key,
                 {
+                    active: true,
                     canvas,
                     modifiers: value,
                     objects: [],
@@ -1032,8 +1042,8 @@ class XRenderer extends XHost {
         const shakeX = this.shake.value ? this.shake.value * (Math.random() - 0.5) : 0;
         const shakeY = this.shake.value ? this.shake.value * (Math.random() - 0.5) : 0;
         for (const key in this.layers) {
-            const { modifiers, objects, renderer } = this.layers[key];
-            if (objects.length > 0 && (update || this.shake.value > 0 || !modifiers.includes('ambient'))) {
+            const { active, modifiers, objects, renderer } = this.layers[key];
+            if (active && objects.length > 0 && (update || this.shake.value > 0 || !modifiers.includes('ambient'))) {
                 const center = this.size.divide(2);
                 const statik = modifiers.includes('static');
                 this.reset(key);
@@ -1041,13 +1051,14 @@ class XRenderer extends XHost {
                     objects.sort((object1, object2) => (object1.priority.value || object1.position.y) - (object2.priority.value || object2.position.y));
                 }
                 const zoom = statik ? 1 : this.zoom.value;
+                const subcamera = camera.add(this.size.subtract(this.size.divide(zoom)).divide(2));
                 const transform = [
-                    new XVector(center.x + -(statik ? center.x : camera.x) + shakeX, center.y + -(statik ? center.y : camera.y) + shakeY),
+                    new XVector(center.x + -(statik ? center.x : subcamera.x) + shakeX, center.y + -(statik ? center.y : subcamera.y) + shakeY),
                     0,
                     new XVector(this.quality.value * zoom)
                 ];
                 for (const object of objects) {
-                    object.render(renderer, camera, transform, [this.quality.value * zoom, zoom], {
+                    object.render(renderer, subcamera, transform, [this.quality.value * zoom, zoom], {
                         globalAlpha: 1,
                         globalCompositeOperation: 'source-over',
                         fillStyle: 'transparent',
@@ -1085,53 +1096,61 @@ class XSprite extends XObject {
     }
     compute() {
         const texture = this.frames[this.state.index];
-        if (texture && texture.state.value) {
-            const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
-            const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
-            const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
-            const h = (this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom - y;
-            return new XVector(w, h);
+        if (texture) {
+            if (texture.state.value) {
+                const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
+                const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
+                const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
+                const h = (this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom - y;
+                return new XVector(w, h);
+            }
+            else {
+                X.status(`Error: Cannot invoke the unloaded asset of "${texture.source}"`, X.preset.error);
+            }
         }
-        else {
-            return new XVector(0, 0);
-        }
+        return new XVector(0, 0);
     }
     disable() {
         this.state.active = false;
         return this;
     }
-    draw(renderer, [position, rotation, scale], [quality, zoom], style) {
+    draw(renderer, [position, rotation, scale], [quality], style) {
         const texture = this.frames[this.state.index];
-        if (texture && texture.state.value) {
-            const r = (Math.PI / 180) * (rotation % 360);
-            const a = (this.anchor.x + 1) / 2;
-            const b = (this.anchor.y + 1) / 2;
-            const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
-            const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
-            const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
-            const h = (this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom - y;
-            const sprite = new PIXI.Sprite(X.cache.textures.get(texture));
-            sprite.anchor.set((x + w * a) / texture.value.width, (y + h * b) / texture.value.height);
-            sprite.position.set(position.x * quality, position.y * quality);
-            sprite.rotation = r;
-            sprite.scale.set(scale.x, scale.y);
-            sprite.alpha = style.globalAlpha;
-            sprite.blendMode = X.blend(style.globalCompositeOperation);
-            // mask setup
-            const graphics = new PIXI.Graphics();
-            graphics.position.set(sprite.position.x, sprite.position.y);
-            graphics.pivot.set(w * a, h * b);
-            graphics.rotation = r;
-            graphics.scale.set(scale.x, scale.y);
-            graphics.beginFill(0xffffff, 1).drawRect(0, 0, w, h).endFill();
-            const mask = new PIXI.MaskData(graphics);
-            mask.type = rotation % 90 === 0 ? PIXI.MASK_TYPES.SCISSOR : PIXI.MASK_TYPES.STENCIL;
-            sprite.mask = mask;
-            // render
-            (GL && rotation % 90 === 0) || renderer.render(graphics);
-            renderer.render(sprite);
-            sprite.destroy();
-            graphics.destroy();
+        if (texture) {
+            if (texture.state.value) {
+                const r = (Math.PI / 180) * (rotation % 360);
+                const a = (this.anchor.x + 1) / 2;
+                const b = (this.anchor.y + 1) / 2;
+                const x = (this.crop.left < 0 ? texture.value.width : 0) + this.crop.left;
+                const y = (this.crop.top < 0 ? texture.value.height : 0) + this.crop.top;
+                const w = (this.crop.right < 0 ? 0 : texture.value.width) - this.crop.right - x;
+                const h = (this.crop.bottom < 0 ? 0 : texture.value.height) - this.crop.bottom - y;
+                const sprite = new PIXI.Sprite(X.cache.textures.get(texture));
+                sprite.anchor.set((x + w * a) / texture.value.width, (y + h * b) / texture.value.height);
+                sprite.position.set(position.x * quality, position.y * quality);
+                sprite.rotation = r;
+                sprite.scale.set(scale.x, scale.y);
+                sprite.alpha = style.globalAlpha;
+                sprite.blendMode = X.blend(style.globalCompositeOperation);
+                // mask setup
+                const graphics = new PIXI.Graphics();
+                graphics.position.set(sprite.position.x, sprite.position.y);
+                graphics.pivot.set(w * a, h * b);
+                graphics.rotation = r;
+                graphics.scale.set(scale.x, scale.y);
+                graphics.beginFill(0xffffff, 1).drawRect(0, 0, w, h).endFill();
+                const mask = new PIXI.MaskData(graphics);
+                mask.type = rotation % 90 === 0 ? PIXI.MASK_TYPES.SCISSOR : PIXI.MASK_TYPES.STENCIL;
+                sprite.mask = mask;
+                // render
+                (GL && rotation % 90 === 0) || renderer.render(graphics);
+                renderer.render(sprite);
+                sprite.destroy();
+                graphics.destroy();
+            }
+            else {
+                X.status(`Error: Cannot invoke the unloaded asset of "${texture.source}"`, X.preset.error);
+            }
         }
         if (Math.round(this.steps / X.speed.value) <= ++this.state.step) {
             this.state.step = 0;
@@ -1161,7 +1180,6 @@ class XSprite extends XObject {
             const pixels = [
                 ...X.shader.plugins.extract.pixels(sprite).slice((originX + originY * sprite.width) * 4)
             ];
-            sprite.destroy();
             while (colors.length < sizeY) {
                 const subcolors = [];
                 while (subcolors.length < sizeX) {
@@ -1170,6 +1188,7 @@ class XSprite extends XObject {
                 colors.push(subcolors);
                 pixels.splice(0, (sprite.width - sizeY) * 4);
             }
+            sprite.destroy();
         }
         return colors;
     }
@@ -1203,35 +1222,35 @@ class XAnimation extends XSprite {
         return this;
     }
     compute() {
-        if (this.resources && this.resources.state.value) {
-            const frames = this.resources.value[0].value.frames;
-            const update = this.state.index !== this.state.previous;
-            if (update) {
-                this.state.previous = this.state.index;
-            }
-            const { duration, frame: { x, y, w, h } } = frames[this.state.index];
-            const sx = (this.subcrop.left < 0 ? w : 0) + this.subcrop.left;
-            const sy = (this.subcrop.top < 0 ? h : 0) + this.subcrop.top;
-            const sw = (this.subcrop.right < 0 ? 0 : w) - this.subcrop.right - sx;
-            const sh = (this.subcrop.bottom < 0 ? 0 : h) - this.subcrop.bottom - sy;
-            this.crop = { left: x + sx, top: y + sy, right: -(x + sx + sw), bottom: -(y + sy + sh) };
-            if (update) {
-                const content = this.resources.value[1];
-                this.frames = X.populate(frames.length, () => content);
-                if (this.stepper) {
-                    this.steps = Math.round(duration / (1000 / this.framerate));
+        if (this.resources) {
+            if (this.resources.state.value) {
+                const frames = this.resources.value[0].value.frames;
+                const update = this.state.index !== this.state.previous;
+                if (update) {
+                    this.state.previous = this.state.index;
+                }
+                const { duration, frame: { x, y, w, h } } = frames[this.state.index];
+                const sx = (this.subcrop.left < 0 ? w : 0) + this.subcrop.left;
+                const sy = (this.subcrop.top < 0 ? h : 0) + this.subcrop.top;
+                const sw = (this.subcrop.right < 0 ? 0 : w) - this.subcrop.right - sx;
+                const sh = (this.subcrop.bottom < 0 ? 0 : h) - this.subcrop.bottom - sy;
+                this.crop = { left: x + sx, top: y + sy, right: -(x + sx + sw), bottom: -(y + sy + sh) };
+                if (update) {
+                    const content = this.resources.value[1];
+                    this.frames = X.populate(frames.length, () => content);
+                    if (this.stepper) {
+                        this.steps = Math.round(duration / (1000 / this.framerate));
+                    }
+                }
+                if (frames.length > 0) {
+                    return new XVector(sw, sh);
                 }
             }
-            if (frames.length > 0) {
-                return new XVector(sw, sh);
-            }
             else {
-                return new XVector();
+                X.status(`Error: Cannot invoke the unloaded asset of "${this.resources.source}"`, X.preset.error);
             }
         }
-        else {
-            return new XVector();
-        }
+        return new XVector();
     }
     draw(renderer, transform, [quality, zoom], style) {
         this.compute();
@@ -1269,6 +1288,9 @@ class XVector {
             return this.add(a.x, a.y);
         }
     }
+    ceil(base) {
+        return base ? this.multiply(base).ceil().divide(base) : new XVector(Math.ceil(this.x), Math.ceil(this.y));
+    }
     clamp(min, max) {
         return new XVector(Math.min(Math.max(this.x, min.x), max.x), Math.min(Math.max(this.y, min.y), max.y));
     }
@@ -1277,9 +1299,6 @@ class XVector {
     }
     angle(vector) {
         return ((180 / Math.PI) * Math.atan2(this.y - vector.y, this.x - vector.x) + 360) % 360;
-    }
-    extent(vector) {
-        return Math.sqrt((vector.x - this.x) ** 2 + (vector.y - this.y) ** 2);
     }
     divide(a, b = a) {
         if (typeof a === 'number') {
@@ -1292,6 +1311,12 @@ class XVector {
     endpoint(angle, extent) {
         const rads = Math.PI - (((angle + 90) % 360) * Math.PI) / 180;
         return new XVector(this.x + extent * Math.sin(rads), this.y + extent * Math.cos(rads));
+    }
+    extent(vector) {
+        return Math.sqrt((vector.x - this.x) ** 2 + (vector.y - this.y) ** 2);
+    }
+    floor(base) {
+        return base ? this.multiply(base).floor().divide(base) : new XVector(Math.floor(this.x), Math.floor(this.y));
     }
     modulate(duration, ...points) {
         const x = this.x;
@@ -1570,6 +1595,7 @@ const X = {
                 return PIXI.BLEND_MODES.NORMAL;
         }
     },
+    buffer: new AudioBuffer({ length: 1, sampleRate: 3000 }),
     cache: {
         audios: {},
         audioAssets: {},
@@ -1581,7 +1607,8 @@ const X = {
         imageAssets: {},
         textMetrics: {},
         textures: new Map(),
-        modulationTasks: new Map()
+        modulationTasks: new Map(),
+        when: []
     },
     chain(input, handler) {
         const loop = (input) => handler(input, loop);
@@ -1615,12 +1642,17 @@ const X = {
                 const gain = context.createGain();
                 const source = context.createBufferSource();
                 gain.gain.value = daemon.gain;
-                source.buffer = daemon.audio.value;
+                if (daemon.audio.state.value) {
+                    source.buffer = daemon.audio.value;
+                }
+                else {
+                    X.status(`Error: Cannot invoke the unloaded asset of "${daemon.audio.source}"`, X.preset.error);
+                    source.buffer = X.buffer;
+                }
                 source.loop = daemon.loop;
                 source.playbackRate.value = daemon.rate;
                 daemon.router(context, gain);
                 source.connect(gain);
-                source.start(0, offset);
                 const instance = {
                     context,
                     daemon,
@@ -1633,12 +1665,19 @@ const X = {
                     },
                     rate: source.playbackRate,
                     stop() {
-                        source.stop();
-                        source.disconnect();
-                        source.buffer = null;
-                        store && daemon.instances.splice(daemon.instances.indexOf(instance), 1);
+                        if (source.buffer) {
+                            source.stop();
+                            source.disconnect();
+                            source.buffer = null;
+                            store && daemon.instances.splice(daemon.instances.indexOf(instance), 1);
+                            gain.disconnect();
+                        }
                     }
                 };
+                source.addEventListener('ended', () => {
+                    instance.loop || instance.stop();
+                });
+                source.start(0, offset);
                 store && daemon.instances.push(instance);
                 return instance;
             },
@@ -1785,15 +1824,16 @@ const X = {
         return (await fetch(source)).json();
     },
     inventory(...assets) {
-        return new XAsset({
+        const inventory = new XAsset({
             async loader() {
-                return await Promise.all(assets.map(asset => asset.load())).then(() => assets);
+                return await Promise.all(assets.map(asset => asset.load(inventory))).then(() => assets);
             },
-            source: assets.map(asset => asset.source).join('//'),
+            source: assets.map(asset => asset.source).join('\n'),
             async unloader() {
-                await Promise.all(assets.map(asset => asset.unload()));
+                await Promise.all(assets.map(asset => asset.unload(inventory)));
             }
         });
+        return inventory;
     },
     math: {
         bezier(value, ...points) {
@@ -1884,6 +1924,9 @@ const X = {
             array.push(provider(index++));
         }
         return array;
+    },
+    preset: {
+        error: { backgroundColor: '#f00', color: '#fff', fontSize: '12px' }
     },
     provide(provider, ...args) {
         return typeof provider === 'function' ? X.provide(provider(...args)) : provider;
@@ -1976,15 +2019,9 @@ const X = {
         }
     },
     when(condition) {
-        return new Promise(resolve => {
-            const listener = () => {
-                if (condition()) {
-                    resolve();
-                    X.timer.off('tick', listener);
-                }
-            };
-            X.timer.on('tick', listener);
-        });
+        const { promise, resolve } = X.hyperpromise();
+        X.cache.when.push({ condition, resolve });
+        return promise;
     },
     zero: new XVector()
 };
@@ -1995,4 +2032,9 @@ AudioParam.prototype.modulate = function (duration, ...points) {
     return XNumber.prototype.modulate.call(this, duration, ...points);
 };
 X.timer.fire('init');
+X.timer.on('tick', () => {
+    for (const check of X.cache.when) {
+        check.condition() && (void X.cache.when.splice(X.cache.when.indexOf(check), 1), check.resolve());
+    }
+});
 //# sourceMappingURL=2C.js.map
