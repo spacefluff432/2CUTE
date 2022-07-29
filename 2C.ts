@@ -828,7 +828,7 @@ class XNumber {
       this.value = value;
    }
    modulate (duration: number, ...points: number[]) {
-      const base = X.time;
+      const base = X.time.value;
       const value = this.value;
       let active = true;
       X.cache.modulationTasks.get(this)?.cancel();
@@ -839,7 +839,7 @@ class XNumber {
       });
       return X.when(() => {
          if (active) {
-            const elapsed = X.time - base;
+            const elapsed = X.time.value - base;
             if (elapsed < duration) {
                this.value = X.math.bezier(elapsed / duration, value, ...points);
                return false;
@@ -913,7 +913,7 @@ class XObject extends XHost<{ tick: [] }> {
       position: { x: position_x = 0, y: position_y = 0 } = {},
       priority = 0,
       rotation = 0,
-      size: { x: size_x = 1, y: size_y = 1 } = {},
+      size: { x: size_x = 0, y: size_y = 0 } = {},
       scale: { x: scale_x = 1, y: scale_y = 1 } = {},
       shadow: { blur = void 0, color = void 0, offset: { x: shadow$offset_x = 0, y: shadow$offset_y = 0 } = {} } = {},
       stroke = void 0,
@@ -957,7 +957,7 @@ class XObject extends XHost<{ tick: [] }> {
       this.text = { align, baseline, direction, font };
       this.velocity = new XVector(velocity_x, velocity_y);
    }
-   compute (renderer: PRenderer | PCanvasRenderer) {
+   compute () {
       return this.size;
    }
    draw (renderer: PRenderer | PCanvasRenderer, transform: XTransform, [ quality, zoom ]: XFactor, style: XStyle) {}
@@ -1234,7 +1234,7 @@ class XRectangle extends XObject {
       const fill = style.fillStyle !== 'transparent';
       const stroke = style.strokeStyle !== 'transparent';
       if (fill || stroke) {
-         const size = this.compute(renderer);
+         const size = this.compute();
          const half = size.divide(2);
          const base = position.subtract(half.add(half.multiply(this.anchor)));
          const rectangle = new PIXI.Graphics();
@@ -1899,7 +1899,7 @@ class XVector {
    modulate (duration: number, ...points: Partial<X2>[]) {
       const x = this.x;
       const y = this.y;
-      const base = X.time;
+      const base = X.time.value;
       let active = true;
       X.cache.modulationTasks.get(this)?.cancel();
       X.cache.modulationTasks.set(this, {
@@ -1909,7 +1909,7 @@ class XVector {
       });
       return X.when(() => {
          if (active) {
-            const elapsed = X.time - base;
+            const elapsed = X.time.value - base;
             if (elapsed < duration) {
                this.x = X.math.bezier(elapsed / duration, x, ...points.map(point => point.x ?? x));
                this.y = X.math.bezier(elapsed / duration, y, ...points.map(point => point.y ?? y));
@@ -1987,7 +1987,7 @@ class XText extends XObject {
    ) {
       let index = 0;
       const state = Object.assign({}, style);
-      const phase = X.time / 1e3;
+      const phase = X.time.value / 1e3;
       const offset = { x: 0, y: 0 };
       const random = { x: 0, y: 0 };
       const swirl = { p: 0, r: 0, s: 0 };
@@ -2335,13 +2335,13 @@ const X = {
       const key = `${Object.values(style).join('\x00')}\x00${charset}\x00${quality}`;
       if (key in X.cache.fonts) {
          const font = X.cache.fonts[key];
-         font.time = X.time;
+         font.time = X.time.value;
          return font.value;
       } else {
          const size =
             typeof style.fontSize === 'number' ? style.fontSize : +style.fontSize.replace(/(px|pt|em|%)/g, '');
          return (X.cache.fonts[key] = {
-            time: X.time,
+            time: X.time.value,
             value: PIXI.BitmapFont.from(key, style, {
                chars: charset.split(''),
                padding: 0,
@@ -2517,8 +2517,8 @@ const X = {
       if (duration === Infinity) {
          return new Promise<void>(() => {});
       } else {
-         const time = X.time;
-         return X.when(() => duration <= X.time - time);
+         const time = X.time.value;
+         return X.when(() => duration <= X.time.value - time);
       }
    },
    populate<A extends (index: number) => any>(size: number, provider: A) {
@@ -2597,25 +2597,27 @@ const X = {
    synthesize (colors: XColor[][]) {
       return createImageBitmap(new ImageData(new Uint8ClampedArray(colors.flat(2)), colors.length));
    },
-   time: 0,
-   timer: (() => {
-      const host = new XHost<{ init: []; tick: [number] }>();
-      host.on('init').then(() => {
-         setInterval(() => {
-            X.time += 5 * X.speed.value;
-            X.timer.fire('tick', 5 * X.speed.value);
-            for (const key in X.cache.fonts) {
-               X.time - X.cache.fonts[key].time > 30e3 && delete X.cache.fonts[key];
+   time: {
+      timer: (() => {
+         const host = new XHost<{ init: []; tick: [number] }>();
+         host.on('init').then(() => {
+            setInterval(() => {
+               X.time.value += 5 * X.speed.value;
+               X.time.timer.fire('tick', 5 * X.speed.value);
+               for (const key in X.cache.fonts) {
+                  X.time.value - X.cache.fonts[key].time > 30e3 && delete X.cache.fonts[key];
+               }
+            }, 5);
+         });
+         host.on('tick', () => {
+            for (const check of X.cache.checks) {
+               check.condition() && (void X.cache.checks.splice(X.cache.checks.indexOf(check), 1), check.resolve());
             }
-         }, 5);
-      });
-      host.on('tick', () => {
-         for (const check of X.cache.checks) {
-            check.condition() && (void X.cache.checks.splice(X.cache.checks.indexOf(check), 1), check.resolve());
-         }
-      });
-      return host;
-   })(),
+         });
+         return host;
+      })(),
+      value: 0
+   },
    weighted<A extends string> (input: XProvider<[A, number][]>, modifier = Math.random()) {
       const weights = X.provide(input);
       let total = 0;
@@ -2645,4 +2647,4 @@ AudioParam.prototype.modulate = function (duration: number, ...points: number[])
    return XNumber.prototype.modulate.call(this, duration, ...points);
 };
 
-X.timer.fire('init');
+X.time.timer.fire('init');

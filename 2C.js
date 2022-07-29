@@ -381,7 +381,7 @@ class XNumber {
     }
     modulate(duration, ...points) {
         var _a;
-        const base = X.time;
+        const base = X.time.value;
         const value = this.value;
         let active = true;
         (_a = X.cache.modulationTasks.get(this)) === null || _a === void 0 ? void 0 : _a.cancel();
@@ -392,7 +392,7 @@ class XNumber {
         });
         return X.when(() => {
             if (active) {
-                const elapsed = X.time - base;
+                const elapsed = X.time.value - base;
                 if (elapsed < duration) {
                     this.value = X.math.bezier(elapsed / duration, value, ...points);
                     return false;
@@ -412,7 +412,7 @@ class XNumber {
     }
 }
 class XObject extends XHost {
-    constructor({ alpha = 1, anchor: { x: anchor_x = -1, y: anchor_y = -1 } = {}, blend, fill = void 0, friction = 1, gravity: { angle = 0, extent = 0 } = {}, line: { cap = void 0, dash = void 0, join = void 0, miter = void 0, width = void 0 } = {}, metadata = {}, objects = [], parallax: { x: parallax_x = 0, y: parallax_y = 0 } = {}, position: { x: position_x = 0, y: position_y = 0 } = {}, priority = 0, rotation = 0, size: { x: size_x = 1, y: size_y = 1 } = {}, scale: { x: scale_x = 1, y: scale_y = 1 } = {}, shadow: { blur = void 0, color = void 0, offset: { x: shadow$offset_x = 0, y: shadow$offset_y = 0 } = {} } = {}, stroke = void 0, text: { align = void 0, baseline = void 0, direction = void 0, font = void 0 } = {}, velocity: { x: velocity_x = 0, y: velocity_y = 0 } = {} } = {}) {
+    constructor({ alpha = 1, anchor: { x: anchor_x = -1, y: anchor_y = -1 } = {}, blend, fill = void 0, friction = 1, gravity: { angle = 0, extent = 0 } = {}, line: { cap = void 0, dash = void 0, join = void 0, miter = void 0, width = void 0 } = {}, metadata = {}, objects = [], parallax: { x: parallax_x = 0, y: parallax_y = 0 } = {}, position: { x: position_x = 0, y: position_y = 0 } = {}, priority = 0, rotation = 0, size: { x: size_x = 0, y: size_y = 0 } = {}, scale: { x: scale_x = 1, y: scale_y = 1 } = {}, shadow: { blur = void 0, color = void 0, offset: { x: shadow$offset_x = 0, y: shadow$offset_y = 0 } = {} } = {}, stroke = void 0, text: { align = void 0, baseline = void 0, direction = void 0, font = void 0 } = {}, velocity: { x: velocity_x = 0, y: velocity_y = 0 } = {} } = {}) {
         super();
         this.alpha = new XNumber(alpha);
         this.anchor = new XVector(anchor_x, anchor_y);
@@ -450,7 +450,7 @@ class XObject extends XHost {
         this.text = { align, baseline, direction, font };
         this.velocity = new XVector(velocity_x, velocity_y);
     }
-    compute(renderer) {
+    compute() {
         return this.size;
     }
     draw(renderer, transform, [quality, zoom], style) { }
@@ -696,7 +696,7 @@ class XRectangle extends XObject {
         const fill = style.fillStyle !== 'transparent';
         const stroke = style.strokeStyle !== 'transparent';
         if (fill || stroke) {
-            const size = this.compute(renderer);
+            const size = this.compute();
             const half = size.divide(2);
             const base = position.subtract(half.add(half.multiply(this.anchor)));
             const rectangle = new PIXI.Graphics();
@@ -1289,7 +1289,7 @@ class XVector {
         var _a;
         const x = this.x;
         const y = this.y;
-        const base = X.time;
+        const base = X.time.value;
         let active = true;
         (_a = X.cache.modulationTasks.get(this)) === null || _a === void 0 ? void 0 : _a.cancel();
         X.cache.modulationTasks.set(this, {
@@ -1300,7 +1300,7 @@ class XVector {
         return X.when(() => {
             var _a, _b;
             if (active) {
-                const elapsed = X.time - base;
+                const elapsed = X.time.value - base;
                 if (elapsed < duration) {
                     this.x = X.math.bezier(elapsed / duration, x, ...points.map(point => { var _a; return (_a = point.x) !== null && _a !== void 0 ? _a : x; }));
                     this.y = X.math.bezier(elapsed / duration, y, ...points.map(point => { var _a; return (_a = point.y) !== null && _a !== void 0 ? _a : y; }));
@@ -1360,7 +1360,7 @@ class XText extends XObject {
     draw(renderer, [position, rotation, scale], [quality, zoom], style) {
         let index = 0;
         const state = Object.assign({}, style);
-        const phase = X.time / 1e3;
+        const phase = X.time.value / 1e3;
         const offset = { x: 0, y: 0 };
         const random = { x: 0, y: 0 };
         const swirl = { p: 0, r: 0, s: 0 };
@@ -1696,13 +1696,13 @@ const X = {
         const key = `${Object.values(style).join('\x00')}\x00${charset}\x00${quality}`;
         if (key in X.cache.fonts) {
             const font = X.cache.fonts[key];
-            font.time = X.time;
+            font.time = X.time.value;
             return font.value;
         }
         else {
             const size = typeof style.fontSize === 'number' ? style.fontSize : +style.fontSize.replace(/(px|pt|em|%)/g, '');
             return (X.cache.fonts[key] = {
-                time: X.time,
+                time: X.time.value,
                 value: PIXI.BitmapFont.from(key, style, {
                     chars: charset.split(''),
                     padding: 0,
@@ -1880,8 +1880,8 @@ const X = {
             return new Promise(() => { });
         }
         else {
-            const time = X.time;
-            return X.when(() => duration <= X.time - time);
+            const time = X.time.value;
+            return X.when(() => duration <= X.time.value - time);
         }
     },
     populate(size, provider) {
@@ -1948,25 +1948,27 @@ const X = {
     synthesize(colors) {
         return createImageBitmap(new ImageData(new Uint8ClampedArray(colors.flat(2)), colors.length));
     },
-    time: 0,
-    timer: (() => {
-        const host = new XHost();
-        host.on('init').then(() => {
-            setInterval(() => {
-                X.time += 5 * X.speed.value;
-                X.timer.fire('tick', 5 * X.speed.value);
-                for (const key in X.cache.fonts) {
-                    X.time - X.cache.fonts[key].time > 30e3 && delete X.cache.fonts[key];
+    time: {
+        timer: (() => {
+            const host = new XHost();
+            host.on('init').then(() => {
+                setInterval(() => {
+                    X.time.value += 5 * X.speed.value;
+                    X.time.timer.fire('tick', 5 * X.speed.value);
+                    for (const key in X.cache.fonts) {
+                        X.time.value - X.cache.fonts[key].time > 30e3 && delete X.cache.fonts[key];
+                    }
+                }, 5);
+            });
+            host.on('tick', () => {
+                for (const check of X.cache.checks) {
+                    check.condition() && (void X.cache.checks.splice(X.cache.checks.indexOf(check), 1), check.resolve());
                 }
-            }, 5);
-        });
-        host.on('tick', () => {
-            for (const check of X.cache.checks) {
-                check.condition() && (void X.cache.checks.splice(X.cache.checks.indexOf(check), 1), check.resolve());
-            }
-        });
-        return host;
-    })(),
+            });
+            return host;
+        })(),
+        value: 0
+    },
     weighted(input, modifier = Math.random()) {
         const weights = X.provide(input);
         let total = 0;
@@ -1993,5 +1995,5 @@ PIXI.settings.RESOLUTION = 1;
 AudioParam.prototype.modulate = function (duration, ...points) {
     return XNumber.prototype.modulate.call(this, duration, ...points);
 };
-X.timer.fire('init');
+X.time.timer.fire('init');
 //# sourceMappingURL=2C.js.map
