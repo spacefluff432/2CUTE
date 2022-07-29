@@ -12,18 +12,22 @@
 
 declare const PIXI: typeof import('pixi.js-legacy');
 
-interface AudioParam {
-   modulate(duration: number, ...points: number[]): Promise<void>;
-}
-
 type PBaseTexture = import('pixi.js-legacy').BaseTexture;
 type PBitmapFont = import('pixi.js-legacy').BitmapFont;
 type PCanvasRenderer = import('pixi.js-legacy').CanvasRenderer;
+type PContainer = import('pixi.js-legacy').Container;
+type PDisplayObject = import('pixi.js-legacy').DisplayObject;
 type PExtract = import('pixi.js-legacy').Extract;
+type PGraphics = import('pixi.js-legacy').Graphics;
 type PRenderer = import('pixi.js-legacy').Renderer;
 type PResource = import('pixi.js-legacy').Resource;
+type PSprite = import('pixi.js-legacy').Sprite;
 type PTextStyle = import('pixi.js-legacy').TextStyle;
 type PTexture = import('pixi.js-legacy').Texture<PResource>;
+
+interface AudioParam {
+   modulate(duration: number, ...points: number[]): Promise<void>;
+}
 
 /** A raw vector. */
 type X2 = {
@@ -87,7 +91,10 @@ type XAnimationProperties = XNot<XSpriteProperties, 'crop' | 'frames' | 'steps'>
 /**
  * An animation's resources.
  * @example
- * const resources = X.inventory(X.dataAsset('animation-data.json'), X.imageAsset('animation.png')) as XAnimationResources
+ * const resources = X.inventory(
+ *    X.dataAsset('animation-data.json'),
+ *    X.imageAsset('animation.png')
+ * ) as XAnimationResources
  */
 type XAnimationResources = XInventory<[XData<XAnimationData>, XImage]>;
 
@@ -101,17 +108,7 @@ type XAtlasProperties<A extends string = string> = {
 type XAudio = XAsset<AudioBuffer>;
 
 /** Serializable data. */
-type XBasic =
-   | {
-        [k: string]: XBasic;
-     }
-   | XBasic[]
-   | string
-   | number
-   | boolean
-   | null
-   | undefined
-   | void;
+type XBasic = { [k: string]: XBasic } | XBasic[] | string | number | boolean | null | undefined | void;
 
 /** A cardinal direction. */
 type XCardinal = 'down' | 'left' | 'right' | 'up';
@@ -162,16 +159,13 @@ type XData<A extends XBasic = XBasic> = XAsset<A>;
 type XDefined<A> = Exclude<A, null | undefined | void>;
 
 /** Properties for the `XEntity` class. */
-type XEntityProperties = XNot<XHitboxProperties, 'objects'> & XProperties<XEntity, 'sprites' | 'step'>;
+type XEntityProperties = XNot<XObjectProperties, 'objects'> & XProperties<XEntity, 'sprites' | 'step'>;
 
 /** Factor data, in the form of `[quality, zoom]`. These properties are generally extrapolated from an `XRenderer`. */
 type XFactor = [number, number];
 
 /** An `XHost` event handler. */
 type XHandler<A extends any[] = any> = ((...data: A) => any) | { listener: (...data: A) => any; priority: number };
-
-/** Properties for the `XHitbox` class. */
-type XHitboxProperties = XObjectProperties & XProperties<XHitbox, 'size'>;
 
 /** An image asset. */
 type XImage = XAsset<PBaseTexture>;
@@ -234,18 +228,16 @@ type XObjectProperties = XProperties<
    | 'rotation'
    | 'scale'
    | 'shadow'
+   | 'size'
    | 'stroke'
    | 'text'
    | 'velocity'
 >;
 
-/** Properties for the `XPath` class. */
-type XPathProperties = XObjectProperties & XProperties<XPath, 'size'> & ({ tracer?: XTracer | void } | void);
+/** Properties for the `XGraphics` class. */
+type XGraphicsProperties = XObjectProperties & ({ processor?: XProcessor<void> | void } | void);
 
-/** Properties for the `XPlayer` class. */
-type XPlayerProperties = XEntityProperties & XProperties<XPlayer, 'extent'>;
-
-/** Recursively converts common engine components into their primitive forms where possible. */
+/** Recursively converts common engine components into primitive forms where possible. */
 type XPrimitive<A> = A extends string | number | boolean | null | undefined
    ? A | void
    : A extends XAudio
@@ -270,6 +262,11 @@ type XPrimitive<A> = A extends string | number | boolean | null | undefined
    ? Partial<{ [x in keyof A]?: XPrimitive<A[x]> }> | void
    : never;
 
+/** A post-processing FX provider. */
+type XProcessor<A extends PDisplayObject | void> = A extends void
+   ? (renderer: PRenderer | PCanvasRenderer, transform: XTransform, factor: XFactor, style: XStyle) => void
+   : (renderer: PRenderer | PCanvasRenderer, transform: XTransform, factor: XFactor, style: XStyle, display: A) => void;
+
 /** Extrapolates a properties object. */
 type XProperties<A extends XKeyed, B extends keyof A> = XPrimitive<{ [x in B]: A[x] }>;
 
@@ -280,7 +277,12 @@ type XProvider<A, B extends any[] = []> = A | ((...args: B) => XProvider<A>);
 type XRegion = [X2, X2];
 
 /** Properties for the `XRectangle` class. */
-type XRectangleProperties = XObjectProperties & XProperties<XRectangle, 'size'>;
+type XRectangleProperties =
+   | (XObjectProperties & {
+        /** The post-processing provider for this sprite. */
+        processor?: XProcessor<PGraphics> | void;
+     })
+   | void;
 
 /** A rendering layer. */
 type XRendererLayer = {
@@ -304,7 +306,7 @@ type XRendererProperties<A extends string = string> = XProperties<
    XRenderer<A>,
    'alpha' | 'camera' | 'container' | 'framerate' | 'region' | 'shake' | 'size' | 'quality' | 'zoom'
 > &
-   ({ auto?: boolean | void; layers?: Partial<XKeyed<XRendererLayerModifier[], A>> | void } | void);
+   ({ layers?: Partial<XKeyed<XRendererLayerModifier[], A>> | void } | void);
 
 /** Extrapolates a promise result. */
 type XResult<A> = A extends () => Promise<infer B> ? B : never;
@@ -323,6 +325,8 @@ type XSpriteProperties = XObjectProperties &
       auto?: boolean | void;
       /** An array of image assets to use as frames. */
       frames?: (XImage | null)[];
+      /** The post-processing provider for this sprite. */
+      processor?: XProcessor<PSprite> | void;
    } | void);
 
 /** Rendering style, used during the rendering loop to determine colors, lines, and other variables in rendered objects. In practice, this object is not modified directly, but rather by properties on rendered objects such as `fill`, `text.font`, and `line.width`, among others. */
@@ -347,7 +351,13 @@ type XStyle = {
 };
 
 /** Properties for the `XText` class. */
-type XTextProperties = XObjectProperties & XProperties<XText, 'cache' | 'charset' | 'content' | 'spacing'>;
+type XTextProperties =
+   | (XObjectProperties &
+        XProperties<XText, 'cache' | 'charset' | 'content' | 'spacing'> & {
+           /** The post-processing provider for this sprite. */
+           processor?: XProcessor<PContainer> | void;
+        })
+   | void;
 
 /** A tracer function, used in the rendering of `XPath` objects. */
 type XTracer = (
@@ -470,10 +480,10 @@ class XEffect {
    context: AudioContext;
    /** The dry gain node, which controls the level of the raw audio throughput. */
    dry: GainNode;
+   /** The effect node, such as a convolver node, panner node, or filter node. */
+   node: AudioNode;
    /** The output node. */
    output: GainNode;
-   /** The effect processor, such as a convolver node, panner node, or filter node. */
-   processor: AudioNode;
    /** The wet gain node, which controls the gain of the effected audio. */
    wet: GainNode;
    /** The wet gain node's value. When modified, the dry gain value is set to the inverse of this value. */
@@ -486,18 +496,18 @@ class XEffect {
    constructor (
       /** The effect's audio context. */
       context: AudioContext,
-      /** The effect processor, such as a convolver node, panner node, or filter node. */
-      processor: AudioNode,
+      /** The effect node, such as a convolver node, panner node, or filter node. */
+      node: AudioNode,
       /** The wet gain node's value. When modified, the dry gain value is set to the inverse of this value. */
       value = 1
    ) {
       this.context = context;
-      this.processor = processor;
+      this.node = node;
       this.dry = context.createGain();
       this.wet = context.createGain();
       this.output = context.createGain();
       this.dry.connect(this.output);
-      this.processor.connect(this.wet).connect(this.output);
+      this.node.connect(this.wet).connect(this.output);
       this.value = value;
    }
    /** A helper function which connects this effect's output to another effect, audio node, or audio context. */
@@ -508,7 +518,7 @@ class XEffect {
          this.output.connect(target);
       } else {
          this.output.connect(target.dry);
-         this.output.connect(target.processor);
+         this.output.connect(target.node);
       }
    }
    /** A helper function which disconnects this effect's output from another previously connected effect, audio node, or audio context. */
@@ -519,7 +529,7 @@ class XEffect {
          this.output.disconnect(target);
       } else if (target) {
          this.output.disconnect(target.dry);
-         this.output.disconnect(target.processor);
+         this.output.disconnect(target.node);
       } else {
          this.output.disconnect();
       }
@@ -739,7 +749,7 @@ class XMixer {
             controller.connect(this.effects[index]);
          } else {
             controller.connect(this.effects[index].dry);
-            controller.connect(this.effects[index].processor);
+            controller.connect(this.effects[index].node);
          }
       }
    }
@@ -820,31 +830,31 @@ class XNumber {
    modulate (duration: number, ...points: number[]) {
       const base = X.time;
       const value = this.value;
-      return new Promise<void>(resolve => {
-         let active = true;
-         X.cache.modulationTasks.get(this)?.cancel();
-         X.cache.modulationTasks.set(this, {
-            cancel () {
-               active = false;
-            }
-         });
-         const listener = () => {
-            if (active) {
-               const elapsed = X.time - base;
-               if (elapsed < duration) {
-                  this.value = X.math.bezier(elapsed / duration, value, ...points);
-               } else {
-                  X.cache.modulationTasks.delete(this);
-                  this.value = points.length > 0 ? points[points.length - 1] : value;
-                  X.timer.off('tick', listener);
-                  resolve();
-               }
-            } else {
-               X.timer.off('tick', listener);
-            }
-         };
-         X.timer.on('tick', listener);
+      let active = true;
+      X.cache.modulationTasks.get(this)?.cancel();
+      X.cache.modulationTasks.set(this, {
+         cancel () {
+            active = false;
+         }
       });
+      return X.when(() => {
+         if (active) {
+            const elapsed = X.time - base;
+            if (elapsed < duration) {
+               this.value = X.math.bezier(elapsed / duration, value, ...points);
+               return false;
+            } else {
+               X.cache.modulationTasks.delete(this);
+               this.value = points.length > 0 ? points[points.length - 1] : value;
+            }
+         }
+         return true;
+      });
+   }
+   async step (speed: number, ...points: number[]) {
+      for (const point of points) {
+         await this.modulate((Math.abs(this.value - point) / speed) * 1000, point);
+      }
    }
 }
 
@@ -871,6 +881,7 @@ class XObject extends XHost<{ tick: [] }> {
    position: XVector;
    priority: XNumber;
    rotation: XNumber;
+   size: XVector;
    scale: XVector;
    shadow: {
       blur: XNumber | void;
@@ -902,6 +913,7 @@ class XObject extends XHost<{ tick: [] }> {
       position: { x: position_x = 0, y: position_y = 0 } = {},
       priority = 0,
       rotation = 0,
+      size: { x: size_x = 1, y: size_y = 1 } = {},
       scale: { x: scale_x = 1, y: scale_y = 1 } = {},
       shadow: { blur = void 0, color = void 0, offset: { x: shadow$offset_x = 0, y: shadow$offset_y = 0 } = {} } = {},
       stroke = void 0,
@@ -940,16 +952,15 @@ class XObject extends XHost<{ tick: [] }> {
             y: shadow$offset_y === void 0 ? void 0 : new XNumber(shadow$offset_y)
          }
       };
+      this.size = new XVector(size_x, size_y);
       this.stroke = stroke;
       this.text = { align, baseline, direction, font };
       this.velocity = new XVector(velocity_x, velocity_y);
    }
-   compute(renderer: PRenderer | PCanvasRenderer): XVector;
-   compute () {
-      return X.zero;
+   compute (renderer: PRenderer | PCanvasRenderer) {
+      return this.size;
    }
-   draw(renderer: PRenderer | PCanvasRenderer, transform: XTransform, [ quality, zoom ]: XFactor, style: XStyle): void;
-   draw () {}
+   draw (renderer: PRenderer | PCanvasRenderer, transform: XTransform, [ quality, zoom ]: XFactor, style: XStyle) {}
    render (
       renderer: PRenderer | PCanvasRenderer,
       camera: X2,
@@ -1006,20 +1017,21 @@ class XObject extends XHost<{ tick: [] }> {
    }
 }
 
+class XGraphics extends XObject {
+   processor: XProcessor<void>;
+   constructor (properties: XGraphicsProperties = {}) {
+      super(properties);
+      this.processor = properties?.processor ?? (() => {});
+   }
+   draw (renderer: PRenderer | PCanvasRenderer, transform: XTransform, [ quality, zoom ]: XFactor, style: XStyle) {
+      this.processor(renderer, transform, [ quality, zoom ], style);
+   }
+}
+
 class XHitbox extends XObject {
-   size: XVector;
    state = { dimensions: void 0, vertices: [] } as
       | { dimensions: void; vertices: [] }
       | { dimensions: string; vertices: [X2, X2, X2, X2] };
-   constructor (properties: XHitboxProperties = {}) {
-      super(properties);
-      (({ size: { x: size_x = 0, y: size_y = 0 } = {} }: XHitboxProperties = {}) => {
-         this.size = new XVector(size_x, size_y);
-      })(properties);
-   }
-   compute () {
-      return this.size;
-   }
    region (): XRegion {
       const vertices = this.vertices();
       const { x: x1, y: y1 } = vertices[0];
@@ -1061,9 +1073,6 @@ class XEntity extends XHitbox {
          };
          this.step = step;
       })(properties);
-      this.on('tick', () => {
-         this.objects[0] = this.sprites[this.face];
-      });
    }
    move<A extends string> (
       offset: X2,
@@ -1115,6 +1124,10 @@ class XEntity extends XHitbox {
          return true;
       }
    }
+   render (renderer: PRenderer | PCanvasRenderer, camera: X2, transform: XTransform, factor: XFactor, style: XStyle) {
+      this.objects[0] = this.sprites[this.face];
+      super.render(renderer, camera, transform, factor, style);
+   }
    async walk<A extends string> (renderer: XRenderer<A>, key: A, speed: number, ...points: Partial<X2>[]) {
       await renderer.on('tick');
       for (const sprite of Object.values(this.sprites)) {
@@ -1153,54 +1166,10 @@ class XCharacter extends XEntity {
          this.key = key;
          this.preset = preset;
       })(properties);
-      this.on('tick', {
-         priority: -1,
-         listener: () => {
-            this.sprites = this.talk ? this.preset.talk : this.preset.walk;
-         }
-      });
    }
-}
-
-class XPath extends XObject {
-   size: XVector;
-   tracer: XTracer;
-   constructor (properties: XPathProperties = {}) {
-      super(properties);
-      (({ size: { x: size_x = 0, y: size_y = 0 } = {}, tracer = () => {} }: XPathProperties = {}) => {
-         this.tracer = tracer;
-         this.size = new XVector(size_x, size_y);
-      })(properties);
-   }
-   compute () {
-      return this.size;
-   }
-   draw (renderer: PRenderer | PCanvasRenderer, transform: XTransform, [ quality, zoom ]: XFactor, style: XStyle) {
-      this.tracer(renderer, transform, [ quality, zoom ], style);
-   }
-}
-
-class XPlayer extends XEntity {
-   extent: XVector;
-   walking = false;
-   constructor (properties: XPlayerProperties = {}) {
-      super(properties);
-      (({ extent: { x: extent_x = 0, y: extent_y = 0 } = {} }: XPlayerProperties = {}) => {
-         this.extent = new XVector(extent_x, extent_y);
-      })(properties);
-      this.on('tick').then(() => {
-         this.objects[1] = new XHitbox().wrapOn('tick', self => () => {
-            self.anchor.x = this.face === 'left' ? 1 : this.face === 'right' ? -1 : 0;
-            self.anchor.y = this.face === 'up' ? 1 : this.face === 'down' ? -1 : 0;
-            self.size.x = this.face === 'left' || this.face === 'right' ? this.extent.y : this.extent.x;
-            self.size.y = this.face === 'down' || this.face === 'up' ? this.extent.y : this.extent.x;
-         });
-      });
-   }
-   async walk<A extends string> (renderer: XRenderer<A>, key: A, speed: number, ...targets: Partial<X2>[]) {
-      this.walking = true;
-      await super.walk(renderer, key, speed, ...targets);
-      this.walking = false;
+   render (renderer: PRenderer | PCanvasRenderer, camera: X2, transform: XTransform, factor: XFactor, style: XStyle) {
+      this.sprites = this.talk ? this.preset.talk : this.preset.walk;
+      super.render(renderer, camera, transform, factor, style);
    }
 }
 
@@ -1251,15 +1220,10 @@ class XRandom {
 }
 
 class XRectangle extends XObject {
-   size: XVector;
+   processor: XProcessor<PGraphics>;
    constructor (properties: XRectangleProperties = {}) {
       super(properties);
-      (({ size: { x: size_x = 0, y: size_y = 0 } = {} }: XRectangleProperties = {}) => {
-         this.size = new XVector(size_x, size_y);
-      })(properties);
-   }
-   compute () {
-      return this.size;
+      this.processor = properties?.processor ?? (() => {});
    }
    draw (
       renderer: PRenderer | PCanvasRenderer,
@@ -1270,7 +1234,7 @@ class XRectangle extends XObject {
       const fill = style.fillStyle !== 'transparent';
       const stroke = style.strokeStyle !== 'transparent';
       if (fill || stroke) {
-         const size = this.compute();
+         const size = this.compute(renderer);
          const half = size.divide(2);
          const base = position.subtract(half.add(half.multiply(this.anchor)));
          const rectangle = new PIXI.Graphics();
@@ -1305,7 +1269,9 @@ class XRectangle extends XObject {
                rectangle.beginFill(0, 0);
             }
          }
-         renderer.render(rectangle.drawRect(0, 0, size.x, size.y).endFill());
+         rectangle.drawRect(0, 0, size.x, size.y).endFill();
+         this.processor(renderer, [ position, rotation, scale ], [ quality, zoom ], style, rectangle);
+         renderer.render(rectangle);
          rectangle.destroy();
       }
    }
@@ -1335,7 +1301,6 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
    zoom: XNumber;
    constructor ({
       alpha = 1,
-      auto = false,
       camera: { x: camera_x = 0, y: camera_y = 0 } = {},
       container = document.body,
       framerate = 30,
@@ -1375,7 +1340,7 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
                   canvas,
                   modifiers: value,
                   objects: [] as XObject[],
-                  renderer: new (GL ? PIXI.Renderer : PIXI.CanvasRenderer)({
+                  renderer: new (G ? PIXI.Renderer : PIXI.CanvasRenderer)({
                      antialias: false,
                      backgroundAlpha: 0,
                      clearBeforeRender: false,
@@ -1660,6 +1625,7 @@ class XRenderer<A extends string = string> extends XHost<{ tick: [] }> {
 class XSprite extends XObject {
    crop: XKeyed<number, XSide>;
    frames: (XImage | null)[];
+   processor: XProcessor<PSprite>;
    step: number;
    steps: number;
    state = { index: 0, active: false, step: 0 };
@@ -1668,12 +1634,14 @@ class XSprite extends XObject {
       (({
          auto = false,
          crop: { bottom = 0, left = 0, right = 0, top = 0 } = {},
+         processor = () => {},
          step = 0,
          steps = 1,
          frames = []
       }: XSpriteProperties = {}) => {
          this.crop = { bottom, left, right, top };
          this.frames = frames;
+         this.processor = processor;
          this.step = step;
          this.steps = steps;
          auto && (this.state.active = true);
@@ -1701,7 +1669,7 @@ class XSprite extends XObject {
    draw (
       renderer: PRenderer | PCanvasRenderer,
       [ position, rotation, scale ]: XTransform,
-      [ quality ]: XFactor,
+      [ quality, zoom ]: XFactor,
       style: XStyle
    ) {
       const texture = this.frames[this.state.index];
@@ -1733,8 +1701,11 @@ class XSprite extends XObject {
             mask.type = rotation % 90 === 0 ? PIXI.MASK_TYPES.SCISSOR : PIXI.MASK_TYPES.STENCIL;
             sprite.mask = mask;
 
+            // preprocess
+            this.processor(renderer, [ position, rotation, scale ], [ quality, zoom ], style, sprite);
+
             // render
-            (GL && rotation % 90 === 0) || renderer.render(graphics);
+            (G && rotation % 90 === 0) || renderer.render(graphics);
             renderer.render(sprite);
             sprite.destroy();
             graphics.destroy();
@@ -1767,7 +1738,7 @@ class XSprite extends XObject {
          const sizeX = Math.round(max?.x ?? sprite.width) - originX;
          const sizeY = Math.round(max?.y ?? sprite.height) - originY;
          const pixels = [
-            ...(X.shader.plugins.extract as PExtract).pixels(sprite).slice((originX + originY * sprite.width) * 4)
+            ...(X.chalkboard.plugins.extract as PExtract).pixels(sprite).slice((originX + originY * sprite.width) * 4)
          ];
          while (colors.length < sizeY) {
             const subcolors: XColor[] = [];
@@ -1929,32 +1900,27 @@ class XVector {
       const x = this.x;
       const y = this.y;
       const base = X.time;
-      return new Promise<void>(resolve => {
-         let active = true;
-         X.cache.modulationTasks.get(this)?.cancel();
-         X.cache.modulationTasks.set(this, {
-            cancel () {
-               active = false;
-            }
-         });
-         const listener = () => {
-            if (active) {
-               const elapsed = X.time - base;
-               if (elapsed < duration) {
-                  this.x = X.math.bezier(elapsed / duration, x, ...points.map(point => point.x ?? x));
-                  this.y = X.math.bezier(elapsed / duration, y, ...points.map(point => point.y ?? y));
-               } else {
-                  X.cache.modulationTasks.delete(this);
-                  this.x = points.length > 0 ? points[points.length - 1].x ?? x : x;
-                  this.y = points.length > 0 ? points[points.length - 1].y ?? y : y;
-                  X.timer.off('tick', listener);
-                  resolve();
-               }
+      let active = true;
+      X.cache.modulationTasks.get(this)?.cancel();
+      X.cache.modulationTasks.set(this, {
+         cancel () {
+            active = false;
+         }
+      });
+      return X.when(() => {
+         if (active) {
+            const elapsed = X.time - base;
+            if (elapsed < duration) {
+               this.x = X.math.bezier(elapsed / duration, x, ...points.map(point => point.x ?? x));
+               this.y = X.math.bezier(elapsed / duration, y, ...points.map(point => point.y ?? y));
+               return false;
             } else {
-               X.timer.off('tick', listener);
+               X.cache.modulationTasks.delete(this);
+               this.x = points.length > 0 ? points[points.length - 1].x ?? x : x;
+               this.y = points.length > 0 ? points[points.length - 1].y ?? y : y;
             }
-         };
-         X.timer.on('tick', listener);
+         }
+         return true;
       });
    }
    multiply(a: number | X2): XVector;
@@ -1971,6 +1937,11 @@ class XVector {
    }
    shift (angle: number, extent: number, origin = X.zero) {
       return origin.endpoint(this.angle(origin) + angle, this.extent(origin) + extent);
+   }
+   async step (speed: number, ...points: Partial<X2>[]) {
+      for (const point of points.map(point => ({ x: point.x ?? this.x, y: point.y ?? this.y }))) {
+         await this.modulate((this.extent(point) / speed) * 1000, point);
+      }
    }
    subtract(a: number | X2): XVector;
    subtract(x: number, y: number): XVector;
@@ -1990,6 +1961,7 @@ class XText extends XObject {
    cache: boolean;
    charset: string;
    content: string;
+   processor: XProcessor<PContainer>;
    spacing: XVector;
    constructor (properties: XTextProperties = {}) {
       super(properties);
@@ -1997,16 +1969,15 @@ class XText extends XObject {
          cache = true,
          charset = '/0123456789=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
          content = '',
+         processor = () => {},
          spacing: { x: spacing_x = 0, y: spacing_y = 0 } = {}
       }: XTextProperties = {}) => {
          this.cache = cache;
          this.charset = charset;
          this.content = content;
+         this.processor = processor;
          this.spacing = new XVector(spacing_x, spacing_y);
       })(properties);
-   }
-   compute () {
-      return new XVector();
    }
    draw (
       renderer: PRenderer | PCanvasRenderer,
@@ -2129,13 +2100,14 @@ class XText extends XObject {
             offset.x += X.metrics(textStyle, char).x + this.spacing.x;
          }
       }
+      this.processor(renderer, [ position, rotation, scale ], [ quality, zoom ], style, container);
       renderer.render(container);
       container.destroy({ children: true });
       Object.assign(style, state);
    }
 }
 
-const GL = PIXI.utils.isWebGLSupported();
+const G = PIXI.utils.isWebGLSupported();
 
 const X = {
    /** Gets an `AudioBuffer` from the given source URL. */
@@ -2223,6 +2195,7 @@ const X = {
    cache: {
       audios: {} as XKeyed<Promise<AudioBuffer>>,
       audioAssets: {} as XKeyed<XAudio[]>,
+      checks: [] as { condition: () => boolean; resolve: () => void }[],
       color: {} as XKeyed<XColor>,
       datas: {} as XKeyed<Promise<XBasic>>,
       dataAssets: {} as XKeyed<XData[]>,
@@ -2231,13 +2204,17 @@ const X = {
       imageAssets: {} as XKeyed<XImage[]>,
       textMetrics: {} as XKeyed<X2>,
       textures: new Map<XImage, PTexture>(),
-      modulationTasks: new Map<AudioParam | XNumber | XVector, { cancel: () => void }>(),
-      when: [] as { condition: () => boolean; resolve: () => void }[]
+      modulationTasks: new Map<AudioParam | XNumber | XVector, { cancel: () => void }>()
    },
    chain<A, B> (input: A, handler: (input: A, loop: (input: A) => B) => B) {
       const loop = (input: A) => handler(input, loop);
       return loop(input);
    },
+   chalkboard: new (G ? PIXI.Renderer : PIXI.CanvasRenderer)({
+      antialias: false,
+      backgroundAlpha: 0,
+      clearBeforeRender: false
+   }) as PRenderer & PCanvasRenderer,
    color (input: string) {
       if (input in X.cache.color) {
          return X.cache.color[input];
@@ -2409,7 +2386,7 @@ const X = {
                image = PIXI.BaseTexture.from(await createImageBitmap(new ImageData(1, 1)));
             } else if (shader) {
                const sprite = PIXI.Sprite.from(image);
-               const data = new Uint8ClampedArray((X.shader.plugins.extract as PExtract).pixels(sprite));
+               const data = new Uint8ClampedArray((X.chalkboard.plugins.extract as PExtract).pixels(sprite));
                sprite.destroy();
                const x4 = image.width * 4;
                const index = { x: -1, y: -1 };
@@ -2538,13 +2515,10 @@ const X = {
    },
    pause (duration = 0) {
       if (duration === Infinity) {
-         return new Promise<void>(resolve => {});
+         return new Promise<void>(() => {});
       } else {
-         return X.chain<number, Promise<void>>(0, async (elapsed, next) => {
-            if (elapsed < duration) {
-               await next(elapsed + (await X.timer.on('tick'))[0]);
-            }
-         });
+         const time = X.time;
+         return X.when(() => duration <= X.time - time);
       }
    },
    populate<A extends (index: number) => any>(size: number, provider: A) {
@@ -2564,11 +2538,6 @@ const X = {
    ): A extends XProvider<infer B, any[]> ? B : never {
       return typeof provider === 'function' ? X.provide(provider(...args)) : provider;
    },
-   shader: new (GL ? PIXI.Renderer : PIXI.CanvasRenderer)({
-      antialias: false,
-      backgroundAlpha: 0,
-      clearBeforeRender: false
-   }) as PRenderer & PCanvasRenderer,
    sound: {
       convolver (context: AudioContext, duration: number, ...pattern: number[]) {
          const convolver = context.createConvolver();
@@ -2625,14 +2594,9 @@ const X = {
          }
       });
    },
-   text: (() => {
-      const canvas = document.createElement('canvas');
-      Object.assign(canvas.style, {
-         imageRendering: 'pixelated',
-         webkitFontSmoothing: 'none'
-      });
-      return canvas;
-   })(),
+   synthesize (colors: XColor[][]) {
+      return createImageBitmap(new ImageData(new Uint8ClampedArray(colors.flat(2)), colors.length));
+   },
    time: 0,
    timer: (() => {
       const host = new XHost<{ init: []; tick: [number] }>();
@@ -2644,6 +2608,11 @@ const X = {
                X.time - X.cache.fonts[key].time > 30e3 && delete X.cache.fonts[key];
             }
          }, 5);
+      });
+      host.on('tick', () => {
+         for (const check of X.cache.checks) {
+            check.condition() && (void X.cache.checks.splice(X.cache.checks.indexOf(check), 1), check.resolve());
+         }
       });
       return host;
    })(),
@@ -2662,7 +2631,7 @@ const X = {
    },
    when (condition: () => boolean) {
       const { promise, resolve } = X.hyperpromise();
-      X.cache.when.push({ condition, resolve });
+      X.cache.checks.push({ condition, resolve });
       return promise;
    },
    zero: new XVector()
@@ -2677,9 +2646,3 @@ AudioParam.prototype.modulate = function (duration: number, ...points: number[])
 };
 
 X.timer.fire('init');
-
-X.timer.on('tick', () => {
-   for (const check of X.cache.when) {
-      check.condition() && (void X.cache.when.splice(X.cache.when.indexOf(check), 1), check.resolve());
-   }
-});
